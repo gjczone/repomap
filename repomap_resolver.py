@@ -1,0 +1,743 @@
+#!/usr/bin/env python3
+"""
+Repo Map Resolver — Import and Alias Resolution Layer
+=======================================================
+负责 import 路径解析、alias 映射、re-export 追踪。
+
+支持：
+- tsconfig.json / jsconfig.json paths 和 baseUrl
+- package.json exports 字段
+- Vite / Webpack 等 bundler 的 alias 配置
+- CommonJS require/module.exports
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+from collections import defaultdict
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from repomap_parser import EXT_TO_LANG
+from repomap_support import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph
+
+logger = logging.getLogger("repomap")
+
+MAX_EXPORT_RESOLVE_DEPTH = 3
+
+# Bundler config file names
+BUNDLER_CONFIGS = {
+    "vite": ["vite.config.js", "vite.config.ts", "vite.config.mjs"],
+    "webpack": ["webpack.config.js", "webpack.config.ts"],
+    "rollup": ["rollup.config.js", "rollup.config.mjs"],
+    "esbuild": [],  # esbuild usually configured in package.json or build scripts
+    "turbopack": [],  # Next.js 13+, uses next.config.js
+}
+
+SKIP_DIR_NAMES = {
+    ".cache",
+    ".git",
+    ".hg",
+    ".idea",
+    ".mypy_cache",
+    ".next",
+    ".nox",
+    ".nuxt",
+    ".parcel-cache",
+    ".pnpm-store",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svelte-kit",
+    ".tox",
+    ".turbo",
+    ".venv",
+    ".vscode",
+    ".yarn",
+    "__pypackages__",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "env",
+    "ENV",
+    "node_modules",
+    "site-packages",
+    "target",
+    "venv",
+}
+
+
+class PackageJsonExports:
+    """解析 package.json exports 字段，支持条件导出和子路径模式。"""
+
+    def __init__(self, exports: Any) -> None:
+        self.raw = exports
+        self.mappings: dict[str, str] = {}  # subpath -> resolved path
+        self._parse_exports(exports)
+
+    def _parse_exports(self, exports: Any, base_path: str = ".", is_nested_condition: bool = False) -> None:
+        """解析 exports 字段的各种形式。
+        
+        Args:
+            exports: package.json 中的 exports 字段值
+            base_path: 当前子路径（用于子路径映射）
+            is_nested_condition: 是否处于嵌套条件导出中
+        """
+        if isinstance(exports, str):
+            # 简写形式: "exports": "./dist/index.js"
+            self.mappings[base_path] = exports
+        elif isinstance(exports, dict):
+            # 检查是否有条件导出 (import/require/default/types 等)
+            condition_keys = {"import", "require", "default", "types", "node", "browser", "deno"}
+            has_conditions = bool(set(exports.keys()) & condition_keys)
+
+            if has_conditions:
+                # 选择优先的条件: import > default > require > types
+                selected_target = None
+                for key in ("import", "default", "require", "types"):
+                    if key in exports:
+                        selected_target = exports[key]
+                        break
+                
+                if selected_target is None:
+                    # 使用第一个非子路径的可用条件
+                    for key, target in exports.items():
+                        if not key.startswith("."):
+                            selected_target = target
+                            break
+                
+                # 处理选中的目标
+                if isinstance(selected_target, str):
+                    self.mappings[base_path] = selected_target
+                elif isinstance(selected_target, dict):
+                    # 嵌套条件导出，base_path 保持不变
+                    self._parse_exports(selected_target, base_path, is_nested_condition=True)
+            else:
+                # 子路径映射形式
+                for key, target in exports.items():
+                    subpath = f"{base_path}/{key}" if base_path != "." else key
+                    if isinstance(target, str):
+                        self.mappings[subpath] = target
+                    elif isinstance(target, dict):
+                        # 子路径映射中的值可能是条件导出字典
+                        self._parse_exports(target, subpath, is_nested_condition=False)
+
+    def resolve(self, import_path: str) -> str | None:
+        """
+        解析 import 路径到实际文件路径。
+        import_path 应该是包内路径，如 "#utils" 或 "./helpers"
+        """
+        # 直接匹配
+        if import_path in self.mappings:
+            return self.mappings[import_path]
+
+        # 处理子路径通配符模式，如 "./features/*": "./dist/features/*.js"
+        for pattern, target in self.mappings.items():
+            if "*" in pattern:
+                prefix = pattern.split("*")[0]
+                if import_path.startswith(prefix):
+                    suffix = import_path[len(prefix):]
+                    if "*" in target:
+                        return target.replace("*", suffix, 1)
+                    # 目标没有通配符，追加到目录
+                    if target.endswith("/"):
+                        return f"{target}{suffix}"
+
+        return None
+
+
+class BundlerAliasConfig:
+    """解析各种 bundler 的 alias 配置。
+    
+    NOTE: 当前实现仅作为占位符，实际 bundler alias 解析依赖于：
+    1. tsconfig.json / jsconfig.json 的 paths 配置（由 ImportResolver 主逻辑处理）
+    2. 项目特定的构建配置通常应由用户通过其他方式提供
+    
+    正则解析 JS 配置文件极易出错，已移除。如需支持特定 bundler，
+    建议通过显式的配置文件映射而非解析代码实现。
+    """
+
+    def __init__(self, project_root: Path) -> None:
+        self.project_root = project_root
+        self.aliases: dict[str, str] = {}  # alias -> resolved path
+
+    def resolve(self, import_path: str) -> str | None:
+        """解析 bundler alias 到实际路径。"""
+        for alias, target in self.aliases.items():
+            if import_path == alias:
+                return target
+            if import_path.startswith(f"{alias}/"):
+                suffix = import_path[len(alias) + 1:]
+                return f"{target}/{suffix}" if not target.endswith("/") else f"{target}{suffix}"
+        return None
+
+
+class ImportResolver:
+    """
+    Import 解析器：处理各种 import 路径解析场景。
+    """
+
+    def __init__(self, project_root: Path, graph: RepoGraph) -> None:
+        self.project_root = project_root
+        self.graph = graph
+        self.import_configs: list[ProjectImportConfig] = []
+        self.bundler_aliases = BundlerAliasConfig(project_root)
+        self.package_exports: dict[str, PackageJsonExports] = {}  # package name -> exports
+
+        # 构建文件索引: stem -> [files]
+        self._file_map: dict[str, list[str]] = defaultdict(list)
+        # name -> [sym_id]
+        self._name_idx: dict[str, list[str]] = defaultdict(list)
+        # sym_id -> file
+        self._sym_file: dict[str, str] = {}
+
+        self._load_import_configs()
+        self._load_package_json_exports()
+
+    def _load_import_configs(self) -> None:
+        """加载所有 tsconfig.json / jsconfig.json 配置。"""
+        configs: list[ProjectImportConfig] = []
+        for config_path in self._discover_import_config_paths():
+            data = self._load_jsonc_with_extends(config_path, set())
+            compiler_options = data.get("compilerOptions", {}) if isinstance(data, dict) else {}
+            base_url = self._resolve_config_relative_path(config_path, compiler_options.get("baseUrl"))
+            alias_rules: list[PathAliasRule] = []
+            raw_paths = compiler_options.get("paths", {})
+            if isinstance(raw_paths, dict):
+                for alias_pattern, targets in raw_paths.items():
+                    if not isinstance(alias_pattern, str) or not isinstance(targets, list):
+                        continue
+                    resolved_targets = tuple(
+                        target
+                        for raw_target in targets
+                        if isinstance(raw_target, str)
+                        for target in [self._resolve_config_relative_path(config_path, raw_target)]
+                        if target is not None
+                    )
+                    if resolved_targets:
+                        alias_rules.append(
+                            PathAliasRule(alias_pattern=alias_pattern, target_patterns=resolved_targets)
+                        )
+            try:
+                config_dir = config_path.parent.relative_to(self.project_root).as_posix()
+            except ValueError:
+                continue
+            configs.append(
+                ProjectImportConfig(
+                    config_path=str(config_path.relative_to(self.project_root)),
+                    config_dir=config_dir or ".",
+                    base_url=base_url,
+                    alias_rules=alias_rules,
+                )
+            )
+        configs.sort(
+            key=lambda config: (
+                -self._path_depth(config.config_dir),
+                config.config_path or "",
+            )
+        )
+        self.import_configs = configs
+
+    def _load_package_json_exports(self) -> None:
+        """扫描 package.json 并解析 exports 字段。"""
+        package_json_path = self.project_root / "package.json"
+        if not package_json_path.exists():
+            return
+        try:
+            data = json.loads(package_json_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return
+            # 解析本项目自身的 exports
+            if "exports" in data:
+                self.package_exports["."] = PackageJsonExports(data["exports"])
+            # 解析子包的 package.json（monorepo 场景）
+            for sub_package_path in self.project_root.rglob("*/package.json"):
+                if sub_package_path == package_json_path:
+                    continue
+                try:
+                    sub_data = json.loads(sub_package_path.read_text(encoding="utf-8"))
+                    if isinstance(sub_data, dict) and "exports" in sub_data:
+                        # 计算相对于项目根的路径作为包名
+                        try:
+                            rel_path = sub_package_path.parent.relative_to(self.project_root)
+                            package_name = f"./{rel_path.as_posix()}"
+                            self.package_exports[package_name] = PackageJsonExports(sub_data["exports"])
+                        except ValueError:
+                            pass
+                except Exception as e:
+                    logger.debug(f"Failed to parse {sub_package_path}: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to parse package.json: {e}")
+
+    def build_indices(self) -> None:
+        """构建文件和符号索引，用于快速解析。"""
+        self._file_map.clear()
+        self._name_idx.clear()
+        self._sym_file.clear()
+
+        for file in sorted(self.graph.file_symbols):
+            self._file_map[Path(file).stem].append(file)
+
+        for sid, sym in self.graph.symbols.items():
+            self._name_idx[sym.name].append(sid)
+            self._sym_file[sid] = sym.file
+
+        for symbol_ids in self._name_idx.values():
+            symbol_ids.sort(key=lambda symbol_id: (
+                self._sym_file[symbol_id],
+                self.graph.symbols[symbol_id].line,
+                self.graph.symbols[symbol_id].name,
+            ))
+
+    def resolve_import_targets(self, source_file: str, imp: str) -> list[str]:
+        """解析 import 路径到目标文件列表。"""
+        if imp.startswith("."):
+            return self._resolve_relative(source_file, imp)
+
+        # 尝试 bundler alias 解析
+        bundler_match = self.bundler_aliases.resolve(imp)
+        if bundler_match:
+            return self._resolve_relative(source_file, bundler_match)
+
+        # 尝试 tsconfig/jsconfig alias/baseUrl 解析
+        alias_matches = self._resolve_alias_or_baseurl_targets(source_file, imp)
+        if alias_matches:
+            return alias_matches
+
+        # 尝试 package.json exports 解析（用于自引用或子包）
+        for package_name, exports in self.package_exports.items():
+            if imp.startswith(package_name) or (package_name == "." and imp.startswith("#")):
+                resolved = exports.resolve(imp if package_name == "." else imp[len(package_name):] or ".")
+                if resolved:
+                    return self._resolve_relative(source_file, resolved)
+
+        # 最后尝试模块名匹配（优先同语言）
+        module_key = Path(imp).stem or imp.split(".")[-1]
+        matches = list(self._file_map.get(module_key, []))
+        if not matches:
+            return []
+        
+        # 优先匹配同扩展名的文件（语言隔离）
+        source_ext = Path(source_file).suffix.lower()
+        same_lang_matches = [f for f in matches if f.lower().endswith(source_ext)]
+        if same_lang_matches:
+            return same_lang_matches
+        
+        # 次优：匹配相同语言组的文件
+        source_lang = EXT_TO_LANG.get(source_ext)
+        if source_lang:
+            same_group_matches = [f for f in matches if EXT_TO_LANG.get(Path(f).suffix.lower()) == source_lang]
+            if same_group_matches:
+                return same_group_matches
+        
+        # 兜底：返回所有匹配（但限制数量避免爆炸）
+        return matches[:3]
+
+    def _resolve_relative(self, source_file: str, imp: str) -> list[str]:
+        resolved = self._resolve_relative_base(source_file, imp)
+        return self._candidate_files_for_base_path(resolved)
+
+    def _candidate_files_for_base_path(self, resolved: PurePosixPath) -> list[str]:
+        matches = []
+        for ext in EXT_TO_LANG:
+            direct = str(resolved) + ext
+            index_file = str(resolved / f"index{ext}")
+            if direct in self.graph.file_symbols:
+                matches.append(direct)
+            if index_file in self.graph.file_symbols:
+                matches.append(index_file)
+        init_file = str(resolved / "__init__.py")
+        if init_file in self.graph.file_symbols:
+            matches.append(init_file)
+        return sorted(set(matches))
+
+    def _resolve_alias_or_baseurl_targets(self, source_file: str, imp: str) -> list[str]:
+        for config in self._candidate_import_configs_for_file(source_file):
+            alias_matches: list[str] = []
+            for rule in config.alias_rules:
+                wildcard_value = self._match_alias_pattern(rule.alias_pattern, imp)
+                if wildcard_value is None:
+                    continue
+                for target_pattern in rule.target_patterns:
+                    target_base = self._apply_alias_target(target_pattern, wildcard_value)
+                    if target_base is None:
+                        continue
+                    alias_matches.extend(self._candidate_files_for_base_path(PurePosixPath(target_base)))
+            if alias_matches:
+                return sorted(set(alias_matches))
+            if config.base_url:
+                base_path = self._normalize_posix_path(PurePosixPath(config.base_url, imp))
+                base_matches = self._candidate_files_for_base_path(base_path)
+                if base_matches:
+                    return base_matches
+        return []
+
+    def _candidate_import_configs_for_file(self, source_file: str) -> list[ProjectImportConfig]:
+        source_parent = self._normalize_posix_path(PurePosixPath(source_file).parent)
+        ranked: list[tuple[int, ProjectImportConfig]] = []
+        for config in self.import_configs:
+            config_dir = self._normalize_posix_path(PurePosixPath(config.config_dir or "."))
+            if self._is_subpath(source_parent, config_dir):
+                ranked.append((self._path_depth(config.config_dir), config))
+        ranked.sort(key=lambda item: (-item[0], item[1].config_path or ""))
+        return [config for _, config in ranked]
+
+    @staticmethod
+    def _match_alias_pattern(alias_pattern: str, import_path: str) -> str | None:
+        if "*" not in alias_pattern:
+            return "" if alias_pattern == import_path else None
+        prefix, suffix = alias_pattern.split("*", 1)
+        if not import_path.startswith(prefix) or not import_path.endswith(suffix):
+            return None
+        return import_path[len(prefix):len(import_path) - len(suffix) if suffix else None]
+
+    @staticmethod
+    def _apply_alias_target(target_pattern: str, wildcard_value: str) -> str | None:
+        if "*" in target_pattern:
+            return target_pattern.replace("*", wildcard_value, 1)
+        if wildcard_value:
+            return None
+        return target_pattern
+
+    def _resolve_relative_base(self, source_file: str, imp: str) -> PurePosixPath:
+        source_parent = PurePosixPath(source_file).parent
+        if "/" in imp:
+            return self._normalize_posix_path(PurePosixPath(source_parent, imp))
+
+        leading_dots = len(imp) - len(imp.lstrip("."))
+        remainder = imp.lstrip(".").replace(".", "/")
+        base = source_parent
+        for _ in range(max(leading_dots - 1, 0)):
+            base = base.parent
+        if remainder:
+            base = PurePosixPath(base, remainder)
+        return self._normalize_posix_path(base)
+
+    @staticmethod
+    def _normalize_posix_path(path: PurePosixPath) -> PurePosixPath:
+        normalized_parts: list[str] = []
+        for part in path.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                if normalized_parts:
+                    normalized_parts.pop()
+                continue
+            normalized_parts.append(part)
+        if not normalized_parts:
+            return PurePosixPath(".")
+        return PurePosixPath(*normalized_parts)
+
+    @staticmethod
+    def _path_depth(path_value: str | None) -> int:
+        if not path_value or path_value == ".":
+            return 0
+        return len([part for part in PurePosixPath(path_value).parts if part not in ("", ".")])
+
+    @staticmethod
+    def _is_subpath(path: PurePosixPath, maybe_parent: PurePosixPath) -> bool:
+        parent_parts = tuple(part for part in maybe_parent.parts if part not in ("", "."))
+        path_parts = tuple(part for part in path.parts if part not in ("", "."))
+        if not parent_parts:
+            return True
+        if len(parent_parts) > len(path_parts):
+            return False
+        return path_parts[: len(parent_parts)] == parent_parts
+
+    def resolve_calling_symbol(self, file: str, call_line: int) -> str | None:
+        """确定指定行所在的符号（调用者）。"""
+        symbol_ids = self.graph.file_symbols.get(file, [])
+        containing = [
+            self.graph.symbols[symbol_id]
+            for symbol_id in symbol_ids
+            if symbol_id in self.graph.symbols
+            and self.graph.symbols[symbol_id].line <= call_line <= max(
+                self.graph.symbols[symbol_id].end_line,
+                self.graph.symbols[symbol_id].line,
+            )
+        ]
+        if not containing:
+            return None
+        containing.sort(
+            key=lambda symbol: (
+                max(symbol.end_line, symbol.line) - symbol.line,
+                -symbol.line,
+                symbol.col,
+                symbol.name,
+            )
+        )
+        return containing[0].id
+
+    def resolve_import_binding_targets(
+        self,
+        file: str,
+        binding: JSImportBinding,
+    ) -> set[str]:
+        """解析 import binding 到目标符号。"""
+        if binding.imported_name == "*":
+            return set()
+        target_files = self.resolve_import_targets(file, binding.module)
+        if not target_files:
+            return set()
+
+        resolved_ids: set[str] = set()
+        for target_file in target_files:
+            resolved_ids.update(
+                self._resolve_exported_symbols(
+                    file=target_file,
+                    export_name=binding.imported_name,
+                    depth=0,
+                    visited=set(),
+                )
+            )
+
+        if resolved_ids:
+            return resolved_ids
+
+        if binding.imported_name != "default":
+            direct_candidates = [
+                symbol_id
+                for symbol_id in self._name_idx.get(binding.imported_name, [])
+                if self._sym_file[symbol_id] in target_files
+            ]
+            if direct_candidates:
+                return set(direct_candidates)
+        return set()
+
+    def _resolve_exported_symbols(
+        self,
+        file: str,
+        export_name: str,
+        depth: int,
+        visited: set[tuple[str, str]],
+    ) -> set[str]:
+        """递归解析 re-export，追踪到实际定义的符号。"""
+        if depth >= MAX_EXPORT_RESOLVE_DEPTH:
+            return set()
+        visit_key = (file, export_name)
+        if visit_key in visited:
+            return set()
+        next_visited = set(visited)
+        next_visited.add(visit_key)
+
+        bindings = self.graph.file_exports.get(file, [])
+        resolved_ids: set[str] = set()
+
+        for binding in bindings:
+            if binding.kind == "wildcard" and binding.module:
+                target_files = self.resolve_import_targets(file, binding.module)
+                for target_file in target_files:
+                    resolved_ids.update(
+                        self._resolve_exported_symbols(
+                            file=target_file,
+                            export_name=export_name,
+                            depth=depth + 1,
+                            visited=next_visited,
+                        )
+                    )
+                continue
+
+            if binding.exported_name != export_name:
+                continue
+
+            if binding.module is None and binding.source_name:
+                resolved_ids.update(
+                    symbol_id
+                    for symbol_id in self._name_idx.get(binding.source_name, [])
+                    if self._sym_file[symbol_id] == file
+                )
+                continue
+
+            if binding.module and binding.source_name:
+                target_files = self.resolve_import_targets(file, binding.module)
+                for target_file in target_files:
+                    resolved_ids.update(
+                        self._resolve_exported_symbols(
+                            file=target_file,
+                            export_name=binding.source_name,
+                            depth=depth + 1,
+                            visited=next_visited,
+                        )
+                    )
+
+        if resolved_ids:
+            return resolved_ids
+
+        return {
+            symbol_id
+            for symbol_id in self._name_idx.get(export_name, [])
+            if self._sym_file[symbol_id] == file and self.graph.symbols[symbol_id].visibility == "exported"
+        }
+
+    def resolve_call_target(
+        self,
+        file: str,
+        call_name: str,
+        call_line: int,
+        import_targets_by_file: dict[str, set[str]],
+        import_symbol_targets_by_file: dict[str, dict[str, set[str]]],
+    ) -> str | None:
+        """解析函数调用到目标符号。"""
+        candidates = self._name_idx.get(call_name, [])
+        if not candidates:
+            return None
+
+        same_file = [symbol_id for symbol_id in candidates if self._sym_file[symbol_id] == file]
+        if same_file:
+            return self._pick_best_target(same_file, file, call_line)
+
+        imported_targets = list(import_symbol_targets_by_file.get(file, {}).get(call_name, set()))
+        if imported_targets:
+            return self._pick_best_target(imported_targets, file, call_line)
+
+        imported_files = import_targets_by_file.get(file, set())
+        imported = [symbol_id for symbol_id in candidates if self._sym_file[symbol_id] in imported_files]
+        if imported:
+            return self._pick_best_target(imported, file, call_line)
+
+        if len(candidates) == 1:
+            return candidates[0]
+
+        exported = [
+            symbol_id
+            for symbol_id in candidates
+            if self.graph.symbols[symbol_id].visibility == "exported"
+        ]
+        if len(exported) == 1:
+            return exported[0]
+        return None
+
+    def _pick_best_target(self, candidates: list[str], file: str, call_line: int) -> str:
+        ordered = sorted(
+            candidates,
+            key=lambda symbol_id: (
+                0 if self.graph.symbols[symbol_id].file == file else 1,
+                abs(self.graph.symbols[symbol_id].line - call_line),
+                0 if self.graph.symbols[symbol_id].visibility == "exported" else 1,
+                self.graph.symbols[symbol_id].file,
+                self.graph.symbols[symbol_id].line,
+                self.graph.symbols[symbol_id].name,
+            ),
+        )
+        return ordered[0]
+
+    def _discover_import_config_paths(self) -> list[Path]:
+        found: list[Path] = []
+        for root, dir_names, file_names in os.walk(self.project_root):
+            dir_names[:] = [name for name in dir_names if name not in SKIP_DIR_NAMES]
+            for filename in ("tsconfig.json", "jsconfig.json"):
+                if filename in file_names:
+                    found.append(Path(root) / filename)
+        return sorted(found)
+
+    def _load_jsonc_with_extends(self, config_path: Path, visited: set[Path]) -> dict[str, Any]:
+        if config_path in visited or not config_path.exists():
+            return {}
+        next_visited = set(visited)
+        next_visited.add(config_path)
+        try:
+            raw_data = json.loads(self._strip_jsonc(config_path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(raw_data, dict):
+            return {}
+
+        extends_value = raw_data.get("extends")
+        if not isinstance(extends_value, str):
+            return raw_data
+        base_config_path = self._resolve_extends_path(config_path, extends_value)
+        if base_config_path is None:
+            return raw_data
+        base_data = self._load_jsonc_with_extends(base_config_path, next_visited)
+        return self._merge_dicts(base_data, raw_data)
+
+    def _resolve_extends_path(self, config_path: Path, extends_value: str) -> Path | None:
+        candidate = Path(extends_value)
+        if not candidate.suffix:
+            candidate = candidate.with_suffix(".json")
+        if candidate.is_absolute():
+            resolved = candidate
+        else:
+            if not extends_value.startswith("."):
+                return None
+            resolved = (config_path.parent / candidate).resolve()
+        try:
+            resolved.relative_to(self.project_root)
+        except ValueError:
+            return None
+        return resolved
+
+    def _resolve_config_relative_path(self, config_path: Path, value: Any) -> str | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        resolved = (config_path.parent / value).resolve()
+        try:
+            return resolved.relative_to(self.project_root).as_posix()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = ImportResolver._merge_dicts(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    @staticmethod
+    def _strip_jsonc(text: str) -> str:
+        result: list[str] = []
+        in_string = False
+        string_delimiter = ""
+        escape = False
+        in_line_comment = False
+        in_block_comment = False
+        i = 0
+        while i < len(text):
+            char = text[i]
+            next_char = text[i + 1] if i + 1 < len(text) else ""
+            if in_line_comment:
+                if char == "\n":
+                    in_line_comment = False
+                    result.append(char)
+                i += 1
+                continue
+            if in_block_comment:
+                if char == "*" and next_char == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if in_string:
+                result.append(char)
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == string_delimiter:
+                    in_string = False
+                i += 1
+                continue
+            if char == "/" and next_char == "/":
+                in_line_comment = True
+                i += 2
+                continue
+            if char == "/" and next_char == "*":
+                in_block_comment = True
+                i += 2
+                continue
+            if char in {'"', "'"}:
+                in_string = True
+                string_delimiter = char
+                result.append(char)
+                i += 1
+                continue
+            result.append(char)
+            i += 1
+        return re.sub(r",(\s*[}\]])", r"\1", "".join(result))

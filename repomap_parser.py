@@ -1,0 +1,970 @@
+#!/usr/bin/env python3
+"""
+Repo Map Parser — Tree-sitter Analysis Layer
+==============================================
+负责代码解析、符号提取、import/export 绑定提取。
+
+此模块独立于引擎层，可被单独使用进行代码分析。
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections import defaultdict
+from typing import Any
+
+from repomap_support import JSImportBinding, JSExportBinding, Symbol
+
+logger = logging.getLogger("repomap")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tree-sitter Queries（内嵌，无需外部 .scm 文件）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+QUERIES: dict[str, dict[str, str]] = {
+    "python": {
+        "function": """
+            (function_definition name: (identifier) @name) @definition.function
+            (decorated_definition (function_definition name: (identifier) @name)) @definition.function
+            (class_definition body: (block (function_definition name: (identifier) @name))) @definition.method
+            (assignment left: (identifier) @name right: (lambda)) @definition.lambda
+        """,
+        "class": """
+            (class_definition name: (identifier) @name) @definition.class
+            (decorated_definition (class_definition name: (identifier) @name)) @definition.class
+        """,
+        "import": """
+            (import_statement name: (dotted_name) @name)
+            (import_statement name: (aliased_import name: (dotted_name) @name))
+            (import_from_statement module_name: (dotted_name) @name)
+            (import_from_statement module_name: (relative_import) @name)
+        """,
+        "call": """
+            (call function: (identifier) @name) @reference.call
+            (call function: (attribute attribute: (identifier) @name)) @reference.call
+        """,
+    },
+    "javascript": {
+        "function": """
+            (function_declaration name: (identifier) @name) @definition.function
+            (variable_declarator name: (identifier) @name value: (arrow_function)) @definition.function
+            (variable_declarator name: (identifier) @name value: (function_expression)) @definition.function
+            (method_definition name: (property_identifier) @name) @definition.method
+        """,
+        "anonymous_function": """
+            (arrow_function) @definition.anonymous_function
+            (function_expression) @definition.anonymous_function
+        """,
+        "class": """
+            (class_declaration name: (identifier) @name) @definition.class
+        """,
+        "import": """
+            (import_statement source: (string) @source)
+            (import_specifier name: (identifier) @name)
+            (import_clause (identifier) @name)
+        """,
+        "call": """
+            (call_expression function: (identifier) @name) @reference.call
+            (call_expression function: (member_expression property: (property_identifier) @name)) @reference.call
+        """,
+    },
+    # TypeScript：使用专用绑定时节点名不同；回退到 JS parser 时 TS 特有语法会报 ERROR，
+    # 此处只保留两个 parser 都支持的通用模式
+    "typescript": {
+        "function": """
+            (function_declaration name: (identifier) @name) @definition.function
+            (variable_declarator name: (identifier) @name value: (arrow_function)) @definition.function
+            (method_definition name: (property_identifier) @name) @definition.method
+        """,
+        "anonymous_function": """
+            (arrow_function) @definition.anonymous_function
+            (function_expression) @definition.anonymous_function
+        """,
+        "class": """
+            (class_declaration name: (_) @name) @definition.class
+        """,
+        "import": """
+            (import_statement source: (string) @source)
+            (import_specifier name: (identifier) @name)
+            (import_clause (identifier) @name)
+        """,
+        "call": """
+            (call_expression function: (identifier) @name) @reference.call
+            (call_expression function: (member_expression property: (property_identifier) @name)) @reference.call
+        """,
+    },
+    "go": {
+        "function": """
+            (function_declaration name: (identifier) @name) @definition.function
+            (method_declaration name: (field_identifier) @name) @definition.method
+        """,
+        "class": """
+            (type_spec name: (type_identifier) @name type: (struct_type)) @definition.struct
+            (type_spec name: (type_identifier) @name type: (interface_type)) @definition.interface
+        """,
+        "import": """
+            (import_spec path: (interpreted_string_literal) @path)
+        """,
+        "call": """
+            (call_expression function: (identifier) @name) @reference.call
+            (call_expression function: (selector_expression field: (field_identifier) @name)) @reference.call
+        """,
+    },
+    "rust": {
+        "function": """
+            (function_item name: (identifier) @name) @definition.function
+            (function_signature_item name: (identifier) @name) @definition.trait_method
+        """,
+        "class": """
+            (struct_item name: (type_identifier) @name) @definition.struct
+            (enum_item name: (type_identifier) @name) @definition.enum
+            (trait_item name: (type_identifier) @name) @definition.trait
+            (impl_item type: (type_identifier) @name) @definition.impl
+            (type_item name: (type_identifier) @name) @definition.type
+            (mod_item name: (identifier) @name) @definition.module
+        """,
+        "import": """
+            ; 捕获 use crate::module::Item 中的 module 部分
+            (use_declaration 
+                argument: (scoped_identifier 
+                    path: (identifier) @path
+                    name: (identifier) @name))
+            ; 捕获 use crate::module::{A, B} 中的 module 部分
+            (use_declaration 
+                argument: (scoped_use_list 
+                    path: (identifier) @path))
+            ; 捕获 use module::Item 中的 module
+            (use_declaration 
+                argument: (scoped_identifier 
+                    path: (identifier) @path
+                    name: (identifier) @name))
+            ; 捕获 extern crate name;
+            (extern_crate_declaration name: (identifier) @name)
+            ; 捕获 use module;
+            (use_declaration argument: (identifier) @name)
+        """,
+        "call": """
+            (call_expression function: (identifier) @name) @reference.call
+            (call_expression function: (field_expression field: (field_identifier) @name)) @reference.call
+            (call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call
+        """,
+    },
+}
+
+EXT_TO_LANG: dict[str, str] = {
+    ".py": "python",
+    ".pyi": "python",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tree-sitter 适配层
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TreeSitterAdapter:
+    """
+    封装 tree-sitter 多语言解析。
+    ‑ 兼容 tree-sitter 0.20 ~ 0.25+（捕获结果格式差异）
+    ‑ 懒加载语言绑定，未安装的静默跳过
+    """
+
+    def __init__(self) -> None:
+        self.parsers: dict[str, Any] = {}
+        # lang -> query_type -> compiled Query
+        self._queries: dict[str, dict[str, Any]] = {}
+        self._init_parsers()
+
+    # ── 初始化 ─────────────────────────────────────────────────────────────────
+
+    def _init_parsers(self) -> None:
+        """加载各语言 parser，并预编译 queries。"""
+        bindings = {
+            "python":     ("tree_sitter_python",     "language"),
+            "javascript": ("tree_sitter_javascript",  "language"),
+            "go":         ("tree_sitter_go",          "language"),
+            "rust":       ("tree_sitter_rust",        "language"),
+        }
+
+        # 动态导入，失败则跳过
+        for lang, (module, attr) in bindings.items():
+            try:
+                mod  = __import__(module)
+                lang_fn = getattr(mod, attr)
+                from tree_sitter import Language, Parser  # type: ignore
+                self.parsers[lang] = Parser(Language(lang_fn()))
+                logger.debug(f"Parser loaded: {lang}")
+            except Exception as e:
+                logger.debug(f"Parser unavailable [{lang}]: {e}")
+
+        # TypeScript：优先专用绑定，回退到 JavaScript parser
+        try:
+            from tree_sitter_typescript import language_typescript  # type: ignore
+            from tree_sitter import Language, Parser  # type: ignore
+            self.parsers["typescript"] = Parser(Language(language_typescript()))
+            logger.debug("Parser loaded: typescript (dedicated)")
+        except Exception:
+            if "javascript" in self.parsers:
+                self.parsers["typescript"] = self.parsers["javascript"]
+                logger.debug("Parser loaded: typescript (fallback to javascript)")
+
+        # 预编译 queries —— 只对已加载的语言
+        self._precompile_queries()
+
+    def _precompile_queries(self) -> None:
+        """预编译所有 tree-sitter queries，失败时记录警告。
+        
+        要求 tree-sitter >= 0.21（支持 Query 类）
+        """
+        try:
+            from tree_sitter import Query  # type: ignore
+        except ImportError:
+            logger.warning("tree-sitter Query class not available (requires >=0.21), queries disabled")
+            return
+            
+        for lang, patterns in QUERIES.items():
+            if lang not in self.parsers:
+                continue
+            self._queries[lang] = {}
+            parser = self.parsers[lang]
+            for qtype, src in patterns.items():
+                try:
+                    q = Query(parser.language, src)
+                    self._queries[lang][qtype] = q
+                except Exception as e:
+                    logger.warning(f"Query compile failed [{lang}/{qtype}]: {e}")
+
+    # ── 公开接口 ────────────────────────────────────────────────────────────────
+
+    def parse(self, content: bytes, lang: str) -> Any | None:
+        parser = self.parsers.get(lang)
+        if not parser:
+            return None
+        
+        # 内容大小限制（防止内存溢出）
+        MAX_PARSE_SIZE = 10 * 1024 * 1024  # 10MB
+        if len(content) > MAX_PARSE_SIZE:
+            logger.warning(f"File too large for parsing ({len(content)} bytes > {MAX_PARSE_SIZE}), skipping")
+            return None
+        
+        # 检测异常内容模式（可能导致解析器崩溃）
+        try:
+            # 检查是否包含可能导致解析器栈溢出的极端嵌套模式
+            content_str = content.decode('utf-8', errors='ignore')
+            # 检测极端深度的括号嵌套（可能导致递归溢出）
+            max_nesting = 0
+            current_nesting = 0
+            for char in content_str[:100000]:  # 只检查前 100KB
+                if char in '({[<':
+                    current_nesting += 1
+                    max_nesting = max(max_nesting, current_nesting)
+                elif char in ')}]>':
+                    current_nesting -= 1
+            # 如果嵌套深度超过 1000，可能触发解析器栈溢出
+            if max_nesting > 1000:
+                logger.warning(f"Extreme nesting detected ({max_nesting} levels), skipping file to prevent parser crash")
+                return None
+        except Exception:
+            pass  # 解码失败继续尝试解析
+        
+        try:
+            return parser.parse(content)
+        except RecursionError:
+            logger.warning(f"Parser recursion limit exceeded for {lang}, skipping file")
+            return None
+        except MemoryError:
+            logger.warning(f"Parser out of memory for {lang}, skipping file")
+            return None
+        except Exception as e:
+            logger.debug(f"Parse error [{lang}]: {e}")
+            return None
+
+    def extract_symbols(self, tree: Any, lang: str, file: str, content: bytes) -> list[Symbol]:
+        """从 AST 提取函数 / 类等符号定义。"""
+        symbols_by_id: dict[str, Symbol] = {}
+        root = tree.root_node
+
+        for qtype in ("function", "class"):
+            query = self._queries.get(lang, {}).get(qtype)
+            if not query:
+                continue
+
+            captures = self._run_query(query, root)
+            name_nodes: list[Any] = []
+            def_nodes:  list[tuple[Any, str]] = []
+
+            for cap_name, node in captures:
+                if cap_name == "name":
+                    name_nodes.append(node)
+                elif "definition" in cap_name or "export" in cap_name:
+                    def_nodes.append((node, cap_name))
+
+            for name_node in name_nodes:
+                for def_node, def_cap in def_nodes:
+                    if not self._within(name_node, def_node):
+                        continue
+                    kind = def_cap.split(".")[-1] if "." in def_cap else def_cap
+                    vis  = "exported" if "export" in def_cap else "public"
+                    name = self._text(name_node)
+                    if not name:
+                        break
+                    # Python: _ 前缀视为 private
+                    if lang == "python" and name.startswith("_") and not name.startswith("__"):
+                        vis = "private"
+                    sym_id = f"{file}::{name}::{name_node.start_point[0] + 1}"
+                    symbols_by_id[sym_id] = Symbol(
+                        id=sym_id,
+                        name=name,
+                        kind=kind,
+                        file=file,
+                        line=name_node.start_point[0] + 1,
+                        end_line=def_node.end_point[0] + 1,
+                        col=name_node.start_point[1],
+                        visibility=vis,
+                        docstring=self._docstring(def_node, lang),
+                        signature=self._signature(def_node, lang),
+                    )
+                    break
+
+        for symbol in self._extract_anonymous_symbols(tree, lang, file):
+            symbols_by_id.setdefault(symbol.id, symbol)
+
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (
+                symbol.file,
+                symbol.line,
+                symbol.end_line,
+                symbol.col,
+                symbol.name,
+                symbol.kind,
+            ),
+        )
+
+    def _extract_anonymous_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+        if lang not in ("javascript", "typescript"):
+            return []
+
+        query = self._queries.get(lang, {}).get("anonymous_function")
+        if not query:
+            return []
+
+        anonymous_symbols: dict[str, Symbol] = {}
+        for cap_name, node in self._run_query(query, tree.root_node):
+            if cap_name != "definition.anonymous_function":
+                continue
+            if self._has_named_owner(node):
+                continue
+            if node.end_point[0] <= node.start_point[0]:
+                continue
+
+            line = node.start_point[0] + 1
+            name = f"<anonymous@{line}>"
+            symbol_id = f"{file}::{name}::{line}"
+            anonymous_symbols[symbol_id] = Symbol(
+                id=symbol_id,
+                name=name,
+                kind="anonymous_function",
+                file=file,
+                line=line,
+                end_line=node.end_point[0] + 1,
+                col=node.start_point[1],
+                visibility="private",
+                signature=self._signature(node, lang),
+            )
+
+        return list(anonymous_symbols.values())
+
+    def _has_named_owner(self, node: Any) -> bool:
+        current = getattr(node, "parent", None)
+        depth = 0
+        while current is not None and depth < 4:
+            if current.type in {"function_declaration", "method_definition"}:
+                return True
+            if current.type == "variable_declarator":
+                for child in current.children:
+                    if child.type == "identifier":
+                        return True
+            current = getattr(current, "parent", None)
+            depth += 1
+        return False
+
+    def extract_imports(self, tree: Any, lang: str) -> list[tuple[str, int]]:
+        query = self._queries.get(lang, {}).get("import")
+        if not query:
+            return []
+        results = set()
+        
+        # 对于Rust，需要特殊处理：优先使用path而不是name
+        if lang == "rust":
+            paths_by_line: dict[int, str] = {}
+            names_by_line: dict[int, list[str]] = defaultdict(list)
+            
+            for cap_name, node in self._run_query(query, tree.root_node):
+                text = self._text(node)
+                line = node.start_point[0] + 1
+                if cap_name == "path":
+                    paths_by_line[line] = text
+                elif cap_name == "name":
+                    names_by_line[line].append(text)
+            
+            # 优先使用path（模块名），其次使用name
+            for line in sorted(set(list(paths_by_line.keys()) + list(names_by_line.keys()))):
+                if line in paths_by_line:
+                    results.add((paths_by_line[line], line))
+                else:
+                    for name in names_by_line[line]:
+                        results.add((name, line))
+        else:
+            for cap_name, node in self._run_query(query, tree.root_node):
+                if lang in ("javascript", "typescript") and cap_name != "source":
+                    continue
+                text = self._text(node).strip("\"'")
+                if text:
+                    results.add((text, node.start_point[0] + 1))
+        return sorted(results, key=lambda item: (item[1], item[0]))
+
+    def extract_js_ts_import_bindings(
+        self,
+        content: bytes,
+        lang: str,
+        tree: Any | None = None,
+    ) -> list[JSImportBinding]:
+        """提取 JS/TS import 绑定信息。"""
+        if lang not in ("javascript", "typescript"):
+            return []
+        parsed_tree = tree or self.parse(content, lang)
+        if not parsed_tree:
+            return []
+        bindings: dict[tuple[str, str, str, int, str], JSImportBinding] = {}
+        for node in parsed_tree.root_node.children:
+            if node.type == "import_statement":
+                self._collect_es_import_bindings(node, bindings)
+        for node in self._walk_tree(parsed_tree.root_node):
+            if node.type == "variable_declarator":
+                self._collect_commonjs_import_bindings(node, bindings)
+        return sorted(
+            bindings.values(),
+            key=lambda item: (item.line, item.module, item.local_name, item.imported_name, item.kind),
+        )
+
+    def extract_js_ts_export_bindings(
+        self,
+        content: bytes,
+        lang: str,
+        tree: Any | None = None,
+    ) -> list[JSExportBinding]:
+        """提取 JS/TS export 绑定信息。"""
+        if lang not in ("javascript", "typescript"):
+            return []
+        parsed_tree = tree or self.parse(content, lang)
+        if not parsed_tree:
+            return []
+        bindings: dict[tuple[str, str | None, str | None, int, str], JSExportBinding] = {}
+
+        def add_binding(exported_name: str, source_name: str | None, module: str | None, line: int, kind: str) -> None:
+            key = (exported_name, source_name, module, line, kind)
+            bindings[key] = JSExportBinding(
+                exported_name=exported_name,
+                source_name=source_name,
+                module=module,
+                line=line,
+                kind=kind,
+            )
+
+        for node in parsed_tree.root_node.children:
+            if node.type == "export_statement":
+                self._collect_es_export_bindings(node, add_binding)
+        for node in self._walk_tree(parsed_tree.root_node):
+            if node.type == "assignment_expression":
+                self._collect_commonjs_export_bindings(node, add_binding)
+        return sorted(
+            bindings.values(),
+            key=lambda item: (
+                item.line,
+                item.exported_name,
+                item.source_name or "",
+                item.module or "",
+                item.kind,
+            ),
+        )
+
+    def _collect_es_import_bindings(
+        self,
+        node: Any,
+        bindings: dict[tuple[str, str, str, int, str], JSImportBinding],
+    ) -> None:
+        module = self._module_literal_from_statement(node)
+        if not module:
+            return
+        line = node.start_point[0] + 1
+        import_clause = self._first_child_of_type(node, "import_clause")
+        if not import_clause:
+            return
+        for child in import_clause.children:
+            if child.type == "identifier":
+                self._add_import_binding(bindings, child.text.decode("utf-8"), "default", module, line, "default")
+            elif child.type == "named_imports":
+                for specifier in child.children:
+                    if specifier.type != "import_specifier":
+                        continue
+                    source_node = specifier.child_by_field_name("name")
+                    alias_node = specifier.child_by_field_name("alias")
+                    source_name = self._identifier_text(source_node)
+                    local_name = self._identifier_text(alias_node) or source_name
+                    if source_name and local_name:
+                        self._add_import_binding(bindings, local_name, source_name, module, line, "named")
+            elif child.type == "namespace_import":
+                local_name = self._last_identifier(child)
+                if local_name:
+                    self._add_import_binding(bindings, local_name, "*", module, line, "namespace")
+
+    def _collect_commonjs_import_bindings(
+        self,
+        node: Any,
+        bindings: dict[tuple[str, str, str, int, str], JSImportBinding],
+    ) -> None:
+        value_node = node.child_by_field_name("value")
+        module = self._require_call_module(value_node)
+        if not module:
+            return
+        name_node = node.child_by_field_name("name")
+        if not name_node:
+            return
+        line = node.start_point[0] + 1
+        if name_node.type == "identifier":
+            self._add_import_binding(bindings, name_node.text.decode("utf-8"), "default", module, line, "default")
+            return
+        if name_node.type != "object_pattern":
+            return
+        for child in name_node.children:
+            if child.type in {"shorthand_property_identifier_pattern", "identifier"}:
+                name = child.text.decode("utf-8")
+                self._add_import_binding(bindings, name, name, module, line, "named")
+            elif child.type == "pair_pattern":
+                source_name = self._identifier_text(child.child_by_field_name("key"))
+                local_name = self._identifier_text(child.child_by_field_name("value"))
+                if source_name and local_name:
+                    self._add_import_binding(bindings, local_name, source_name, module, line, "named")
+
+    def _collect_es_export_bindings(
+        self,
+        node: Any,
+        add_binding: Any,
+    ) -> None:
+        line = node.start_point[0] + 1
+        module = self._module_literal_from_statement(node)
+        has_default = self._first_child_of_type(node, "default") is not None
+        namespace_export = self._first_child_of_type(node, "namespace_export")
+        export_clause = self._first_child_of_type(node, "export_clause")
+        declaration = self._export_declaration_node(node)
+
+        if namespace_export is not None and module:
+            exported_name = self._last_identifier(namespace_export)
+            if exported_name:
+                add_binding(exported_name, "*", module, line, "namespace")
+            return
+
+        if self._first_child_of_type(node, "*") is not None and module:
+            add_binding("*", "*", module, line, "wildcard")
+            return
+
+        if export_clause is not None:
+            kind = "reexport" if module else "local"
+            for specifier in export_clause.children:
+                if specifier.type != "export_specifier":
+                    continue
+                source_name = self._identifier_text(specifier.child_by_field_name("name"))
+                exported_name = self._identifier_text(specifier.child_by_field_name("alias")) or source_name
+                if source_name and exported_name:
+                    add_binding(exported_name, source_name, module, line, kind)
+            return
+
+        if has_default:
+            source_name = self._export_default_source_name(node, declaration)
+            if source_name:
+                add_binding("default", source_name, None, line, "local")
+            return
+
+        for exported_name in self._exported_names_from_declaration(declaration):
+            add_binding(exported_name, exported_name, None, line, "local")
+
+    def _collect_commonjs_export_bindings(
+        self,
+        node: Any,
+        add_binding: Any,
+    ) -> None:
+        target_node = node.child_by_field_name("left")
+        value_node = node.child_by_field_name("right")
+        if target_node is None or value_node is None or target_node.type != "member_expression":
+            return
+        export_target = self._commonjs_export_target(target_node)
+        if export_target is None:
+            return
+        line = node.start_point[0] + 1
+        if export_target == "default":
+            if value_node.type == "object":
+                for child in value_node.children:
+                    if child.type == "shorthand_property_identifier":
+                        name = child.text.decode("utf-8")
+                        add_binding(name, name, None, line, "local")
+                    elif child.type == "pair":
+                        exported_name = self._identifier_text(child.child_by_field_name("key"))
+                        source_name = self._identifier_text(child.child_by_field_name("value"))
+                        if exported_name and source_name:
+                            add_binding(exported_name, source_name, None, line, "local")
+                return
+            source_name = self._expression_binding_name(value_node)
+            if source_name:
+                add_binding("default", source_name, None, line, "local")
+            return
+        source_name = self._expression_binding_name(value_node)
+        if source_name:
+            add_binding(export_target, source_name, None, line, "local")
+
+    def _add_import_binding(
+        self,
+        bindings: dict[tuple[str, str, str, int, str], JSImportBinding],
+        local_name: str,
+        imported_name: str,
+        module: str,
+        line: int,
+        kind: str,
+    ) -> None:
+        key = (local_name, imported_name, module, line, kind)
+        bindings[key] = JSImportBinding(local_name, imported_name, module, line, kind)
+
+    def _module_literal_from_statement(self, node: Any) -> str | None:
+        for child in node.children:
+            if child.type == "string":
+                return self._string_literal_value(child)
+        return None
+
+    def _require_call_module(self, node: Any | None) -> str | None:
+        if node is None or node.type != "call_expression":
+            return None
+        function_node = node.child_by_field_name("function")
+        arguments_node = node.child_by_field_name("arguments")
+        if function_node is None or function_node.type != "identifier":
+            return None
+        if function_node.text.decode("utf-8") != "require" or arguments_node is None:
+            return None
+        for child in arguments_node.children:
+            if child.type == "string":
+                return self._string_literal_value(child)
+        return None
+
+    def _commonjs_export_target(self, node: Any) -> str | None:
+        object_node = node.child_by_field_name("object")
+        property_node = node.child_by_field_name("property")
+        if object_node is None or property_node is None:
+            return None
+        if object_node.type == "identifier" and object_node.text.decode("utf-8") == "exports":
+            return property_node.text.decode("utf-8")
+        if object_node.type == "member_expression":
+            inner_object = object_node.child_by_field_name("object")
+            inner_property = object_node.child_by_field_name("property")
+            if (
+                inner_object is not None
+                and inner_property is not None
+                and inner_object.type == "identifier"
+                and inner_object.text.decode("utf-8") == "module"
+                and inner_property.type == "property_identifier"
+                and inner_property.text.decode("utf-8") == "exports"
+            ):
+                return property_node.text.decode("utf-8")
+        if (
+            object_node.type == "identifier"
+            and property_node.type == "property_identifier"
+            and object_node.text.decode("utf-8") == "module"
+            and property_node.text.decode("utf-8") == "exports"
+        ):
+            return "default"
+        return None
+
+    def _export_declaration_node(self, node: Any) -> Any | None:
+        for child in node.children:
+            if child.type in {
+                "function_declaration",
+                "class_declaration",
+                "lexical_declaration",
+                "interface_declaration",
+                "type_alias_declaration",
+                "enum_declaration",
+            }:
+                return child
+        return None
+
+    def _export_default_source_name(self, node: Any, declaration: Any | None) -> str | None:
+        if declaration is not None:
+            return self._declaration_primary_name(declaration)
+        for child in node.children:
+            if child.type in {"export", "default", ";"}:
+                continue
+            source_name = self._expression_binding_name(child)
+            if source_name:
+                return source_name
+        return None
+
+    def _exported_names_from_declaration(self, declaration: Any | None) -> list[str]:
+        if declaration is None:
+            return []
+        if declaration.type == "lexical_declaration":
+            names: list[str] = []
+            for child in declaration.children:
+                if child.type != "variable_declarator":
+                    continue
+                name_node = child.child_by_field_name("name")
+                if name_node is not None and name_node.type == "identifier":
+                    names.append(name_node.text.decode("utf-8"))
+            return names
+        primary_name = self._declaration_primary_name(declaration)
+        return [primary_name] if primary_name else []
+
+    def _declaration_primary_name(self, declaration: Any) -> str | None:
+        for field_name in ("name",):
+            target = declaration.child_by_field_name(field_name)
+            if target is not None:
+                return target.text.decode("utf-8")
+        for child in declaration.children:
+            if child.type in {"identifier", "type_identifier"}:
+                return child.text.decode("utf-8")
+        return None
+
+    def _expression_binding_name(self, node: Any | None) -> str | None:
+        if node is None:
+            return None
+        if node.type in {"identifier", "property_identifier", "type_identifier"}:
+            return node.text.decode("utf-8")
+        if node.type in {"function_declaration", "class_declaration"}:
+            return self._declaration_primary_name(node)
+        return None
+
+    def _string_literal_value(self, node: Any) -> str:
+        return self._text(node).strip("\"'")
+
+    def _first_child_of_type(self, node: Any, node_type: str) -> Any | None:
+        for child in node.children:
+            if child.type == node_type:
+                return child
+        return None
+
+    def _last_identifier(self, node: Any) -> str | None:
+        identifiers = [
+            child.text.decode("utf-8")
+            for child in node.children
+            if child.type in {"identifier", "property_identifier", "type_identifier"}
+        ]
+        return identifiers[-1] if identifiers else None
+
+    def _identifier_text(self, node: Any | None) -> str | None:
+        if node is None:
+            return None
+        if node.type in {"identifier", "property_identifier", "type_identifier", "shorthand_property_identifier", "shorthand_property_identifier_pattern"}:
+            return node.text.decode("utf-8")
+        return None
+
+    def _walk_tree(self, root: Any) -> list[Any]:
+        nodes = [root]
+        result: list[Any] = []
+        while nodes:
+            current = nodes.pop()
+            result.append(current)
+            nodes.extend(reversed(current.children))
+        return result
+
+    def extract_calls(self, tree: Any, lang: str) -> list[tuple[str, int]]:
+        query = self._queries.get(lang, {}).get("call")
+        if not query:
+            return []
+        results = []
+        for cap_name, node in self._run_query(query, tree.root_node):
+            if "reference" in cap_name or "call" in cap_name or cap_name == "name":
+                name = self._text(node)
+                if name:
+                    results.append((name, node.start_point[0] + 1))
+        return sorted(results, key=lambda item: (item[1], item[0]))
+
+    def _parse_import_specifiers(self, spec: str, module: str, line: int) -> list[JSImportBinding]:
+        bindings: list[JSImportBinding] = []
+        remaining = spec.strip()
+        if not remaining:
+            return bindings
+
+        if remaining.startswith("{"):
+            named_text = remaining[1:remaining.rfind("}")]
+            for imported_name, local_name in self._parse_named_clause(named_text):
+                bindings.append(JSImportBinding(local_name, imported_name, module, line, "named"))
+            return bindings
+
+        if remaining.startswith("*"):
+            namespace_match = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)", remaining)
+            if namespace_match:
+                bindings.append(
+                    JSImportBinding(
+                        local_name=namespace_match.group(1),
+                        imported_name="*",
+                        module=module,
+                        line=line,
+                        kind="namespace",
+                    )
+                )
+            return bindings
+
+        default_part = remaining
+        rest = ""
+        if "," in remaining:
+            default_part, rest = remaining.split(",", 1)
+        default_name = default_part.strip()
+        if default_name and re.fullmatch(r"[A-Za-z_$][\w$]*", default_name):
+            bindings.append(
+                JSImportBinding(
+                    local_name=default_name,
+                    imported_name="default",
+                    module=module,
+                    line=line,
+                    kind="default",
+                )
+            )
+        rest = rest.strip()
+        if rest.startswith("{") and "}" in rest:
+            named_text = rest[1:rest.rfind("}")]
+            for imported_name, local_name in self._parse_named_clause(named_text):
+                bindings.append(JSImportBinding(local_name, imported_name, module, line, "named"))
+        elif rest.startswith("*"):
+            namespace_match = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)", rest)
+            if namespace_match:
+                bindings.append(
+                    JSImportBinding(
+                        local_name=namespace_match.group(1),
+                        imported_name="*",
+                        module=module,
+                        line=line,
+                        kind="namespace",
+                    )
+                )
+        return bindings
+
+    def _parse_named_clause(self, text: str) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for raw_item in text.split(","):
+            item = raw_item.strip()
+            if not item:
+                continue
+            item = re.sub(r"^type\s+", "", item)
+            parts = re.split(r"\s+as\s+", item, maxsplit=1)
+            if len(parts) == 2:
+                source_name, exported_name = parts[0].strip(), parts[1].strip()
+            else:
+                source_name = exported_name = item
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(r"[A-Za-z_$][\w$]*", exported_name):
+                pairs.append((source_name, exported_name))
+        return pairs
+
+    def _parse_commonjs_object_clause(self, text: str) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for raw_item in text.split(","):
+            item = raw_item.strip()
+            if not item:
+                continue
+            parts = [part.strip() for part in item.split(":", 1)]
+            if len(parts) == 2:
+                source_name, local_name = parts
+            else:
+                source_name = local_name = parts[0]
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(r"[A-Za-z_$][\w$]*", local_name):
+                pairs.append((source_name, local_name))
+        return pairs
+
+    @staticmethod
+    def _line_number(text: str, offset: int) -> int:
+        return text.count("\n", 0, offset) + 1
+
+    # ── 内部辅助 ────────────────────────────────────────────────────────────────
+
+    def _run_query(self, query: Any, root: Any) -> list[tuple[str, Any]]:
+        """
+        执行 tree-sitter query 并返回统一格式 list[(cap_name, Node)]
+        
+        要求 tree-sitter >= 0.22（使用 QueryCursor）
+        """
+        try:
+            from tree_sitter import QueryCursor  # type: ignore
+            cursor = QueryCursor(query)
+            raw = cursor.captures(root)
+
+            pairs: list[tuple[str, Any]] = []
+            if isinstance(raw, dict):
+                # 新版格式: dict[cap_name, list[Node]]
+                for cap_name, nodes in raw.items():
+                    node_list = nodes if isinstance(nodes, list) else [nodes]
+                    for n in node_list:
+                        pairs.append((cap_name, n))
+            else:
+                # 旧版格式: list[(Node, cap_name)]
+                for item in raw:
+                    if isinstance(item, (list, tuple)) and len(item) == 2:
+                        node, cap_name = item
+                        pairs.append((cap_name, node))
+            return pairs
+        except Exception as e:
+            logger.debug(f"Query run error: {e}")
+            return []
+
+    @staticmethod
+    def _within(child: Any, parent: Any) -> bool:
+        return (child.start_point >= parent.start_point and
+                child.end_point   <= parent.end_point)
+
+    @staticmethod
+    def _text(node: Any) -> str:
+        return node.text.decode("utf-8") if getattr(node, "text", None) else ""
+
+    def _docstring(self, node: Any, lang: str) -> str:
+        if not node:
+            return ""
+        try:
+            if lang == "python":
+                for child in node.children:
+                    if child.type == "expression_statement":
+                        for sub in child.children:
+                            if sub.type == "string":
+                                return self._text(sub).strip("\"'` \n")
+            elif lang in ("javascript", "typescript", "go", "rust"):
+                prev = getattr(node, "prev_sibling", None)
+                if prev and "comment" in prev.type:
+                    return self._text(prev).lstrip("/* \n").rstrip("*/ \n")
+        except Exception:
+            pass
+        return ""
+
+    def _signature(self, node: Any, lang: str) -> str:
+        if not node:
+            return ""
+        try:
+            first_line = self._text(node).split("\n")[0]
+            patterns = {
+                "python":     r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
+                "javascript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)",
+                "typescript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)(?:\s*:\s*\S+)?\s*=>)",
+                "rust":       r"(?:pub\s+)?(?:async\s+)?fn\s+\w+(?:<[^>]*>)?\s*\([^)]*\)(?:\s*->\s*[^{]+)?",
+                "go":         r"func\s+(?:\([^)]+\)\s+)?\w+\s*\([^)]*\)(?:\s*\([^)]*\))?(?:\s*[^{]+)?",
+            }
+            pat = patterns.get(lang, "")
+            if pat:
+                m = re.search(pat, first_line)
+                if m:
+                    return m.group(0).strip()
+        except Exception:
+            pass
+        return ""

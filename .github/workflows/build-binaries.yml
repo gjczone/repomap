@@ -1,0 +1,63 @@
+name: build-binaries
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run test suite
+        shell: bash
+        run: |
+          uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
+            python -m unittest discover -s tests -v
+
+      - name: Build binary
+        shell: bash
+        run: |
+          uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
+            python -m repomap_cli build-binary --output dist
+
+      - name: Smoke test binary on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ./dist/repomap doctor
+
+      - name: Smoke test binary on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\dist\repomap.exe doctor
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repomap-${{ runner.os }}
+          path: dist/repomap*
