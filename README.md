@@ -88,6 +88,10 @@ repomap --help
 
 If you rebuild the binary later, the symlink still points at the newest file in `dist/repomap`.
 
+For a future AI assistant, use:
+
+- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/for-ai-smoke-check.md)
+
 ## Binary Location
 
 Current Linux binary:
@@ -348,6 +352,10 @@ repomap query-symbol --project /some/repo --symbol main
 repomap check --project /some/repo
 ```
 
+There is also an AI-ready smoke-check guide here:
+
+- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/for-ai-smoke-check.md)
+
 Short version:
 
 - no need for weekly churn
@@ -430,6 +438,10 @@ Important limitations:
 ## Skill Integration
 
 Future skill usage should call the `repomap` skill first, and that skill should execute the CLI directly.
+
+For natural-language examples that help an AI choose the right command, see:
+
+- `/home/guojiancheng/.agents/skills/repomap/references/prompt-examples.md`
 
 Examples:
 
