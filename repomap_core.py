@@ -93,6 +93,16 @@ SKIP_DIR_NAMES = {
     "external",
 }
 
+SKIP_FILE_NAMES = {
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "bun.lock",
+    "bun.lockb",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 核心引擎（协调层）
@@ -254,6 +264,8 @@ class RepoMapEngine:
         path = Path(file)
         if path.name.endswith(".min.js"):
             return True
+        if path.name in SKIP_FILE_NAMES:
+            return True
         return any(part in SKIP_DIR_NAMES for part in path.parts)
 
     def _should_skip_large_file(self, path: Path) -> bool:
@@ -379,6 +391,10 @@ class RepoMapEngine:
         """为 AI 生成推荐阅读顺序。"""
         return self._analyzer.suggested_reading_order(limit)
 
+    def summary_symbols(self, limit_files: int = 6, per_file: int = 4) -> list[dict[str, Any]]:
+        """返回适合 overview 展示的关键实现符号。"""
+        return self._analyzer.summary_symbols(limit_files, per_file)
+
     def _scan_summary_lines(self) -> list[str]:
         lines = [
             f"- 文件数: {self.scan_stats.processed_files}",
@@ -403,14 +419,14 @@ class RepoMapEngine:
     # AI 输出格式（委托给 repomap_ai）
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def render_overview(self, max_chars: int = 48000) -> str:
+    def render_overview(self, max_chars: int = 16000) -> str:
         return render_overview_report(self, max_chars)
 
     def render_call_chain(self, symbol_name: str, max_depth: int = 3) -> str:
         return render_call_chain_report(self, symbol_name, max_depth)
 
-    def render_file_detail(self, file_path: str) -> str:
-        return render_file_detail_report(self, file_path)
+    def render_file_detail(self, file_path: str, max_symbols: int = 12, max_chars: int = 6000) -> str:
+        return render_file_detail_report(self, file_path, max_symbols=max_symbols, max_chars=max_chars)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -426,6 +442,7 @@ __all__ = [
     "QUERIES",
     "RepoMapEngine",
     "SKIP_DIR_NAMES",
+    "SKIP_FILE_NAMES",
     "TreeSitterAdapter",
     "logger",
 ]

@@ -27,6 +27,7 @@ from repomap_support import JSImportBinding, PathAliasRule, ProjectImportConfig,
 logger = logging.getLogger("repomap")
 
 MAX_EXPORT_RESOLVE_DEPTH = 3
+CALLABLE_KINDS = {"function", "method", "anonymous_function"}
 
 # Bundler config file names
 BUNDLER_CONFIGS = {
@@ -581,7 +582,11 @@ class ImportResolver:
         import_symbol_targets_by_file: dict[str, dict[str, set[str]]],
     ) -> str | None:
         """解析函数调用到目标符号。"""
-        candidates = self._name_idx.get(call_name, [])
+        candidates = [
+            symbol_id
+            for symbol_id in self._name_idx.get(call_name, [])
+            if self.graph.symbols[symbol_id].kind in CALLABLE_KINDS
+        ]
         if not candidates:
             return None
 
@@ -589,7 +594,11 @@ class ImportResolver:
         if same_file:
             return self._pick_best_target(same_file, file, call_line)
 
-        imported_targets = list(import_symbol_targets_by_file.get(file, {}).get(call_name, set()))
+        imported_targets = [
+            symbol_id
+            for symbol_id in import_symbol_targets_by_file.get(file, {}).get(call_name, set())
+            if self.graph.symbols[symbol_id].kind in CALLABLE_KINDS
+        ]
         if imported_targets:
             return self._pick_best_target(imported_targets, file, call_line)
 

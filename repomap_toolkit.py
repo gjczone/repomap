@@ -534,8 +534,8 @@ def _is_public_entry(symbol: dict) -> bool:
     visibility = symbol.get('visibility', '')
     kind = symbol.get('kind', '')
     
-    # Rust: main, handler 函数通常是入口
-    if name == 'main' or name.startswith('get_') or name.startswith('post_'):
+    # 只保留有真实静态证据的入口豁免，避免用命名猜测掩盖死代码
+    if name in {'main', '__main__'}:
         return True
     if kind == 'handler' or visibility == 'exported':
         return True

@@ -150,6 +150,9 @@ QUERIES: dict[str, dict[str, str]] = {
             (call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call
         """,
     },
+    "html": {},
+    "css": {},
+    "json": {},
 }
 
 EXT_TO_LANG: dict[str, str] = {
@@ -165,6 +168,10 @@ EXT_TO_LANG: dict[str, str] = {
     ".cts": "typescript",
     ".go": "go",
     ".rs": "rust",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".json": "json",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -194,6 +201,9 @@ class TreeSitterAdapter:
             "javascript": ("tree_sitter_javascript",  "language"),
             "go":         ("tree_sitter_go",          "language"),
             "rust":       ("tree_sitter_rust",        "language"),
+            "html":       ("tree_sitter_html",        "language"),
+            "css":        ("tree_sitter_css",         "language"),
+            "json":       ("tree_sitter_json",        "language"),
         }
 
         # 动态导入，失败则跳过
@@ -291,6 +301,13 @@ class TreeSitterAdapter:
 
     def extract_symbols(self, tree: Any, lang: str, file: str, content: bytes) -> list[Symbol]:
         """从 AST 提取函数 / 类等符号定义。"""
+        if lang == "html":
+            return self._extract_html_symbols(tree, file)
+        if lang == "css":
+            return self._extract_css_symbols(tree, file)
+        if lang == "json":
+            return self._extract_json_symbols(tree, file)
+
         symbols_by_id: dict[str, Symbol] = {}
         root = tree.root_node
 
@@ -433,6 +450,105 @@ class TreeSitterAdapter:
                 if text:
                     results.add((text, node.start_point[0] + 1))
         return sorted(results, key=lambda item: (item[1], item[0]))
+
+    def _extract_html_symbols(self, tree: Any, file: str) -> list[Symbol]:
+        symbols_by_id: dict[str, Symbol] = {}
+        seen_names: dict[tuple[str, int], int] = {}
+        for node in self._walk_tree(tree.root_node):
+            if node.type != "element":
+                continue
+            start_tag = self._first_child_of_type(node, "start_tag")
+            if start_tag is None:
+                continue
+            tag_name = None
+            for child in start_tag.children:
+                if child.type == "tag_name":
+                    tag_name = self._text(child)
+                    break
+            if not tag_name:
+                continue
+            line = node.start_point[0] + 1
+            visible_name = f"<{tag_name}>"
+            key = (visible_name, line)
+            seen_names[key] = seen_names.get(key, 0) + 1
+            if seen_names[key] > 1:
+                visible_name = f"{visible_name}#{seen_names[key]}"
+            symbol_id = f"{file}::{visible_name}::{line}"
+            symbols_by_id[symbol_id] = Symbol(
+                id=symbol_id,
+                name=visible_name,
+                kind="element",
+                file=file,
+                line=line,
+                end_line=node.end_point[0] + 1,
+                col=node.start_point[1],
+                visibility="public",
+                signature=visible_name,
+            )
+        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+
+    def _extract_css_symbols(self, tree: Any, file: str) -> list[Symbol]:
+        symbols_by_id: dict[str, Symbol] = {}
+        seen_names: dict[tuple[str, int], int] = {}
+        selector_types = {"class_selector", "id_selector", "tag_name", "nesting_selector"}
+        for node in self._walk_tree(tree.root_node):
+            if node.type not in selector_types:
+                continue
+            raw_name = self._text(node).strip()
+            if not raw_name:
+                continue
+            line = node.start_point[0] + 1
+            kind = "selector"
+            if raw_name.startswith("."):
+                kind = "class_selector"
+            elif raw_name.startswith("#"):
+                kind = "id_selector"
+            key = (raw_name, line)
+            seen_names[key] = seen_names.get(key, 0) + 1
+            visible_name = raw_name if seen_names[key] == 1 else f"{raw_name}#{seen_names[key]}"
+            symbol_id = f"{file}::{visible_name}::{line}"
+            symbols_by_id[symbol_id] = Symbol(
+                id=symbol_id,
+                name=visible_name,
+                kind=kind,
+                file=file,
+                line=line,
+                end_line=node.end_point[0] + 1,
+                col=node.start_point[1],
+                visibility="public",
+                signature=raw_name,
+            )
+        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+
+    def _extract_json_symbols(self, tree: Any, file: str) -> list[Symbol]:
+        symbols_by_id: dict[str, Symbol] = {}
+        seen_names: dict[tuple[str, int], int] = {}
+        for node in self._walk_tree(tree.root_node):
+            if node.type != "pair":
+                continue
+            key_node = node.child_by_field_name("key")
+            if key_node is None:
+                continue
+            key_name = self._string_literal_value(key_node)
+            if not key_name:
+                continue
+            line = node.start_point[0] + 1
+            key = (key_name, line)
+            seen_names[key] = seen_names.get(key, 0) + 1
+            visible_name = key_name if seen_names[key] == 1 else f"{key_name}#{seen_names[key]}"
+            symbol_id = f"{file}::{visible_name}::{line}"
+            symbols_by_id[symbol_id] = Symbol(
+                id=symbol_id,
+                name=visible_name,
+                kind="json_key",
+                file=file,
+                line=line,
+                end_line=node.end_point[0] + 1,
+                col=node.start_point[1],
+                visibility="public",
+                signature=f'"{key_name}"',
+            )
+        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
 
     def extract_js_ts_import_bindings(
         self,

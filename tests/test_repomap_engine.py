@@ -44,6 +44,18 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertNotIn(".venv/lib/python3.11/site-packages/pkg.py", symbol_files)
             self.assertEqual(engine.scan_stats.filtered_path_files, 1)
 
+    def test_lockfiles_are_skipped_from_symbol_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "package-lock.json", '{ "name": "demo", "packages": {} }\n')
+            write_file(project_root, "main.py", "def app():\n    return 1\n")
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+
+            self.assertNotIn("package-lock.json", engine.graph.file_symbols)
+            self.assertIn("main.py", engine.graph.file_symbols)
+            self.assertEqual(engine.scan_stats.filtered_path_files, 1)
+
     def test_call_chain_uses_call_edges_only(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def shared_helper():\n    return 1\n")
@@ -66,6 +78,26 @@ class RepoMapEngineTests(unittest.TestCase):
 
             self.assertIn("caller", callers)
             self.assertNotIn("only_imports", callers)
+
+    def test_call_chain_ignores_low_signal_non_callable_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "package.json", '{ "name": "demo", "test": "vitest" }\n')
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "export function wrapper(value: string): boolean {\n"
+                    "  return /x/.test(value);\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            wrapper = next(symbol for symbol in engine.query_symbol("wrapper") if symbol.file == "main.ts")
+            callees = engine.call_chain(wrapper.id, "callees", 2)["callees"]
+
+            self.assertEqual(callees, [])
 
     def test_top_level_calls_are_not_assigned_to_nearest_symbol(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -330,7 +362,101 @@ class RepoMapEngineTests(unittest.TestCase):
 
             self.assertIn("## 推荐阅读顺序", overview)
             self.assertIn("## 模块摘要", overview)
+            self.assertIn("## 关键实现符号", overview)
             self.assertIn("main.py", overview)
+
+    def test_summary_symbols_prefer_runtime_code_over_markup_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "def run():\n"
+                    "    return 1\n\n"
+                    "def helper():\n"
+                    "    return run()\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "templates/index.html",
+                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(40)) + "</body></html>",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            if "html" not in engine.ts.parsers:
+                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+
+            summary = engine.summary_symbols(2, 2)
+
+            self.assertEqual(summary[0]["file"], "main.py")
+            self.assertEqual([item["name"] for item in summary[0]["symbols"]], ["run", "helper"])
+
+    def test_hotspots_deprioritize_markup_only_density(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "def run():\n"
+                    "    return 1\n\n"
+                    "def helper():\n"
+                    "    return run()\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "templates/index.html",
+                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(40)) + "</body></html>",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            if "html" not in engine.ts.parsers:
+                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+
+            hotspots = engine.hotspots(2)
+
+            self.assertEqual(hotspots[0]["file"], "main.py")
+            self.assertGreater(hotspots[0]["semantic_symbol_count"], hotspots[1]["semantic_symbol_count"])
+
+    def test_reading_order_deprioritizes_markup_noise_when_code_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "from service import helper\n\n"
+                    "def run():\n"
+                    "    return helper()\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "service.py",
+                (
+                    "def helper():\n"
+                    "    return build()\n\n"
+                    "def build():\n"
+                    "    return 1\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "prototype.html",
+                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(80)) + "</body></html>",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            if "html" not in engine.ts.parsers:
+                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+
+            reading_order = engine.suggested_reading_order(3)
+
+            self.assertEqual(reading_order[0]["file"], "main.py")
+            self.assertEqual(reading_order[1]["file"], "service.py")
 
     def test_reading_order_prefers_runtime_files_over_tests(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -360,6 +486,30 @@ class RepoMapEngineTests(unittest.TestCase):
 
             self.assertEqual(reading_order[0]["file"], "main.py")
             self.assertNotEqual(reading_order[0]["file"], "tests/test_main.py")
+
+    def test_reading_order_keeps_entry_file_without_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "src/main.tsx",
+                (
+                    "import React from 'react';\n"
+                    "import ReactDOM from 'react-dom/client';\n"
+                    "import { App } from './App';\n"
+                    "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "src/App.tsx",
+                "export function App() {\n  return <div>app</div>;\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            reading_order = engine.suggested_reading_order(3)
+
+            self.assertEqual(reading_order[0]["file"], "src/main.tsx")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,9 @@ class GraphAnalyzer:
     图分析器：执行 PageRank 和各种图查询。
     """
 
+    LOW_SIGNAL_KINDS = {"element", "selector", "class_selector", "id_selector", "json_key"}
+    BOILERPLATE_NAMES = {"__init__", "__main__"}
+
     def __init__(self, graph: RepoGraph) -> None:
         self.graph = graph
 
@@ -142,16 +145,67 @@ class GraphAnalyzer:
                         queue.append((nxt, depth + 1))
         return result
 
+    def _edge_count(
+        self,
+        symbol_id: str,
+        direction: str,
+        allowed_kinds: set[str] | None = None,
+    ) -> int:
+        edges_map = self.graph.incoming if direction == "incoming" else self.graph.outgoing
+        return sum(
+            1
+            for edge in edges_map.get(symbol_id, [])
+            if allowed_kinds is None or edge.kind in allowed_kinds
+        )
+
+    def _signal_weight(self, symbol: Symbol) -> float:
+        weight = 1.0
+        if symbol.kind in self.LOW_SIGNAL_KINDS:
+            return 0.002
+        if symbol.name in self.BOILERPLATE_NAMES:
+            weight *= 0.35
+        elif symbol.name.startswith("_") and symbol.visibility == "private":
+            weight *= 0.85
+        return weight
+
+    def _summary_symbol_score(self, symbol: Symbol) -> float:
+        incoming_calls = self._edge_count(symbol.id, "incoming", {"call"})
+        outgoing_calls = self._edge_count(symbol.id, "outgoing", {"call"})
+        incoming_imports = self._edge_count(symbol.id, "incoming", {"import"})
+        visibility_bonus = 1.2 if symbol.visibility == "exported" else 0.45 if symbol.visibility == "public" else 0.0
+        kind_bonus = 1.0 if symbol.kind == "class" else 0.55 if symbol.kind in {"function", "method"} else 0.2
+        import_bonus = min(incoming_imports, 4) * 0.15
+        centrality_bonus = symbol.pagerank * 40
+        return (
+            incoming_calls * 4.0
+            + outgoing_calls * 1.5
+            + import_bonus
+            + visibility_bonus
+            + kind_bonus
+            + centrality_bonus
+        ) * self._signal_weight(symbol)
+
     def hotspots(self, limit: int = 15) -> list[dict]:
-        """识别高密度文件（符号数多）。"""
+        """识别高密度文件，优先看高语义密度而不是标签/配置噪音。"""
+        analysis = self.file_analysis()
         counts = sorted(
-            ((f, len(s)) for f, s in self.graph.file_symbols.items()),
-            key=lambda x: x[1], reverse=True,
+            analysis.values(),
+            key=lambda row: (row["is_test_file"], -row["semantic_symbol_count"], -row["score"], row["file"]),
         )
         return [
-            {"file": f, "symbol_count": c,
-             "risk": "high" if c >= 20 else "medium" if c >= 10 else "low"}
-            for f, c in counts[:limit]
+            {
+                "file": row["file"],
+                "symbol_count": row["symbol_count"],
+                "semantic_symbol_count": round(row["semantic_symbol_count"], 1),
+                "risk": (
+                    "high"
+                    if row["semantic_symbol_count"] >= 12
+                    else "medium"
+                    if row["semantic_symbol_count"] >= 4
+                    else "low"
+                ),
+            }
+            for row in counts[:limit]
         ]
 
     def entry_points(self) -> list[str]:
@@ -191,12 +245,31 @@ class GraphAnalyzer:
                 for symbol_id in symbol_ids
                 if symbol_id in self.graph.symbols
             ]
+            ranked_symbols = sorted(
+                symbols,
+                key=lambda item: (-self._summary_symbol_score(item), item.line, item.name),
+            )
+            semantic_symbol_count = sum(self._signal_weight(symbol) for symbol in symbols)
+            semantic_pagerank_sum = sum(symbol.pagerank * self._signal_weight(symbol) for symbol in symbols)
+            weighted_exported_count = sum(
+                self._signal_weight(symbol)
+                for symbol in symbols
+                if symbol.visibility == "exported"
+            )
+            weighted_public_count = sum(
+                self._signal_weight(symbol)
+                for symbol in symbols
+                if symbol.visibility == "public"
+            )
             analysis[file_path] = {
                 "file": file_path,
                 "symbol_count": len(symbols),
+                "semantic_symbol_count": semantic_symbol_count,
                 "pagerank_sum": sum(symbol.pagerank for symbol in symbols),
-                "exported_count": sum(1 for symbol in symbols if symbol.visibility == "exported"),
-                "public_count": sum(1 for symbol in symbols if symbol.visibility == "public"),
+                "semantic_pagerank_sum": semantic_pagerank_sum,
+                "implementation_score": sum(self._summary_symbol_score(symbol) for symbol in ranked_symbols[:5]),
+                "exported_count": weighted_exported_count,
+                "public_count": weighted_public_count,
                 "is_test_file": self._is_test_like_file(file_path),
                 "call_edges": 0,
                 "cross_file_call_edges": 0,
@@ -204,10 +277,7 @@ class GraphAnalyzer:
                 "neighbor_files": set(),
                 "top_symbols": [
                     symbol.name
-                    for symbol in sorted(
-                        symbols,
-                        key=lambda item: (-item.pagerank, item.line, item.name),
-                    )[:3]
+                    for symbol in ranked_symbols[:3]
                 ],
             }
 
@@ -222,7 +292,10 @@ class GraphAnalyzer:
                 {
                     "file": source_file,
                     "symbol_count": 0,
+                    "semantic_symbol_count": 0.0,
                     "pagerank_sum": 0.0,
+                    "semantic_pagerank_sum": 0.0,
+                    "implementation_score": 0.0,
                     "exported_count": 0,
                     "public_count": 0,
                     "is_test_file": self._is_test_like_file(source_file),
@@ -247,7 +320,10 @@ class GraphAnalyzer:
                         {
                             "file": target_file,
                             "symbol_count": 0,
+                            "semantic_symbol_count": 0.0,
                             "pagerank_sum": 0.0,
+                            "semantic_pagerank_sum": 0.0,
+                            "implementation_score": 0.0,
                             "exported_count": 0,
                             "public_count": 0,
                             "is_test_file": self._is_test_like_file(target_file),
@@ -268,12 +344,13 @@ class GraphAnalyzer:
             neighbor_count = len(data["neighbor_files"])
             data["neighbor_count"] = neighbor_count
             data["score"] = (
-                data["pagerank_sum"] * 1000
+                data["implementation_score"]
                 + data["exported_count"] * 0.8
-                + data["public_count"] * 0.3
-                + data["symbol_count"] * 0.25
+                + data["public_count"] * 0.25
+                + data["semantic_symbol_count"] * 0.6
                 + neighbor_count * 0.45
-                + data["cross_file_call_edges"] * 0.15
+                + data["cross_file_call_edges"] * 0.25
+                + data["call_edges"] * 0.05
             )
             if data["is_test_file"]:
                 data["score"] *= 0.55
@@ -296,12 +373,14 @@ class GraphAnalyzer:
                     "module": module_name,
                     "file_count": len(file_rows),
                     "symbol_count": sum(row["symbol_count"] for row in file_rows),
+                    "semantic_symbol_count": round(sum(row["semantic_symbol_count"] for row in file_rows), 1),
                     "pagerank_sum": sum(row["pagerank_sum"] for row in file_rows),
+                    "semantic_pagerank_sum": sum(row["semantic_pagerank_sum"] for row in file_rows),
                     "representative_file": representative["file"] if representative else "",
                     "highlights": representative["top_symbols"][:3] if representative else [],
                 }
             )
-        rows.sort(key=lambda row: (-row["pagerank_sum"], -row["symbol_count"], row["module"]))
+        rows.sort(key=lambda row: (-row["semantic_pagerank_sum"], -row["semantic_symbol_count"], row["module"]))
         return rows[:limit]
 
     def suggested_reading_order(self, limit: int = 8) -> list[dict[str, Any]]:
@@ -314,8 +393,6 @@ class GraphAnalyzer:
         for entry in self.entry_points():
             if entry not in analysis or entry in seen_files:
                 continue
-            if analysis[entry]["symbol_count"] <= 0:
-                continue
             file_data = analysis[entry]
             suggestions.append(
                 {
@@ -323,6 +400,7 @@ class GraphAnalyzer:
                     "reason": "入口点，适合先建立运行路径",
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
+                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
                 }
             )
             seen_files.add(entry)
@@ -345,7 +423,7 @@ class GraphAnalyzer:
                 reason_parts.append("跨模块枢纽")
             if file_data["exported_count"] >= 2:
                 reason_parts.append("导出面大")
-            if file_data["symbol_count"] >= 8:
+            if file_data["semantic_symbol_count"] >= 5:
                 reason_parts.append("逻辑密集")
             if file_data["is_test_file"]:
                 reason_parts.append("测试验证入口")
@@ -357,12 +435,75 @@ class GraphAnalyzer:
                     "reason": "，".join(reason_parts),
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
+                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
                 }
             )
             seen_files.add(file_path)
             if len(suggestions) >= limit:
                 break
         return suggestions
+
+    def summary_symbols(
+        self,
+        limit_files: int = 6,
+        per_file: int = 4,
+        include_tests: bool = False,
+    ) -> list[dict[str, Any]]:
+        """给 overview 提供更适合阅读的关键实现符号。"""
+        analysis = self.file_analysis()
+        suggestion_rows = self.suggested_reading_order(max(limit_files * 2, limit_files))
+        reasons = {row["file"]: row["reason"] for row in suggestion_rows}
+        ordered_files = [row["file"] for row in suggestion_rows]
+        ordered_files.extend(
+            row["file"]
+            for row in sorted(
+                analysis.values(),
+                key=lambda row: (row["is_test_file"], -row["score"], row["file"]),
+            )
+            if row["file"] not in reasons
+        )
+
+        sections: list[dict[str, Any]] = []
+        for file_path in ordered_files:
+            file_data = analysis.get(file_path)
+            if not file_data:
+                continue
+            if file_data["is_test_file"] and not include_tests:
+                continue
+            symbols = [
+                self.graph.symbols[symbol_id]
+                for symbol_id in self.graph.file_symbols.get(file_path, [])
+                if symbol_id in self.graph.symbols
+            ]
+            ranked_symbols = sorted(
+                symbols,
+                key=lambda item: (-self._summary_symbol_score(item), item.line, item.name),
+            )
+            if not ranked_symbols:
+                continue
+            sections.append(
+                {
+                    "file": file_path,
+                    "reason": reasons.get(file_path, ""),
+                    "symbol_count": file_data["symbol_count"],
+                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
+                    "symbols": [
+                        {
+                            "name": symbol.name,
+                            "kind": symbol.kind,
+                            "line": symbol.line,
+                            "visibility": symbol.visibility,
+                            "signature": symbol.signature,
+                            "pagerank": symbol.pagerank,
+                            "summary_score": round(self._summary_symbol_score(symbol), 2),
+                        }
+                        for symbol in ranked_symbols[:per_file]
+                    ],
+                }
+            )
+            if len(sections) >= limit_files:
+                break
+        return sections
 
     @staticmethod
     def _module_bucket_for_file(file_path: str) -> str:

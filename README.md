@@ -38,6 +38,24 @@ The old MCP server kept an in-memory scan state between tool calls. This CLI is 
 
 This makes the CLI predictable for skills and shell automation.
 
+## Reading Value Policy
+
+`repomap` now distinguishes between:
+
+- graph centrality: raw PageRank and dependency connectivity
+- reading value: symbols and files that are more useful for understanding or modifying behavior
+
+In practice this means:
+
+- `overview` prioritizes key implementation symbols instead of dumping raw PageRank leaders
+- text output defaults are now sized for AI workflows instead of terminal-dump completeness
+- `hotspots` uses effective symbol density, so HTML tags, CSS selectors, and JSON keys do not drown real code
+- lockfiles such as `package-lock.json` are skipped from symbol scan because they distort repo understanding without helping navigation
+- entry files can still appear in reading order even when they contain little or no extractable symbol structure, including after CLI session-cache restore
+- `call-chain` ignores low-signal non-callable targets such as JSON keys, so object/config noise does not leak into runtime call graphs
+- `file-detail` now defaults to a compact symbol slice, and `overview/query-symbol/call-chain/file-detail` all support explicit text caps
+- raw PageRank is still available in `query-symbol`, `file-detail`, and the graph itself when you need centrality
+
 ## AST Accuracy Upgrade
 
 JS/TS import/export bindings are now extracted from tree-sitter AST nodes instead of raw regex matching.

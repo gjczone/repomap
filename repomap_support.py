@@ -29,6 +29,12 @@ def get_cache_paths(project_path: str) -> tuple[Path, Path, Path]:
     )
 
 
+def get_session_cache_path(project_path: str) -> Path:
+    """获取跨进程短期扫描缓存路径。"""
+    cache_dir = get_project_cache_dir(project_path)
+    return cache_dir / "session_scan.json"
+
+
 @dataclass
 class Symbol:
     """代码符号（函数 / 类 / 接口等）"""

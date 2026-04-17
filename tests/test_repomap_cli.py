@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import subprocess
 import sys
@@ -130,6 +131,395 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("--onefile", command)
             self.assertIn("--name", command)
             self.assertIn("repomap", command)
+
+    def test_orphan_reports_unreferenced_get_prefix_function(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def get_unused():\n    return 1\n")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["orphan", "--project", project_root])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("get_unused", stdout.getvalue())
+
+    def test_call_chain_requires_file_path_when_symbol_is_ambiguous(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(
+                project_root,
+                "b.py",
+                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
+            )
+
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["call-chain", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("--file-path", stderr.getvalue())
+            self.assertIn("a.py:1", stderr.getvalue())
+            self.assertIn("b.py:1", stderr.getvalue())
+
+    def test_call_chain_can_disambiguate_with_file_path(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(
+                project_root,
+                "b.py",
+                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
+            )
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    ["call-chain", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("caller", stdout.getvalue())
+            self.assertIn("b.py:1", stdout.getvalue())
+
+    def test_query_symbol_groups_exact_and_fuzzy_matches(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(project_root, "b.py", "def helper_extra():\n    return 2\n")
+            write_file(project_root, "c.py", "def helper():\n    return 3\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+
+            text = stdout.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertIn("## 精确匹配 `helper` (2)", text)
+            self.assertIn("## 模糊匹配 (1)", text)
+            self.assertIn("建议加 `--file-path`", text)
+            self.assertIn("helper_extra", text)
+
+    def test_query_symbol_can_filter_by_file_path(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(project_root, "b.py", "def helper():\n    return 2\n")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"])
+
+            text = stdout.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertIn("已按文件过滤: `b.py`", text)
+            self.assertIn("## 精确匹配 `helper` (1)", text)
+            self.assertIn("`b.py:1`", text)
+            self.assertNotIn("`a.py:1`", text)
+
+    def test_overview_json_returns_machine_readable_summary(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
+            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["overview", "--project", project_root, "--json"])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["project_root"], project_root)
+            self.assertIn("scan_stats", payload)
+            self.assertIn("entry_points", payload)
+            self.assertIn("hotspots", payload)
+            self.assertIn("reading_order", payload)
+            self.assertIn("modules", payload)
+            self.assertIn("summary_symbols", payload)
+            self.assertGreaterEqual(payload["scan_stats"]["symbol_count"], 2)
+            self.assertLessEqual(len(payload["hotspots"]), 8)
+            self.assertLessEqual(len(payload["reading_order"]), 6)
+            self.assertLessEqual(len(payload["modules"]), 6)
+            self.assertLessEqual(len(payload["summary_symbols"]), 4)
+
+    def test_file_detail_defaults_to_compact_symbol_list(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                "\n\n".join(f"def helper_{index}():\n    return {index}" for index in range(15)) + "\n",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["file-detail", "--project", project_root, "--file-path", "main.py"])
+
+            text = stdout.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertIn("默认仅展开前 12 个符号", text)
+            self.assertIn("helper_11", text)
+            self.assertNotIn("helper_12", text)
+
+    def test_file_detail_max_chars_truncates_output(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                "\n\n".join(
+                    f"def helper_{index}(first_argument, second_argument, third_argument):\n    return first_argument + second_argument + third_argument + {index}"
+                    for index in range(12)
+                ) + "\n",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(
+                    ["file-detail", "--project", project_root, "--file-path", "main.py", "--max-chars", "220"]
+                )
+
+            text = stdout.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertIn("已截断", text)
+            self.assertLessEqual(len(text), 260)
+
+    def test_call_chain_json_returns_selected_symbol_and_edges(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
+            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["call-chain", "--project", project_root, "--symbol", "helper", "--json"])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["symbol"]["name"], "helper")
+            self.assertEqual(payload["direction"], "both")
+            self.assertTrue(any(item["name"] == "caller" for item in payload["callers"]))
+
+    def test_scan_cache_reuses_engine_for_identical_project_state(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def helper():\n    return 1\n")
+            cli_mod._SCAN_CACHE.clear()
+
+            original_scan = cli_mod.RepoMapEngine.scan
+            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code1 = main(["overview", "--project", project_root])
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertEqual(scan_mock.call_count, 1)
+
+    def test_session_cache_reuses_scan_across_memory_cache_reset(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+        from repomap_support import get_session_cache_path
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def helper():\n    return 1\n")
+            cli_mod._SCAN_CACHE.clear()
+            session_cache = get_session_cache_path(project_root)
+            if session_cache.exists():
+                session_cache.unlink()
+
+            original_scan = cli_mod.RepoMapEngine.scan
+            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code1 = main(["overview", "--project", project_root])
+                cli_mod._SCAN_CACHE.clear()
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertTrue(session_cache.exists())
+            self.assertEqual(scan_mock.call_count, 1)
+
+    def test_session_cache_preserves_zero_symbol_entry_files(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+        from repomap_support import get_session_cache_path
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "src/main.tsx",
+                (
+                    "import React from 'react';\n"
+                    "import ReactDOM from 'react-dom/client';\n"
+                    "import { App } from './App';\n"
+                    "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "src/App.tsx",
+                "export function App() {\n  return <div>app</div>;\n}\n",
+            )
+            cli_mod._SCAN_CACHE.clear()
+            session_cache = get_session_cache_path(project_root)
+            if session_cache.exists():
+                session_cache.unlink()
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code1 = main(["overview", "--project", project_root])
+
+            cli_mod._SCAN_CACHE.clear()
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                code2 = main(["overview", "--project", project_root, "--json"])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertTrue(session_cache.exists())
+            self.assertIn("src/main.tsx", payload["entry_points"])
+            self.assertEqual(payload["reading_order"][0]["file"], "src/main.tsx")
+
+    def test_scan_cache_invalidates_after_source_change(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def helper():\n    return 1\n")
+            cli_mod._SCAN_CACHE.clear()
+
+            original_scan = cli_mod.RepoMapEngine.scan
+            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code1 = main(["overview", "--project", project_root])
+                write_file(project_root, "main.py", "def helper():\n    return 1\n\ndef added():\n    return helper()\n")
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "added"])
+
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertEqual(scan_mock.call_count, 2)
+
+    def test_session_cache_invalidates_after_source_change(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def helper():\n    return 1\n")
+            cli_mod._SCAN_CACHE.clear()
+
+            original_scan = cli_mod.RepoMapEngine.scan
+            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code1 = main(["overview", "--project", project_root])
+                cli_mod._SCAN_CACHE.clear()
+                write_file(project_root, "main.py", "def helper():\n    return 1\n\ndef changed():\n    return helper()\n")
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code2 = main(["overview", "--project", project_root])
+
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertEqual(scan_mock.call_count, 2)
+
+    def test_refs_requires_file_path_when_symbol_is_ambiguous(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(
+                project_root,
+                "b.py",
+                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
+            )
+
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["refs", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("--file-path", stderr.getvalue())
+            self.assertIn("a.py:1", stderr.getvalue())
+            self.assertIn("b.py:1", stderr.getvalue())
+
+    def test_refs_can_disambiguate_with_file_path(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(
+                project_root,
+                "b.py",
+                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
+            )
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    ["refs", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("caller", stdout.getvalue())
+            self.assertIn("被引用次数: 1", stdout.getvalue())
+
+    def test_git_history_requires_file_path_when_symbol_is_ambiguous(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(project_root, "b.py", "def helper():\n    return 2\n")
+
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["git-history", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("--file-path", stderr.getvalue())
+            self.assertIn("a.py:1", stderr.getvalue())
+            self.assertIn("b.py:1", stderr.getvalue())
+
+    def test_git_history_can_disambiguate_with_file_path(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            subprocess.run(["git", "init"], cwd=project_root, capture_output=True, text=True, check=False)
+            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, capture_output=True, text=True, check=False)
+            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, capture_output=True, text=True, check=False)
+
+            write_file(project_root, "a.py", "def helper():\n    return 1\n")
+            write_file(project_root, "b.py", "def helper():\n    return 2\n")
+            subprocess.run(["git", "add", "a.py", "b.py"], cwd=project_root, capture_output=True, text=True, check=False)
+            subprocess.run(["git", "commit", "-m", "add helpers"], cwd=project_root, capture_output=True, text=True, check=False)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    ["git-history", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("b.py:1", stdout.getvalue())
+            self.assertIn("最近提交", stdout.getvalue())
 
 
 if __name__ == "__main__":
