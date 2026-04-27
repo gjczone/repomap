@@ -327,9 +327,19 @@ class TreeSitterAdapter:
                     def_nodes.append((node, cap_name))
 
             for name_node in name_nodes:
-                for def_node, def_cap in def_nodes:
-                    if not self._within(name_node, def_node):
-                        continue
+                matching_defs = [
+                    (def_node, def_cap)
+                    for def_node, def_cap in def_nodes
+                    if self._within(name_node, def_node)
+                ]
+                matching_defs.sort(
+                    key=lambda item: (
+                        (item[0].end_point[0] - item[0].start_point[0], item[0].end_point[1] - item[0].start_point[1]),
+                        item[0].start_point[0],
+                        item[0].start_point[1],
+                    )
+                )
+                for def_node, def_cap in matching_defs:
                     kind = def_cap.split(".")[-1] if "." in def_cap else def_cap
                     vis  = "exported" if "export" in def_cap else "public"
                     name = self._text(name_node)
@@ -353,6 +363,9 @@ class TreeSitterAdapter:
                     )
                     break
 
+        for symbol in self._extract_object_literal_method_symbols(tree, lang, file):
+            symbols_by_id.setdefault(symbol.id, symbol)
+
         for symbol in self._extract_anonymous_symbols(tree, lang, file):
             symbols_by_id.setdefault(symbol.id, symbol)
 
@@ -367,6 +380,40 @@ class TreeSitterAdapter:
                 symbol.kind,
             ),
         )
+
+    def _extract_object_literal_method_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+        if lang not in ("javascript", "typescript"):
+            return []
+        symbols_by_id: dict[str, Symbol] = {}
+        for node in self._walk_tree(tree.root_node):
+            if node.type != "pair":
+                continue
+            value_node = node.child_by_field_name("value")
+            if value_node is None or value_node.type not in {"arrow_function", "function_expression"}:
+                continue
+            key_node = node.child_by_field_name("key")
+            if key_node is None:
+                for child in node.children:
+                    if child.type in {"property_identifier", "identifier", "string"}:
+                        key_node = child
+                        break
+            name = self._identifier_text(key_node) or (self._string_literal_value(key_node) if key_node and key_node.type == "string" else "")
+            if not name:
+                continue
+            line = key_node.start_point[0] + 1
+            symbol_id = f"{file}::{name}::{line}"
+            symbols_by_id[symbol_id] = Symbol(
+                id=symbol_id,
+                name=name,
+                kind="method",
+                file=file,
+                line=line,
+                end_line=value_node.end_point[0] + 1,
+                col=key_node.start_point[1],
+                visibility="public",
+                signature=self._signature(value_node, lang),
+            )
+        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
 
     def _extract_anonymous_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
         if lang not in ("javascript", "typescript"):
@@ -408,6 +455,11 @@ class TreeSitterAdapter:
         while current is not None and depth < 4:
             if current.type in {"function_declaration", "method_definition"}:
                 return True
+            if current.type == "pair":
+                value_node = current.child_by_field_name("value")
+                key_node = current.child_by_field_name("key")
+                if value_node is node and key_node is not None:
+                    return True
             if current.type == "variable_declarator":
                 for child in current.children:
                     if child.type == "identifier":
@@ -450,6 +502,18 @@ class TreeSitterAdapter:
                 if text:
                     results.add((text, node.start_point[0] + 1))
         return sorted(results, key=lambda item: (item[1], item[0]))
+
+    @staticmethod
+    def _call_reference_kind(node: Any) -> str:
+        parent = getattr(node, "parent", None)
+        while parent is not None:
+            if parent.type == "call_expression":
+                function_node = parent.child_by_field_name("function")
+                if function_node is not None and function_node.type in {"member_expression", "field_expression", "selector_expression"}:
+                    return "member"
+                return "direct"
+            parent = getattr(parent, "parent", None)
+        return "direct"
 
     def _extract_html_symbols(self, tree: Any, file: str) -> list[Symbol]:
         symbols_by_id: dict[str, Symbol] = {}
@@ -899,7 +963,7 @@ class TreeSitterAdapter:
             nodes.extend(reversed(current.children))
         return result
 
-    def extract_calls(self, tree: Any, lang: str) -> list[tuple[str, int]]:
+    def extract_calls(self, tree: Any, lang: str) -> list[tuple[str, int, str]]:
         query = self._queries.get(lang, {}).get("call")
         if not query:
             return []
@@ -908,7 +972,7 @@ class TreeSitterAdapter:
             if "reference" in cap_name or "call" in cap_name or cap_name == "name":
                 name = self._text(node)
                 if name:
-                    results.append((name, node.start_point[0] + 1))
+                    results.append((name, node.start_point[0] + 1, self._call_reference_kind(node)))
         return sorted(results, key=lambda item: (item[1], item[0]))
 
     def _parse_import_specifiers(self, spec: str, module: str, line: int) -> list[JSImportBinding]:

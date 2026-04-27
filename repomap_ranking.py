@@ -19,7 +19,7 @@ from collections import deque
 from pathlib import PurePosixPath
 from typing import Any, TYPE_CHECKING
 
-from repomap_support import Edge, RepoGraph, Symbol
+from repomap_support import Edge, RepoGraph, Symbol, call_reference_parts
 
 if TYPE_CHECKING:
     from repomap_core import RepoMapEngine
@@ -573,7 +573,8 @@ class EdgeBuilder:
 
         # call 边
         for file, calls in sorted(self.graph.file_calls.items()):
-            for call_name, call_line in calls:
+            for call_ref in calls:
+                call_name, call_line, call_kind = call_reference_parts(call_ref)
                 caller_id = self.resolver.resolve_calling_symbol(file, call_line)
                 if not caller_id:
                     continue
@@ -581,6 +582,7 @@ class EdgeBuilder:
                     file=file,
                     call_name=call_name,
                     call_line=call_line,
+                    call_kind=call_kind,
                     import_targets_by_file=import_targets_by_file,
                     import_symbol_targets_by_file=import_symbol_targets_by_file,
                 )

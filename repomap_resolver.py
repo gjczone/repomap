@@ -578,6 +578,7 @@ class ImportResolver:
         file: str,
         call_name: str,
         call_line: int,
+        call_kind: str,
         import_targets_by_file: dict[str, set[str]],
         import_symbol_targets_by_file: dict[str, dict[str, set[str]]],
     ) -> str | None:
@@ -606,6 +607,9 @@ class ImportResolver:
         imported = [symbol_id for symbol_id in candidates if self._sym_file[symbol_id] in imported_files]
         if imported:
             return self._pick_best_target(imported, file, call_line)
+
+        if call_kind == "member":
+            return None
 
         if len(candidates) == 1:
             return candidates[0]

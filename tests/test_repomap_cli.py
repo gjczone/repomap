@@ -16,7 +16,69 @@ def write_file(root: str, relative_path: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+from repomap_check import RepoMapChecker
+
+
 class RepoMapCliTests(unittest.TestCase):
+    def test_check_marks_nonzero_tool_exit_as_failed_even_without_parsed_issues(self) -> None:
+        from repomap_cli import main
+
+        def fake_check(self, types=None, resolve_symbols=True, symbols_map=None, since_commit=None, modified_files=None):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/demo",
+                "status": "failed",
+                "types": ["javascript"],
+                "incremental": {"enabled": False, "files_checked": [], "files_count": 0},
+                "runs": [
+                    {
+                        "tool": "eslint",
+                        "command": "npx eslint . --format json",
+                        "exit_code": 2,
+                        "duration_ms": 12,
+                        "skipped": False,
+                        "error_count": 0,
+                        "warning_count": 0,
+                        "truncated": False,
+                        "tool_failure_reason": "工具退出码非 0，但未解析到结构化错误",
+                        "raw_excerpt": ["ESLint couldn't find an eslint.config file"],
+                    }
+                ],
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 1,
+                    "tools_skipped": 0,
+                    "tool_failures": 1,
+                },
+                "errors_by_file": {},
+            }
+
+        stdout = io.StringIO()
+        with patch.object(RepoMapChecker, "check", fake_check):
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["check", "--project", ".", "--no-symbols"])
+
+        self.assertEqual(exit_code, 1)
+        output = stdout.getvalue()
+        self.assertIn("❌ 有错误", output)
+        self.assertIn("退出码: 2", output)
+        self.assertIn("未解析到结构化错误", output)
+
+    def test_parse_git_status_porcelain_paths_preserves_unstaged_leading_space(self) -> None:
+        from repomap_cli.cli import _parse_git_status_porcelain_paths
+
+        self.assertEqual(
+            _parse_git_status_porcelain_paths(
+                " M todo.md\n"
+                "M  src/app.ts\n"
+                "?? new file.ts\n"
+                "R  old.ts -> src/new.ts\n"
+            ),
+            ["todo.md", "src/app.ts", "new file.ts", "src/new.ts"],
+        )
+
     def test_script_entrypoint_runs_without_package_context(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
@@ -29,6 +91,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("tree-sitter parsers", result.stdout)
+        self.assertIn("only required for build-binary", result.stdout)
 
     def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
         from repomap_cli import main

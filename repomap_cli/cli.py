@@ -9,9 +9,16 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
+from repomap_ai import (
+    _build_query_reading_order,
+    _rank_symbols_for_file,
+    render_diff_risk_report,
+    render_impact_report,
+    render_query_report,
+)
 from repomap_check import RepoMapChecker
 from repomap_core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
 from repomap_parser import EXT_TO_LANG
@@ -26,6 +33,16 @@ from repomap_support import (
     serialize_symbol,
 )
 from repomap_toolkit import diff_project, load_cache, save_cache, scan_project
+from repomap_topic import (
+    FileMatch,
+    TestMatch,
+    classify_file_role,
+    compute_keyword_weights,
+    find_related_tests,
+    is_test_like_file,
+    split_identifier,
+    topic_score,
+)
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
@@ -44,7 +61,7 @@ PYINSTALLER_BINDINGS = [
 
 _SCAN_CACHE: dict[tuple[str, int, int, str], tuple[str, RepoMapEngine]] = {}
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
-SESSION_CACHE_VERSION = 2
+SESSION_CACHE_VERSION = 4
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
 DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
 DEFAULT_CALL_CHAIN_MAX_CHARS = 4000
@@ -101,6 +118,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_QUERY_SYMBOL_MAX_CHARS,
         help="Maximum text output size.",
     )
+
+    # ── 新增: query（主题关键词搜索）──────────────────────────────────────────
+    topic_query_parser = subparsers.add_parser("query", help="Search repository by topic keyword.")
+    topic_query_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    topic_query_parser.add_argument("--query", "-q", required=True, help="Topic keyword.")
+    topic_query_parser.add_argument("--max-files", type=int, default=20, help="Max result files (default 20).")
+    topic_query_parser.add_argument("--max-symbols", type=int, default=40, help="Max result symbols (default 40).")
+    topic_query_parser.add_argument("--no-tests", action="store_true")
+    topic_query_parser.add_argument("--json", action="store_true")
+    topic_query_parser.add_argument("--paths", help="Limit search to comma-separated directories.")
+    topic_query_parser.add_argument("--exclude", help="Exclude comma-separated directories.")
+
+    # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
+    impact_parser = subparsers.add_parser("impact", help="Analyze file-level change impact.")
+    impact_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    impact_parser.add_argument("--files", required=True, nargs="+", help="Files to analyze (one or more).")
+    impact_parser.add_argument("--json", action="store_true")
+    impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
+
+    # ── 新增: diff-risk（变更风险报告）─────────────────────────────────────────
+    diff_risk_parser = subparsers.add_parser("diff-risk", help="Show risk report for current changes.")
+    diff_risk_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    diff_risk_parser.add_argument("--json", action="store_true")
 
     file_parser = subparsers.add_parser("file-detail", help="Scan a repository and print file detail.")
     _add_project_args(file_parser)
@@ -196,6 +236,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if command == "query-symbol":
         return run_query_symbol(args.project, args.max_files, args.symbol, args.file_path, args.max_chars)
+    if command == "query":
+        return run_query(
+            args.project, 8000, args.query,
+            getattr(args, "max_files", 20), getattr(args, "max_symbols", 40),
+            args.no_tests, args.json, args.paths, args.exclude,
+        )
+    if command == "impact":
+        return run_impact(
+            args.project, 8000, args.files,
+            getattr(args, "max_files", 20), args.json,
+        )
+    if command == "diff-risk":
+        return run_diff_risk(args.project, args.json)
     if command == "file-detail":
         return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars)
     if command == "hotspots":
@@ -340,6 +393,10 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             file_path: list(symbol_ids)
             for file_path, symbol_ids in engine.graph.file_symbols.items()
         },
+        "file_imports": {
+            file_path: list(imports)
+            for file_path, imports in engine.graph.file_imports.items()
+        },
     }
 
 
@@ -382,6 +439,9 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
 
     for file_path, symbol_ids in payload.get("file_symbols", {}).items():
         graph.file_symbols[file_path].extend(symbol_ids)
+
+    for file_path, imports in payload.get("file_imports", {}).items():
+        graph.file_imports[file_path].extend(imports)
 
     stats_row = payload.get("scan_stats", {})
     engine.graph = graph
@@ -754,6 +814,404 @@ def run_diff(project: str, as_json: bool) -> int:
     return 0
 
 
+def run_query(
+    project: str,
+    max_files: int,
+    query: str,
+    max_result_files: int,
+    max_result_symbols: int,
+    no_tests: bool,
+    as_json: bool,
+    paths: str | None,
+    exclude: str | None,
+) -> int:
+    try:
+        engine = _scan_engine(project, max_files)
+        analysis = engine.file_analysis()
+
+        # 过滤搜索范围
+        candidate_files = list(engine.graph.file_symbols.keys())
+        if paths:
+            allowed = set(p.strip() for p in paths.split(",") if p.strip())
+            candidate_files = [f for f in candidate_files if any(f.startswith(a) for a in allowed)]
+        if exclude:
+            excluded = set(e.strip() for e in exclude.split(",") if e.strip())
+            candidate_files = [f for f in candidate_files if not any(f.startswith(e) for e in excluded)]
+        if no_tests:
+            candidate_files = [f for f in candidate_files if not is_test_like_file(f)]
+
+        # 计算高频词权重（命中文件过多的关键词降权）
+        kw_weights = compute_keyword_weights(query.lower().split(), candidate_files, engine.graph)
+
+        # 主题评分
+        matches: list[FileMatch] = []
+        for file_path in candidate_files:
+            file_data = analysis.get(file_path, {})
+            score = topic_score(query, file_path, file_data, engine.graph, keyword_weights=kw_weights)
+            if score > 0:
+                role = classify_file_role(file_path)
+                reasons = _build_match_reasons(query, file_path, engine.graph)
+                matches.append(FileMatch(path=file_path, role=role, score=score, reasons=reasons))
+
+        matches.sort(key=lambda m: (-m.score, m.path))
+        top_matches = matches[:max_result_files]
+
+        # 找相关测试
+        tests: list[TestMatch] = []
+        if not no_tests:
+            target_files = [m.path for m in top_matches if not is_test_like_file(m.path)]
+            tests = find_related_tests(target_files, engine.graph, analysis, engine.project_root)
+
+        if as_json:
+            payload = {
+                "command": "query",
+                "project": str(engine.project_root),
+                "query": query,
+                "scanStats": _scan_stats_payload(engine),
+                "result": {
+                    "filesConsidered": len(candidate_files),
+                    "matchedFiles": len(matches),
+                    "readingOrder": _build_query_reading_order(top_matches, analysis, max_result_files),
+                    "coreFiles": [
+                        {"path": m.path, "role": m.role, "score": m.score, "reasons": m.reasons}
+                        for m in top_matches if m.score >= 30 and not is_test_like_file(m.path)
+                    ],
+                    "supportingFiles": [
+                        {"path": m.path, "role": m.role, "score": m.score, "reasons": m.reasons}
+                        for m in top_matches if m.score < 30
+                    ],
+                    "tests": [
+                        {"testFile": t.test_file, "targetFile": t.target_file,
+                         "confidence": t.confidence, "reason": t.reason}
+                        for t in tests
+                    ],
+                    "symbols": _query_symbols_json(engine, top_matches, max_result_symbols),
+                },
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
+
+        print(render_query_report(engine, query, top_matches, tests, max_result_files, max_result_symbols))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _build_match_reasons(query: str, file_path: str, graph: RepoGraph) -> list[str]:
+    """构建匹配原因列表。"""
+    reasons: list[str] = []
+    keywords = query.lower().split()
+    path_lower = file_path.lower()
+    file_name = PurePosixPath(file_path).stem.lower()
+    tokens = split_identifier(PurePosixPath(file_path).stem)
+
+    for kw in keywords:
+        if kw in path_lower:
+            reasons.append(f"路径包含 {kw}")
+        if kw in file_name:
+            reasons.append(f"文件名命中 {kw}")
+        elif any(kw in t for t in tokens):
+            reasons.append(f"文件名拆分匹配 {kw}")
+    return reasons[:3]
+
+
+def _query_symbols_json(
+    engine: RepoMapEngine,
+    matches: list[FileMatch],
+    max_symbols: int,
+) -> list[dict[str, Any]]:
+    """为 JSON 输出提取符号列表。"""
+    result: list[dict[str, Any]] = []
+    for m in matches:
+        if len(result) >= max_symbols:
+            break
+        for sym in _rank_symbols_for_file(engine, m.path):
+            if len(result) >= max_symbols:
+                break
+            result.append({
+                "name": sym["name"],
+                "kind": sym["kind"],
+                "file": m.path,
+                "line": sym["line"],
+                "role": classify_file_role(m.path),
+            })
+    return result
+
+
+def run_impact(
+    project: str,
+    max_files: int,
+    target_files: list[str],
+    max_affected_files: int,
+    as_json: bool,
+) -> int:
+    try:
+        engine = _scan_engine(project, max_files)
+
+        # 收集目标文件符号
+        target_symbols: set[str] = set()
+        for f in target_files:
+            for sid in engine.graph.file_symbols.get(f, []):
+                target_symbols.add(sid)
+
+        # 找出引用者有谁（incoming edges）
+        affected_files: dict[str, tuple[str, str]] = {}  # file -> (why, confidence)
+        for sid in target_symbols:
+            for edge in engine.graph.incoming.get(sid, []):
+                caller = engine.graph.symbols.get(edge.source)
+                if caller and caller.file not in target_files:
+                    caller_name = caller.name
+                    affected_files[caller.file] = (
+                        f"引用了 {_sym_name(engine, sid)}",
+                        "high",
+                    )
+
+            for edge in engine.graph.outgoing.get(sid, []):
+                callee = engine.graph.symbols.get(edge.target)
+                if callee and callee.file not in target_files:
+                    callee_name = callee.name
+                    if callee.file not in affected_files:
+                        affected_files[callee.file] = (
+                            f"输入文件调用了 {callee_name}（via {_sym_name(engine, sid)}）",
+                            "medium",
+                        )
+
+        # 找相关测试
+        analysis = engine.file_analysis()
+        tests = find_related_tests(target_files, engine.graph, analysis, engine.project_root)
+
+        # 风险评估
+        risk_level, risk_notes = _assess_risk(target_files, set(affected_files), engine)
+
+        affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
+        affected_list.sort(key=lambda x: (x[2], x[0]))
+        affected_list = affected_list[:max_affected_files]
+
+        if as_json:
+            payload = {
+                "command": "impact",
+                "project": str(engine.project_root),
+                "scanStats": _scan_stats_payload(engine),
+                "result": {
+                    "inputFiles": target_files,
+                    "affectedFiles": [
+                        {"file": f, "why": why, "confidence": conf}
+                        for f, why, conf in affected_list
+                    ],
+                    "tests": [
+                        {"testFile": t.test_file, "targetFile": t.target_file,
+                         "confidence": t.confidence, "reason": t.reason}
+                        for t in tests
+                    ],
+                    "riskLevel": risk_level,
+                    "riskNotes": risk_notes,
+                },
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
+
+        print(render_impact_report(engine, target_files, affected_list, tests, risk_level, risk_notes))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _assess_risk(
+    target_files: list[str],
+    affected_files: set[str],
+    engine: RepoMapEngine,
+) -> tuple[str, list[str]]:
+    """三层风险评估模型。返回 (risk_level, risk_notes)。"""
+    risk_notes: list[str] = []
+    total_score = 0
+
+    # 第1层：结构风险
+    analysis = engine.file_analysis()
+    structural_risk = 0
+    for f in target_files:
+        file_data = analysis.get(f, {})
+        nc = file_data.get("neighbor_count", 0)
+        if nc >= 10:
+            structural_risk += 4
+            risk_notes.append(f"`{f}` 被 {nc} 个文件关联，改动影响面很大")
+        elif nc >= 5:
+            structural_risk += 3
+            risk_notes.append(f"`{f}` 被 {nc} 个文件关联，改动影响面大")
+        for sid in engine.graph.file_symbols.get(f, []):
+            sym = engine.graph.symbols.get(sid)
+            if sym and sym.pagerank > 0.01:
+                structural_risk += 1
+                break
+    total_score += structural_risk
+
+    # 第2层：领域关键词风险
+    domain_risk = 0
+    risk_keywords_high = ["auth", "token", "session", "password", "security",
+                          "migration", "database", "schema", "persistence"]
+    risk_keywords_medium = ["terminal", "websocket", "pty", "input", "config",
+                            "build", "deploy", "ci"]
+    all_paths = " ".join(target_files + list(affected_files)).lower()
+    for kw in risk_keywords_high:
+        if kw in all_paths:
+            domain_risk += 3
+    for kw in risk_keywords_medium:
+        if kw in all_paths:
+            domain_risk += 1
+    if domain_risk >= 6:
+        risk_notes.append(f"涉及高风险领域（认证/安全/数据持久化）")
+    elif domain_risk >= 3:
+        risk_notes.append(f"涉及中风险领域（终端/配置/构建）")
+    total_score += domain_risk
+
+    # 第3层：变更类型风险
+    change_type_risk = 0
+    for f in target_files:
+        if is_test_like_file(f):
+            pass  # 只改测试不改实现，低风险
+        elif any(f.endswith(ext) for ext in [".config.ts", ".config.js", "package.json"]):
+            change_type_risk += 2
+            risk_notes.append(f"`{f}` 是配置文件变更，影响全局")
+        elif "types" in PurePosixPath(f).parts or f.endswith(".d.ts"):
+            change_type_risk += 1
+            risk_notes.append(f"`{f}` 是类型定义变更，影响面大")
+    total_score += change_type_risk
+
+    level = "high" if total_score >= 6 else "medium" if total_score >= 3 else "low"
+    return level, risk_notes
+
+
+def _parse_git_status_porcelain_paths(output: str) -> list[str]:
+    paths: list[str] = []
+    for line in output.splitlines():
+        if not line:
+            continue
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if " -> " in path:
+            path = path.split(" -> ")[-1]
+        path = path.strip()
+        if path:
+            paths.append(path)
+    return paths
+
+
+def run_diff_risk(project: str, as_json: bool) -> int:
+    try:
+        project_root = str(Path(project).resolve())
+
+        # 找到 git root，用于把 git status 路径转换为 project root 相对路径
+        git_root_result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project_root, capture_output=True, text=True, timeout=10,
+        )
+        git_root = git_root_result.stdout.strip()
+        if not git_root:
+            print("不是 git 仓库", file=sys.stderr)
+            return 1
+
+        # 获取所有变更文件（路径相对于 git root）
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=project_root, capture_output=True, text=True, timeout=10,
+        )
+        git_relative_changed = _parse_git_status_porcelain_paths(status.stdout)
+
+        if not git_relative_changed:
+            print("没有检测到变更")
+            return 0
+
+        # 将 git-root 相对路径转换为 project-root 相对路径
+        _git_root_path = PurePosixPath(git_root)
+        changed_files: list[str] = []
+        for gf in git_relative_changed:
+            abs_path = str(PurePosixPath(git_root) / gf)
+            try:
+                rel = str(PurePosixPath(abs_path).relative_to(project_root))
+                changed_files.append(rel)
+            except ValueError:
+                # 不在 project_root 下的变更文件（如父目录的配置），跳过
+                pass
+
+        if not changed_files:
+            print("没有检测到当前项目内的变更")
+            return 0
+
+        # 扫描项目
+        engine = _scan_engine(project_root, 8000)
+        analysis = engine.file_analysis()
+
+        # 对变更文件执行影响分析
+        target_symbols: set[str] = set()
+        for f in changed_files:
+            for sid in engine.graph.file_symbols.get(f, []):
+                target_symbols.add(sid)
+
+        affected_files_dict: dict[str, tuple[str, str]] = {}
+        for sid in target_symbols:
+            for edge in engine.graph.incoming.get(sid, []):
+                caller = engine.graph.symbols.get(edge.source)
+                if caller and caller.file not in changed_files:
+                    affected_files_dict[caller.file] = (
+                        f"引用了变更符号 {_sym_name(engine, sid)}",
+                        "high",
+                    )
+
+        affected_list = [(f, why, conf) for f, (why, conf) in affected_files_dict.items()]
+
+        # 测试匹配
+        source_files = [f for f in changed_files if not is_test_like_file(f)]
+        tests = find_related_tests(source_files, engine.graph, analysis, project_root)
+
+        # 风险评估
+        risk_level, risk_reasons = _assess_risk(source_files, set(f for f, _, _ in affected_list), engine)
+
+        # 缺失检查
+        missing_checks: list[str] = []
+        all_exts = set(Path(f).suffix for f in changed_files)
+        if ".ts" in all_exts or ".tsx" in all_exts:
+            if not any(t.test_file.endswith((".ts", ".tsx")) for t in tests):
+                missing_checks.append("没有检测到前端测试文件变更，建议补充前端测试")
+        if ".py" in all_exts:
+            if not any(t.test_file.endswith(".py") for t in tests):
+                missing_checks.append("没有检测到 Python 测试文件变更，建议补充后端测试")
+
+        if as_json:
+            payload = {
+                "command": "diff-risk",
+                "project": str(engine.project_root),
+                "scanStats": _scan_stats_payload(engine),
+                "result": {
+                    "changedFiles": changed_files,
+                    "affectedFiles": [
+                        {"file": f, "why": why, "confidence": conf}
+                        for f, why, conf in affected_list
+                    ],
+                    "tests": [
+                        {"testFile": t.test_file, "targetFile": t.target_file,
+                         "confidence": t.confidence, "reason": t.reason}
+                        for t in tests
+                    ],
+                    "riskLevel": risk_level,
+                    "riskReasons": risk_reasons,
+                    "missingChecks": missing_checks,
+                },
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
+
+        print(render_diff_risk_report(
+            engine, changed_files, affected_list, tests,
+            risk_level, risk_reasons, missing_checks,
+        ))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] diff-risk failed: {exc}", file=sys.stderr)
+        return 1
+
+
 def run_git_history(project: str, max_files: int, symbol: str, file_path: str | None) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -918,6 +1376,11 @@ def run_orphan(project: str, max_files: int) -> int:
         return 1
 
 
+def _sym_name(engine: RepoMapEngine, sid: str) -> str:
+    sym = engine.graph.symbols.get(sid)
+    return sym.name if sym else "?"
+
+
 def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
     symbol = engine.graph.symbols[sid]
     return {"name": symbol.name, "file": symbol.file, "line": symbol.line}
@@ -967,7 +1430,10 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     lines.append(f"- 错误总数: **{summary.get('total_errors', 0)}** 🔴")
     lines.append(f"- 警告总数: **{summary.get('total_warnings', 0)}** ⚠️")
     lines.append(f"- 涉及文件: {summary.get('files_with_errors', 0)}")
-    lines.append(f"- 运行工具: {summary.get('tools_run', 0)} | 跳过: {summary.get('tools_skipped', 0)}\n")
+    lines.append(f"- 运行工具: {summary.get('tools_run', 0)} | 跳过: {summary.get('tools_skipped', 0)}")
+    if summary.get("tool_failures", 0):
+        lines.append(f"- 工具执行失败: **{summary.get('tool_failures', 0)}**")
+    lines.append("")
 
     runs = result.get("runs", [])
     if runs:
@@ -979,6 +1445,13 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
                 lines.append(f"  - 原因: {run.get('skip_reason', '未知')}")
             else:
                 lines.append(f"  - 命令: `{run['command']}`")
+                if run.get("exit_code", 0) != 0:
+                    lines.append(f"  - 退出码: {run['exit_code']}")
+                if run.get("tool_failure_reason"):
+                    lines.append(f"  - 原因: {run['tool_failure_reason']}")
+                    excerpt = run.get("raw_excerpt") or []
+                    if excerpt:
+                        lines.append(f"  - 输出: {str(excerpt[0])[:120]}")
                 if run["error_count"] > 0:
                     lines.append(f"  - 错误: **{run['error_count']}**")
                 if run["warning_count"] > 0:
@@ -1023,7 +1496,10 @@ def run_doctor() -> int:
     else:
         print("tree-sitter bindings are missing", file=sys.stderr)
         return 1
-    print(f"PyInstaller: {'available' if pyinstaller_spec is not None else 'not installed'}")
+    if pyinstaller_spec is not None:
+        print("PyInstaller: available")
+    else:
+        print("PyInstaller: not installed in current runtime, only required for build-binary")
     return 0
 
 

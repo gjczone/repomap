@@ -985,7 +985,10 @@ class RepoMapChecker:
             }
             if r.skip_reason:
                 run_data["skip_reason"] = r.skip_reason
+            if not r.skipped and r.exit_code != 0 and not r.errors and not r.warnings:
+                run_data["tool_failure_reason"] = "工具退出码非 0，但未解析到结构化错误"
             if not r.skipped:
+                run_data["raw_excerpt"] = list(r.raw_excerpt[:10])
                 run_data["errors"] = [
                     {
                         "file": e.file,
@@ -1001,7 +1004,8 @@ class RepoMapChecker:
                 ]
             runs.append(run_data)
 
-        status = "failed" if total_errors > 0 else ("warning" if total_warnings > 0 else "passed")
+        tool_failures = [r for r in results if not r.skipped and r.exit_code != 0]
+        status = "failed" if total_errors > 0 or tool_failures else ("warning" if total_warnings > 0 else "passed")
 
         return {
             "timestamp": self._get_timestamp(),
@@ -1019,7 +1023,7 @@ class RepoMapChecker:
                 "total_warnings": total_warnings,
                 "files_with_errors": len(errors_by_file),
                 "tools_run": len([r for r in results if not r.skipped]),
-                "tools_skipped": len([r for r in results if r.skipped]),
+                "tool_failures": len(tool_failures),
             },
             "errors_by_file": dict(sorted(errors_by_file.items(), key=lambda x: len(x[1]), reverse=True)[:20]),
         }

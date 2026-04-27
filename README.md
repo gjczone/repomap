@@ -27,6 +27,9 @@ This project replaces the old MCP protocol surface with direct CLI commands so s
 | `repomap_refs` | `repomap refs --project <path> [--symbol <name>]` |
 | `repomap_orphan` | `repomap orphan --project <path>` |
 | `repomap_check` | `repomap check --project <path>` |
+| *(new)* | `repomap query --project <path> --query <keyword>` |
+| *(new)* | `repomap impact --project <path> --files <file...>` |
+| *(new)* | `repomap diff-risk --project <path>` |
 
 ## Command Semantics
 
@@ -35,6 +38,11 @@ The old MCP server kept an in-memory scan state between tool calls. This CLI is 
 - Commands that need a symbol graph scan the target project during that invocation.
 - Cache-dependent commands (`cache load`, `diff`) use `~/.cache/repomap/`.
 - `check` can resolve symbols without a long-lived server by scanning internally.
+- `check` treats any non-skipped underlying tool with a non-zero exit code as a failed report, even if no structured issue can be parsed.
+- `diff-risk` preserves porcelain status spacing, so staged, unstaged, untracked, and rename paths are reported without truncation.
+- Member calls such as `obj.method()` avoid unrelated global fallback targets unless same-file or import evidence exists.
+- JS/TS object literal API methods such as `export const api = { getMetadata: () => ... }` are emitted as named method symbols.
+- `impact` and `diff-risk` de-duplicate related-test recommendations by `(test_file, target_file)`.
 
 This makes the CLI predictable for skills and shell automation.
 
@@ -78,6 +86,7 @@ Current AST-backed coverage includes:
 - CommonJS destructured `require`
 - CommonJS `module.exports = { ... }`
 - CommonJS `exports.name = value`
+- JS/TS object literal function properties: `getMetadata: () => ...`, `getKpi: async () => ...`, and `getItem: function () { ... }`
 
 ## Installation
 
@@ -109,6 +118,7 @@ If you rebuild the binary later, the symlink still points at the newest file in 
 For a future AI assistant, use:
 
 - [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/for-ai-smoke-check.md)
+- [Repomap Acceptance Checklist](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/acceptance-checklist.md)
 
 ## Binary Location
 
@@ -166,6 +176,30 @@ uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-
 uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
   python -m repomap_cli check --project /path/to/project
 ```
+
+### Topic Search (new)
+
+```bash
+uv run python -m repomap_cli query --project /path/to/project --query "auth"
+```
+
+AI-friendly keyword-based code discovery. Finds relevant files by path, filename, and symbol name matching — without needing to know exact symbol names. Output includes reading order, core/supporting files, related tests, and key symbols. Supports `--json`, `--paths <dirs>`, `--exclude <dirs>`, `--no-tests`.
+
+### Impact Analysis (new)
+
+```bash
+uv run python -m repomap_cli impact --project /path/to/project --files src/foo.ts
+```
+
+File-level change impact: shows who references your symbols, who your symbols call, related tests, and a three-layer risk assessment (structural + domain + change-type). Supports `--json`.
+
+### Change Risk Report (new)
+
+```bash
+uv run python -m repomap_cli diff-risk --project /path/to/project
+```
+
+Pre-commit safety check: detects all changed files (staged, unstaged, untracked, renamed), runs impact analysis on them, suggests de-duplicated tests to run, flags missing test coverage, and gives a risk level. Supports `--json`.
 
 ## Command Value Assessment
 
@@ -366,7 +400,8 @@ Good smoke check:
 ```bash
 repomap doctor
 repomap overview --project /some/repo
-repomap query-symbol --project /some/repo --symbol main
+repomap query --project /some/repo --query main
+repomap impact --project /some/repo --files src/main.ts
 repomap check --project /some/repo
 ```
 
@@ -474,6 +509,9 @@ Recommended pattern:
 
 - use `overview` when first entering a codebase
 - use `query-symbol` or `file-detail` for pinpoint navigation
+- use `query` (topic search) when you know the feature area but not the symbol names
+- use `impact` before modifying files to assess change blast radius
+- use `diff-risk` before committing to validate changes and suggest tests
 - use `call-chain`, `refs`, `diff`, `check` for change impact
 - use `git-history` only when history or ownership context is the actual question
 - when another skill needs repo understanding, prefer delegating to the `repomap` skill so command selection stays consistent
@@ -505,8 +543,11 @@ cli-created/
         ├── repomap_parser.py       # AST parsing, import/export bindings
         ├── repomap_resolver.py     # import resolution
         ├── repomap_ranking.py      # graph analysis
+        ├── repomap_topic.py        # topic scoring, test matching, file roles
         ├── repomap_check.py        # diagnostics
         ├── repomap_toolkit.py      # cache/diff/git helper logic
+        ├── repomap_ai.py           # markdown report rendering
+        ├── repomap_support.py      # core data structures
         ├── tests/                  # unit and binary E2E tests
         ├── docs/deliverables/      # delivery reports
         ├── dist/repomap            # Linux binary
@@ -518,9 +559,13 @@ cli-created/
 - Dynamic dispatch, reflection, runtime-generated code, and string-built calls can still be missed.
 - Windows/macOS binaries are defined in workflow, but not produced locally on Linux.
 - `diff` still depends on an existing saved cache baseline.
+- `query` uses hand-weighted keyword scoring (path + filename + symbol name). Will upgrade to BM25 in a future iteration for better multi-keyword ranking.
+- `impact` and `diff-risk` identify affected files via graph edge analysis; event-level coupling (CustomEvent, postMessage) is not yet detected (planned as `event-map` command).
+- Test matching uses 5-level heuristics (name → path → import → symbol → git co-change). Coverage depends on project structure and git history depth.
+- `diff-risk` depends on `git status` and works best within a git repository.
 
 ## Delivery Status
 
 See:
 
-- `docs/deliverables/delivery-report-2026-04-06.md`
+- `docs/deliverables/delivery-report-2026-04-26.md`

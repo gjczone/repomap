@@ -87,6 +87,45 @@ class RepoMapParserAstTests(unittest.TestCase):
         self.assertIn("nested", names)
         self.assertIn("enabled", names)
 
+    def test_typescript_object_literal_arrow_properties_become_named_symbols(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = (
+            b"export const api = {\n"
+            b"  getMetadata: (signal) => fetchApi('/api/metadata', signal),\n"
+            b"  getKpi: async () => fetchApi('/api/kpi'),\n"
+            b"};\n"
+        )
+        tree = adapter.parse(content, "typescript")
+        assert tree is not None
+
+        symbols = adapter.extract_symbols(tree, "typescript", "api.ts", content)
+
+        by_name = {item.name: item for item in symbols}
+        self.assertIn("getMetadata", by_name)
+        self.assertIn("getKpi", by_name)
+        self.assertNotIn("<anonymous@2>", by_name)
+        self.assertEqual(by_name["getMetadata"].kind, "method")
+    def test_nested_function_end_lines_are_stable_when_parent_is_also_captured(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = (
+            b"export function AuthProvider() {\n"
+            b"  useEffect(() => {\n"
+            b"    const initAuth = async () => {\n"
+            b"      await checkAuthStatus();\n"
+            b"    };\n"
+            b"    void initAuth();\n"
+            b"  }, []);\n"
+            b"}\n"
+        )
+        tree = adapter.parse(content, "typescript")
+        self.assertIsNotNone(tree)
+
+        symbols = adapter.extract_symbols(tree, "typescript", "auth.tsx", content)
+        by_name = {item.name: item for item in symbols}
+
+        self.assertEqual(by_name["initAuth"].line, 3)
+        self.assertEqual(by_name["initAuth"].end_line, 5)
+
 
 if __name__ == "__main__":
     unittest.main()

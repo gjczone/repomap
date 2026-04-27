@@ -120,7 +120,34 @@ class RepoMapEngineTests(unittest.TestCase):
 
             self.assertNotIn("unrelated", callers)
 
-    def test_scan_summary_reports_filter_counts(self) -> None:
+    def test_member_calls_do_not_fall_back_to_unrelated_global_unique_symbol(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "export function create(): void {\n"
+                    "  session.pty.onData(() => undefined);\n"
+                    "}\n"
+                ),
+            )
+            write_file(
+                project_root,
+                "tests/mock.ts",
+                (
+                    "export function onData(): void {\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            create = next(symbol for symbol in engine.query_symbol("create") if symbol.file == "main.ts")
+            callees = {(symbol.name, symbol.file) for symbol in engine.call_chain(create.id, "callees", 2)["callees"]}
+
+            self.assertNotIn(("onData", "tests/mock.ts"), callees)
+
+
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "small.py", "def keep_me():\n    return 1\n")
             write_file(project_root, "large.js", "function giant() {}\n" * 5000)
@@ -138,7 +165,29 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertIn("- 过滤路径: 1", summary)
             self.assertIn("- 过滤大文件: 1", summary)
 
-    def test_anonymous_typescript_callback_becomes_caller_symbol(self) -> None:
+    def test_cache_save_then_immediate_diff_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "helper.ts", "export function helper(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "import { helper } from './helper';\n\n"
+                    "export function caller(): number {\n"
+                    "  return helper();\n"
+                    "}\n"
+                ),
+            )
+
+            from repomap_toolkit import diff_project, save_cache, scan_project
+
+            symbols, edges = scan_project(project_root)
+            save_cache(project_root, symbols, edges)
+            diff = diff_project(project_root)
+
+            self.assertEqual(diff["summary"], {"added": 0, "removed": 0, "modified": 0, "edges_added": 0, "edges_removed": 0})
+
+
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root,

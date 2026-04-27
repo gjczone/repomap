@@ -117,6 +117,18 @@ class RepoGraph:
     file_exports: dict[str, list[JSExportBinding]] = field(default_factory=lambda: defaultdict(list))
 
 
+def call_reference_parts(call_ref: Any) -> tuple[str, int, str]:
+    if isinstance(call_ref, (list, tuple)):
+        if len(call_ref) >= 3:
+            return str(call_ref[0]), int(call_ref[1]), str(call_ref[2] or "direct")
+        if len(call_ref) >= 2:
+            return str(call_ref[0]), int(call_ref[1]), "direct"
+    name = getattr(call_ref, "name", "")
+    line = getattr(call_ref, "line", 0)
+    kind = getattr(call_ref, "kind", "direct")
+    return str(name), int(line), str(kind or "direct")
+
+
 def serialize_symbol(symbol: Symbol) -> dict[str, Any]:
     return {
         "id": symbol.id,

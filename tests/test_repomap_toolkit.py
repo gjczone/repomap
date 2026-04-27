@@ -70,6 +70,52 @@ class RepoMapToolkitTests(unittest.TestCase):
 
             self.assertIn("get_unused", orphan_names)
 
+    def test_related_tests_are_deduplicated_with_best_confidence(self) -> None:
+        from repomap_core import RepoMapEngine
+        from repomap_topic import find_related_tests
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/foo.ts", "export function foo(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/foo.test.ts",
+                (
+                    "import { foo } from './foo';\n"
+                    "export function testFoo(): number {\n"
+                    "  return foo();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            tests = find_related_tests(["src/foo.ts", "src/foo.ts"], engine.graph, engine.file_analysis(), project_root)
+
+            matches = [item for item in tests if item.test_file == "src/foo.test.ts" and item.target_file == "src/foo.ts"]
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].confidence, "high")
+
+    def test_related_tests_include_same_directory_when_no_stronger_match_exists(self) -> None:
+        from repomap_core import RepoMapEngine
+        from repomap_topic import find_related_tests
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/bar.ts", "export function bar(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/bar-extra.test.ts",
+                "export function testBarExtra(): number {\n  return 1;\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            tests = find_related_tests(["src/bar.ts"], engine.graph, engine.file_analysis(), project_root)
+
+            matches = [item for item in tests if item.test_file == "src/bar-extra.test.ts" and item.target_file == "src/bar.ts"]
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].confidence, "medium")
+            self.assertEqual(matches[0].reason, "同测试目录")
+
 
 if __name__ == "__main__":
     unittest.main()

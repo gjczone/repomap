@@ -19,7 +19,7 @@ Run this smoke check when any of these is true:
 
 ## What To Check
 
-There are four checks. Run them in order.
+There are seven checks. Run them in order.
 
 ### Check 1: Command Exists
 
@@ -100,6 +100,61 @@ Important:
 
 - `check` may report project issues; that does not automatically mean the CLI itself is broken
 - the command is considered healthy if it runs and produces a coherent report
+- if an underlying tool exits non-zero and no structured issue is parsed, the overall status must still be failed and the output should mention the non-zero exit code/raw excerpt
+
+### Check 5: Object Literal API Symbol
+
+Run:
+
+```bash
+repomap query-symbol --project /home/guojiancheng/.A1/bi-next --symbol getMetadata --file-path bi-frontend/src/services/api.ts
+```
+
+Pass condition:
+
+- command exits with code `0`
+- output includes `getMetadata`
+
+Fail meaning:
+
+- JS/TS object literal arrow/function property extraction may be broken
+- binary and source may be out of sync
+
+### Check 6: Cache/Diff Stability
+
+Run:
+
+```bash
+repomap cache save --project /home/guojiancheng/.A1/deeper-web && repomap diff --project /home/guojiancheng/.A1/deeper-web
+```
+
+Pass condition:
+
+- both commands exit with code `0`
+- immediate diff after save reports no graph changes
+
+Fail meaning:
+
+- cache save and diff may be using inconsistent scan semantics
+
+### Check 7: New Commands (query / impact / diff-risk)
+
+Run:
+
+```bash
+repomap query --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --query "topic score" --max-files 5
+repomap impact --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --files repomap_topic.py
+repomap diff-risk --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap
+```
+
+Pass condition:
+
+- all three commands exit with code `0`
+- `query` output includes "Topic Map" header and matched files
+- `impact` output includes "Impact Analysis" header
+- `diff-risk` output includes "Diff Risk Report" header (or "没有检测到变更" if no changes)
+- changed files are not path-truncated; for example `todo.md` must not become `odo.md`
+- related tests are not repeated for the same `(test_file, target_file)` pair
 
 ## Stronger Verification
 
@@ -123,8 +178,7 @@ If `/home/guojiancheng/.A1/ai/cli-created/cli/repomap/dist/repomap` is missing, 
 
 ```bash
 cd /home/guojiancheng/.A1/ai/cli-created/cli/repomap
-uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli build-binary --output dist
+uv run --with pyinstaller python -m repomap_cli build-binary --output dist
 ```
 
 Then restore the PATH link:
