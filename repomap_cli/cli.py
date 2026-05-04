@@ -135,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── 新增: query（主题关键词搜索）──────────────────────────────────────────
     topic_query_parser = subparsers.add_parser("query", help="Search repository by topic keyword.")
-    topic_query_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    topic_query_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     topic_query_parser.add_argument("--query", "-q", required=True, help="Topic keyword.")
     topic_query_parser.add_argument("--max-files", type=int, default=20, help="Max result files (default 20).")
     topic_query_parser.add_argument("--max-symbols", type=int, default=40, help="Max result symbols (default 40).")
@@ -146,14 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
     impact_parser = subparsers.add_parser("impact", help="Analyze file-level change impact.")
-    impact_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    impact_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     impact_parser.add_argument("--files", required=True, nargs="+", help="Files to analyze (one or more).")
     impact_parser.add_argument("--json", action="store_true")
     impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
     impact_parser.add_argument("--with-symbols", action="store_true", help="Include edit-planning key symbols, read-next order, and LSP availability hint.")
 
     verify_parser = subparsers.add_parser("verify", help="Aggregate post-edit evidence before final handoff.")
-    verify_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    verify_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     verify_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     verify_parser.add_argument("--types", nargs="*", choices=["typescript", "rust", "python", "go", "javascript"], help="Explicit project types to check.")
     verify_parser.add_argument("--max-issues", type=int, default=50, help="Maximum issues per tool.")
@@ -186,10 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     cache_parser = subparsers.add_parser("cache", help="Prepare a graph baseline before the target edits.")
     cache_parser.add_argument("action", choices=["save"], help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.")
-    cache_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    cache_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
 
     diff_parser = subparsers.add_parser("diff", help="Advanced graph-only comparison against a baseline saved before the target edits.")
-    diff_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    diff_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     diff_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
     git_parser = subparsers.add_parser("git-history", help="Scan a repository and inspect symbol git history.")
@@ -212,7 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     orphan_parser.add_argument("--min-confidence", type=int, default=0, help="Minimum confidence score 0-100 to include in output (default 0).")
 
     check_parser = subparsers.add_parser("check", help="Run compiler/static analysis diagnostics.")
-    check_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    check_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     check_parser.add_argument(
         "--types",
         nargs="*",
@@ -228,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum explicit files to open through LSP.")
 
     diagnostics_parser = subparsers.add_parser("diagnostics", help="Focused diagnostics for explicit files from optional evidence sources.")
-    diagnostics_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    diagnostics_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     diagnostics_parser.add_argument("--source", choices=["lsp"], default="lsp", help="Diagnostics source.")
     diagnostics_parser.add_argument("--files", nargs="+", required=True, help="Project files to check with the diagnostics source.")
     diagnostics_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
@@ -238,7 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
     lsp_parser = subparsers.add_parser("lsp", help="Inspect local LSP server availability.")
     lsp_subparsers = lsp_parser.add_subparsers(dest="lsp_command", required=True)
     lsp_doctor_parser = lsp_subparsers.add_parser("doctor", help="Detect local LSP servers without starting analysis.")
-    lsp_doctor_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    lsp_doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     lsp_doctor_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
     routes_parser = subparsers.add_parser("routes", help="Extract direct HTTP/API route inventory.")
@@ -255,7 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_project_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     parser.add_argument("--max-files", type=int, default=8000, help="Maximum number of files to scan.")
 
 
@@ -372,10 +372,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-def _resolve_project(project: str) -> str:
-    project_path = Path(project).expanduser().resolve()
+def _resolve_project(project: str | None) -> str:
+    project_path = Path.cwd().resolve() if project is None else Path(project).expanduser().resolve()
     if not project_path.is_dir():
         raise ValueError(f"project path is not a directory: {project_path}")
+    if project is None and project_path == Path.home().resolve():
+        print(
+            f"[{CLI_NAME}] warning: default project root is your home directory: {project_path}. "
+            "Run from the intended project directory or pass --project explicitly.",
+            file=sys.stderr,
+        )
     return str(project_path)
 
 
@@ -467,7 +473,7 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
     return digest.hexdigest()
 
 
-def _scan_engine(project: str, max_files: int) -> RepoMapEngine:
+def _scan_engine(project: str | None, max_files: int) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (
         resolved_project,

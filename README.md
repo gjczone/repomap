@@ -45,6 +45,8 @@ AI 代码助手经常会遇到三个问题：
 
 当 AI 准备修改一个已知文件时，推荐流程是：
 
+> 不传 `--project` 时，`repomap` 会扫描当前工作目录；传了 `--project` 时，会扫描指定目录。AI/Agent 调用时建议始终传绝对项目路径，避免上层工具从 home 目录启动子进程导致误扫。
+
 ```bash
 repomap file-detail --project /path/to/project --file-path src/foo.ts
 repomap impact --project /path/to/project --files src/foo.ts --with-symbols
@@ -117,6 +119,7 @@ This section is for technical readers who need exact behavior. If you only want 
 
 The old MCP server kept an in-memory scan state between tool calls. This CLI is intentionally stateless.
 
+- If `--project` is omitted, commands use the current working directory. If `--project` is provided, commands use that explicit directory.
 - Commands that need a symbol graph scan the target project during that invocation.
 - `cache save` stores a graph baseline in `~/.cache/repomap/` before target edits. `diff` and `verify --with-diff` read that saved baseline later; there is no public `cache load` action.
 - Cache directories are keyed by the canonical project path so relative and absolute references to the same project share a cache while same-name projects in different directories stay isolated.
@@ -130,7 +133,6 @@ The old MCP server kept an in-memory scan state between tool calls. This CLI is 
 - `verify --quick` preserves porcelain status spacing and reports staged, unstaged, untracked, and rename paths without truncation; it fails clearly when `git rev-parse` or `git status --porcelain` fails.
 - `verify` aggregates post-edit evidence from git changed files, risk analysis, `check`, optional LSP diagnostics, and optional graph diff; it does not run project tests automatically and treats missing cache baseline as a non-fatal skipped graph diff. Use `--quick` to skip compiler/LSP checks for a faster change-risk-only report.
 - Member calls such as `obj.method()` avoid unrelated fallback targets unless same-file or import evidence exists.
-- JS/TS imports with explicit source extensions such as `./foo.js` resolve to the real target file before extension probing.
 - TS/JS config aliases respect `baseUrl` when resolving non-relative `paths` targets.
 - Python dotted imports such as `from pkg.sub import helper` resolve to package paths like `pkg/sub.py` or `pkg/sub/__init__.py`.
 - Unresolvable imported names are not silently rebound to same-named global symbols, which avoids misleading call-chain edges.

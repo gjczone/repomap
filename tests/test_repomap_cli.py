@@ -906,6 +906,36 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 1)
 
+    def test_default_project_resolves_to_current_working_directory(self) -> None:
+        import repomap_cli.cli as cli_mod
+
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as project_root:
+            try:
+                os.chdir(project_root)
+                resolved = cli_mod._resolve_project(None)
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertEqual(resolved, str(Path(project_root).resolve()))
+
+    def test_default_project_warns_when_current_working_directory_is_home(self) -> None:
+        import repomap_cli.cli as cli_mod
+
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as home_dir:
+            try:
+                os.chdir(home_dir)
+                stderr = io.StringIO()
+                with patch.object(cli_mod.Path, "home", return_value=Path(home_dir).resolve()):
+                    with redirect_stderr(stderr):
+                        resolved = cli_mod._resolve_project(None)
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertEqual(resolved, str(Path(home_dir).resolve()))
+        self.assertIn("warning: default project root is your home directory", stderr.getvalue())
+
     def test_cache_paths_canonicalize_project_path(self) -> None:
         from repomap_support import get_session_cache_path
 
