@@ -209,7 +209,17 @@ class DiagnosticRunner:
                 results.append(self._run_eslint())
 
         if "javascript" in types and "typescript" not in types:
-            results.append(self._run_eslint())
+            if self._has_eslint_config():
+                results.append(self._run_eslint())
+            else:
+                results.append(DiagnosticResult(
+                    tool="eslint",
+                    command="skip (no eslint config)",
+                    exit_code=0,
+                    duration_ms=0,
+                    skipped=True,
+                    skip_reason="eslint config not found",
+                ))
 
         if "rust" in types:
             results.append(self._run_cargo_check())

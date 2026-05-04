@@ -20,6 +20,19 @@ from repomap_check import RepoMapChecker
 
 
 class RepoMapCliTests(unittest.TestCase):
+    def test_javascript_without_eslint_config_skips_eslint(self) -> None:
+        from repomap_check import RepoMapChecker
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "ui_evaluate.js", "console.log('ok')\n")
+            report = RepoMapChecker(project_root, max_items=10).check(types=["javascript"], resolve_symbols=False)
+
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["summary"]["tools_run"], 0)
+        self.assertEqual(report["summary"]["tools_skipped"], 1)
+        self.assertEqual(report["runs"][0]["tool"], "eslint")
+        self.assertEqual(report["runs"][0]["skip_reason"], "eslint config not found")
+
     def test_verify_json_outputs_post_edit_evidence(self) -> None:
         from repomap_cli import main
 
