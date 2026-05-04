@@ -1044,7 +1044,7 @@ class TreeSitterAdapter:
         return f"<anonymous@{node.start_point[0] + 1}>"
 
     def _string_literal_value(self, node: Any) -> str:
-        return self._text(node).strip("\"'")
+        return self._text(node).strip("\"'`")
 
     def _first_child_of_type(self, node: Any, node_type: str) -> Any | None:
         for child in node.children:
@@ -1091,64 +1091,133 @@ class TreeSitterAdapter:
 
     def extract_http_routes(self, tree: Any, lang: str, file: str) -> list[Any]:
         """从 AST 中提取 HTTP 路由定义。
-        
-        支持框架：FastAPI (Python), Express (JS/TS), Axum (Rust).
-        按字典捕获的索引对齐以确保 method/path/handler 正确配对。
+
+        支持框架：FastAPI (Python), Express (JS/TS), Axum (Rust)。
+        route inventory 只输出严格匹配的生产路由定义，避免把测试 DSL、日志、
+        Array/Option 等普通调用误判为 HTTP route。
         """
         from repomap_support import HttpRoute
+
+        if self._should_skip_route_file(file):
+            return []
 
         query = self._queries.get(lang, {}).get("http_route")
         if not query:
             return []
-        
-        caps = self._run_query(query, tree.root_node)
-        if not caps:
-            return []
 
-        # 按 capture 名称分组，每个组内按文件位置排序
-        groups: dict[str, list[tuple[int, str]]] = {}
-        for cap_name, node in caps:
-            if cap_name.startswith("_"):
-                continue
-            text = self._text(node)
-            if not text:
-                continue
-            line = node.start_point[0] + 1
-            groups.setdefault(cap_name, []).append((line, text))
-        
-        # 获取各组并排序
-        handlers = sorted(groups.get("handler", []), key=lambda x: x[0])
-        paths = sorted(groups.get("path", []), key=lambda x: x[0])
-        methods = sorted(groups.get("method", []) + groups.get("http_method", []), key=lambda x: x[0])
-        
-        # 按索引对齐：paths[i] 和 handlers[i] 属于同一个匹配
-        n = min(len(handlers), len(paths))
         routes: list[HttpRoute] = []
-        
-        for i in range(n):
-            handler_line, handler_name = handlers[i]
-            _, path = paths[i]
-            method = methods[i][1].upper() if i < len(methods) else "GET"
-            
-            if lang == "python":
-                framework = "fastapi"
-            elif lang in ("javascript", "typescript", "tsx"):
-                framework = "express"
-            elif lang == "rust":
-                framework = "axum"
-            else:
-                framework = lang
-            
-            routes.append(HttpRoute(
-                method=method,
-                path=path.strip('"').strip("'"),
-                handler=handler_name,
-                file=file,
-                line=handler_line,
-                framework=framework,
-            ))
-        
-        return routes
+        for captures in self._run_query_matches(query, tree.root_node):
+            route = self._http_route_from_captures(captures, lang, file)
+            if route is not None:
+                routes.append(route)
+
+        return sorted(
+            routes,
+            key=lambda route: (route.file, route.line, route.method, route.path, route.handler),
+        )
+
+    def _http_route_from_captures(self, captures: dict[str, list[Any]], lang: str, file: str) -> Any | None:
+        from repomap_support import HttpRoute
+
+        path_node = self._first_capture(captures, "path")
+        handler_node = self._first_capture(captures, "handler")
+        if path_node is None or handler_node is None:
+            return None
+
+        method_node = self._first_capture(captures, "method") or self._first_capture(captures, "http_method")
+        method = (self._text(method_node) if method_node is not None else "").lower()
+        if not method:
+            return None
+
+        if lang == "python":
+            obj = self._text(self._first_capture(captures, "_obj"))
+            if obj not in {"app", "router", "api"} or method not in {"get", "post", "put", "delete", "patch", "head", "options"}:
+                return None
+            framework = "fastapi"
+        elif lang in ("javascript", "typescript", "tsx"):
+            router = self._text(self._first_capture(captures, "_router"))
+            if router not in {"app", "router"} or method not in {"get", "post", "put", "delete", "patch", "use", "all"}:
+                return None
+            if method in {"describe", "test", "it", "expect", "log", "some", "map", "filter", "find", "reduce", "foreach"}:
+                return None
+            framework = "express"
+        elif lang == "rust":
+            method_name = self._text(self._first_capture(captures, "_method_name"))
+            if method_name != "route" or method not in {"get", "post", "put", "delete", "patch", "head", "options"}:
+                return None
+            if method in {"some", "ok", "err", "is_some", "unwrap", "map", "filter"}:
+                return None
+            framework = "axum"
+        else:
+            return None
+
+        path = self._string_literal_value(path_node)
+        if not path:
+            return None
+        handler_name = self._route_handler_name(handler_node)
+        if not handler_name:
+            return None
+
+        return HttpRoute(
+            method=method.upper(),
+            path=path,
+            handler=handler_name,
+            file=file,
+            line=handler_node.start_point[0] + 1,
+            framework=framework,
+        )
+
+    def _run_query_matches(self, query: Any, root: Any) -> list[dict[str, list[Any]]]:
+        """按 tree-sitter match 返回 captures，避免跨匹配错位拼接 route。"""
+        try:
+            from tree_sitter import QueryCursor  # type: ignore
+            cursor = QueryCursor(query)
+            if hasattr(cursor, "matches"):
+                raw_matches = cursor.matches(root)
+                results: list[dict[str, list[Any]]] = []
+                for item in raw_matches:
+                    if not isinstance(item, (list, tuple)) or len(item) != 2:
+                        continue
+                    _, captures = item
+                    if not isinstance(captures, dict) or not captures:
+                        continue
+                    normalized: dict[str, list[Any]] = {}
+                    for cap_name, nodes in captures.items():
+                        normalized[cap_name] = nodes if isinstance(nodes, list) else [nodes]
+                    results.append(normalized)
+                if results:
+                    return results
+        except Exception as e:
+            logger.debug(f"Query match run error: {e}")
+
+        # 兼容旧 runtime：只能拿到 capture 列表时，按捕获起始行粗分组后再严格校验。
+        captures_by_line: dict[int, dict[str, list[Any]]] = {}
+        for cap_name, node in self._run_query(query, root):
+            line = node.start_point[0]
+            captures_by_line.setdefault(line, {}).setdefault(cap_name, []).append(node)
+        return [captures for _, captures in sorted(captures_by_line.items())]
+
+    @staticmethod
+    def _first_capture(captures: dict[str, list[Any]], name: str) -> Any | None:
+        nodes = captures.get(name) or []
+        return nodes[0] if nodes else None
+
+    @staticmethod
+    def _should_skip_route_file(file: str) -> bool:
+        normalized = file.replace("\\", "/")
+        parts = {part.lower() for part in normalized.split("/")}
+        if parts & {"e2e", "tests", "__tests__"}:
+            return True
+        name = normalized.rsplit("/", 1)[-1].lower()
+        return bool(re.search(r"(_test\.rs|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts))$", name))
+
+    def _route_handler_name(self, node: Any) -> str:
+        explicit = self._identifier_text(node)
+        if explicit:
+            return explicit
+        if node.type in {"arrow_function", "function_expression", "lambda"}:
+            return self._anonymous_symbol_name(node)
+        return self._text(node)
 
     def _parse_import_specifiers(self, spec: str, module: str, line: int) -> list[JSImportBinding]:
         bindings: list[JSImportBinding] = []

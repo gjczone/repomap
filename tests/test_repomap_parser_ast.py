@@ -142,6 +142,76 @@ class RepoMapParserAstTests(unittest.TestCase):
         self.assertEqual(routes[0].framework, "express")
         self.assertEqual(routes[0].path, "/items")
 
+    def test_typescript_test_calls_are_not_http_routes(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = (
+            b"import { test, expect } from '@playwright/test';\n"
+            b"test.describe('/analysis', () => {\n"
+            b"  console.log('/health', value);\n"
+            b"  items.some('/items', handler);\n"
+            b"});\n"
+        )
+        tree = adapter.parse(content, "typescript")
+        assert tree is not None
+
+        routes = adapter.extract_http_routes(tree, "typescript", "bi-frontend/e2e/analysis.spec.ts")
+
+        self.assertEqual(routes, [])
+
+    def test_typescript_non_router_member_calls_are_not_http_routes(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = (
+            b"console.log('/health');\n"
+            b"items.some('/items', handler);\n"
+            b"client.get('/api/customer', handler);\n"
+        )
+        tree = adapter.parse(content, "typescript")
+        assert tree is not None
+
+        routes = adapter.extract_http_routes(tree, "typescript", "src/logger.ts")
+
+        self.assertEqual(routes, [])
+
+    def test_rust_test_helpers_are_not_http_routes(self) -> None:
+        adapter = TreeSitterAdapter()
+        if "rust" not in adapter.parsers:
+            self.skipTest("tree-sitter Rust parser unavailable in current interpreter")
+        content = (
+            b"#[test]\n"
+            b"fn analyzer_test() {\n"
+            b"    let config = Some(\"customer\");\n"
+            b"    let other = Option::Some(\"/api/customer\");\n"
+            b"    assert!(config.is_some());\n"
+            b"}\n"
+        )
+        tree = adapter.parse(content, "rust")
+        assert tree is not None
+
+        routes = adapter.extract_http_routes(tree, "rust", "bi-backend/src/services/analyzer_test.rs")
+
+        self.assertEqual(routes, [])
+
+    def test_rust_axum_route_is_extracted(self) -> None:
+        adapter = TreeSitterAdapter()
+        if "rust" not in adapter.parsers:
+            self.skipTest("tree-sitter Rust parser unavailable in current interpreter")
+        content = (
+            b"use axum::{routing::get, Router};\n"
+            b"fn handler() {}\n"
+            b"fn app() -> Router {\n"
+            b"    Router::new().route(\"/items\", get(handler))\n"
+            b"}\n"
+        )
+        tree = adapter.parse(content, "rust")
+        assert tree is not None
+
+        routes = adapter.extract_http_routes(tree, "rust", "src/main.rs")
+
+        self.assertEqual(len(routes), 1)
+        self.assertEqual(routes[0].framework, "axum")
+        self.assertEqual(routes[0].method, "GET")
+        self.assertEqual(routes[0].path, "/items")
+
     def test_default_anonymous_export_binding_points_to_anonymous_symbol(self) -> None:
         adapter = TreeSitterAdapter()
         content = b"export default () => helper();\n"

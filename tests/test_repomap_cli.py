@@ -379,25 +379,100 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(command[:5], ["ruff", "check", "--output-format", "json", "--"])
             self.assertIn("src/main.py", command)
 
-    def test_diff_risk_fails_when_git_status_fails(self) -> None:
+    def test_removed_low_value_commands_are_not_public(self) -> None:
         from repomap_cli import main
 
-        def fake_run(cmd, **kwargs):
-            completed = subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal: not a git repository")
-            return completed
+        help_stdout = io.StringIO()
+        with redirect_stdout(help_stdout), redirect_stderr(io.StringIO()):
+            help_code = main(["--help"])
+
+        self.assertEqual(help_code, 0)
+        self.assertNotIn("diff-risk", help_stdout.getvalue())
+
+        cache_stdout = io.StringIO()
+        with redirect_stdout(cache_stdout), redirect_stderr(io.StringIO()):
+            cache_help_code = main(["cache", "--help"])
+
+        self.assertEqual(cache_help_code, 0)
+        cache_help = cache_stdout.getvalue()
+        self.assertIn("save", cache_help)
+        self.assertNotIn("load", cache_help)
+
+    def test_focused_commands_remain_public_with_clear_value(self) -> None:
+        from repomap_cli import main
+
+        help_stdout = io.StringIO()
+        with redirect_stdout(help_stdout), redirect_stderr(io.StringIO()):
+            exit_code = main(["--help"])
+
+        self.assertEqual(exit_code, 0)
+        help_text = help_stdout.getvalue()
+        self.assertIn("routes", help_text)
+        self.assertIn("diagnostics", help_text)
+        self.assertIn("verify", help_text)
+
+        verify_stdout = io.StringIO()
+        with redirect_stdout(verify_stdout), redirect_stderr(io.StringIO()):
+            verify_code = main(["verify", "--help"])
+
+        self.assertEqual(verify_code, 0)
+        self.assertIn("--quick", verify_stdout.getvalue())
+
+
+    def test_routes_help_includes_json_output(self) -> None:
+        from repomap_cli import main
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            exit_code = main(["routes", "--help"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("--json", stdout.getvalue())
+
+    def test_routes_filters_test_dsl_noise(self) -> None:
+        from repomap_cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
-            stderr = io.StringIO()
-            with patch("repomap_cli.cli.subprocess.run", side_effect=fake_run):
-                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                    exit_code = main(["diff-risk", "--project", project_root])
+            write_file(
+                project_root,
+                "e2e/analysis.spec.ts",
+                "import { test } from '@playwright/test';\n"
+                "test.describe('/analysis', () => {\n"
+                "  console.log('/health');\n"
+                "  items.some('/items', handler);\n"
+                "});\n",
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["routes", "--project", project_root])
 
-            self.assertEqual(exit_code, 1)
-            self.assertIn("git status failed", stderr.getvalue())
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("未检测到 HTTP 路由定义", output)
+        self.assertNotIn("DESCRIBE", output)
+        self.assertNotIn("LOG", output)
+        self.assertNotIn("SOME", output)
+
+    def test_routes_json_outputs_machine_readable_routes(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/routes.ts", "router.get('/items', handler);\n")
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["routes", "--project", project_root, "--json"])
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["command"], "routes")
+        self.assertIn("scanStats", payload)
+        self.assertEqual(len(payload["routes"]), 1)
+        route = payload["routes"][0]
+        self.assertEqual(route["method"], "GET")
+        self.assertEqual(route["path"], "/items")
+        self.assertEqual(route["framework"], "express")
+        self.assertEqual(route["file"], "src/routes.ts")
+        self.assertEqual(route["line"], 1)
 
     def test_js_detector_fallback_skips_dependency_directories(self) -> None:
         from repomap_check import ProjectDetector
@@ -434,7 +509,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("tsx", result.stdout)
         self.assertIn("repomap_cli:", result.stdout)
         self.assertIn("repomap_parser:", result.stdout)
-        self.assertIn("only required for build-binary", result.stdout)
+        self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
 
     def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
         from repomap_cli import main
@@ -579,7 +654,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(cache_code, 0)
             self.assertEqual(diff_code, 0)
-            self.assertIn("缓存已保存", cache_stdout.getvalue())
+            self.assertIn("Graph baseline saved", cache_stdout.getvalue())
             self.assertIn("新增符号: 1", diff_stdout.getvalue())
 
     def test_build_binary_invokes_pyinstaller_onefile_for_repomap_binary(self) -> None:
@@ -723,6 +798,9 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
             write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(project_root, "README.md", "# Demo\n")
+            write_file(project_root, "scripts/check.sh", "#!/usr/bin/env bash\necho ok\n")
+            write_file(project_root, ".env", "SECRET=hidden\n")
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
@@ -737,11 +815,16 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("reading_order", payload)
             self.assertIn("modules", payload)
             self.assertIn("summary_symbols", payload)
+            self.assertIn("supporting_files", payload)
             self.assertGreaterEqual(payload["scan_stats"]["symbol_count"], 2)
             self.assertLessEqual(len(payload["hotspots"]), 8)
             self.assertLessEqual(len(payload["reading_order"]), 6)
             self.assertLessEqual(len(payload["modules"]), 6)
             self.assertLessEqual(len(payload["summary_symbols"]), 4)
+            supporting_paths = {item["file"] for item in payload["supporting_files"]}
+            self.assertIn("README.md", supporting_paths)
+            self.assertIn("scripts/check.sh", supporting_paths)
+            self.assertNotIn(".env", supporting_paths)
 
     def test_file_detail_defaults_to_compact_symbol_list(self) -> None:
         from repomap_cli import main

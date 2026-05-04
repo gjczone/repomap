@@ -20,8 +20,7 @@ AI 代码助手经常会遇到三个问题：
 - 按业务词找代码：`query`
 - 看某个文件里有什么：`file-detail`
 - 改文件前看影响和风险：`impact --with-symbols`
-- 改完后做交付前证据汇总：`verify`
-- 需要更细节时看变更风险：`diff-risk`
+- 改完后做交付前证据汇总：`verify`（快速模式 `verify --quick` 跳过编译器/LSP，只看变更风险）
 - 做质量检查：`check`
 - 有本地语言服务器时，再额外用 LSP 做更精确的诊断或引用证据
 
@@ -99,16 +98,16 @@ This project replaces the old MCP protocol surface with direct CLI commands so s
 | `repomap_query_symbol` | `repomap query-symbol --project <path> --symbol <name>` |
 | `repomap_file_detail` | `repomap file-detail --project <path> --file-path <file>` |
 | `repomap_hotspots` | `repomap hotspots --project <path>` |
-| `repomap_cache` | `repomap cache save|load --project <path>` |
+| `repomap_cache` | `repomap cache save --project <path>` |
 | `repomap_diff` | `repomap diff --project <path>` |
 | `repomap_git_history` | `repomap git-history --project <path> --symbol <name>` |
 | `repomap_refs` | `repomap refs --project <path> [--symbol <name>]` |
-| `repomap_orphan` | `repomap orphan --project <path>` |
+| `repomap_orphan` | `repomap orphan --project <path> [--json] [--min-confidence N]` |
 | `repomap_check` | `repomap check --project <path>` |
 | *(new)* | `repomap query --project <path> --query <keyword>` |
 | *(new)* | `repomap impact --project <path> --files <file...> [--with-symbols]` |
-| *(new)* | `repomap diff-risk --project <path>` |
-| *(new)* | `repomap verify --project <path> [--with-lsp] [--with-diff]` |
+| *(new)* | `repomap verify --project <path> [--quick] [--with-lsp] [--with-diff]` |
+| *(new)* | `repomap routes --project <path> [--json]` |
 | *(new)* | `repomap diagnostics --project <path> --source lsp --files <file...>` |
 | *(new)* | `repomap lsp doctor --project <path>` |
 
@@ -119,7 +118,8 @@ This section is for technical readers who need exact behavior. If you only want 
 The old MCP server kept an in-memory scan state between tool calls. This CLI is intentionally stateless.
 
 - Commands that need a symbol graph scan the target project during that invocation.
-- Cache-dependent commands (`cache load`, `diff`) use `~/.cache/repomap/`, with cache directories keyed by the canonical project path so relative and absolute references to the same project share a cache while same-name projects in different directories stay isolated.
+- `cache save` stores a graph baseline in `~/.cache/repomap/` before target edits. `diff` and `verify --with-diff` read that saved baseline later; there is no public `cache load` action.
+- Cache directories are keyed by the canonical project path so relative and absolute references to the same project share a cache while same-name projects in different directories stay isolated.
 - Session scan cache restores only when both the source fingerprint and saved `project_root` match the current project.
 - `check` can resolve symbols without a long-lived server by scanning internally.
 - `check` treats any non-skipped underlying tool with a non-zero exit code as a failed report, even if no structured issue can be parsed.
@@ -127,15 +127,15 @@ The old MCP server kept an in-memory scan state between tool calls. This CLI is 
 - `query --paths/--exclude`, `impact --files`, and `file-detail --file-path` normalize `./...` and absolute in-project paths to project-relative paths; outside-project paths fail clearly.
 - `impact --with-symbols` turns file-level impact into an edit-planning report with key symbols, ordered read-next guidance, and lightweight local LSP availability hints; it only detects LSP availability and does not start servers.
 - `query --paths` and `query --exclude` match path segments (`src` matches `src/a.py` but not `src2/a.py`).
-- `diff-risk` preserves porcelain status spacing, so staged, unstaged, untracked, and rename paths are reported without truncation.
-- `diff-risk` fails clearly when `git rev-parse` or `git status --porcelain` fails instead of treating failed git output as an empty diff.
-- `verify` aggregates post-edit evidence from git changed files, risk analysis, `check`, optional LSP diagnostics, and optional graph diff; it does not run project tests automatically and treats missing cache baseline as a non-fatal skipped graph diff.
+- `verify --quick` preserves porcelain status spacing and reports staged, unstaged, untracked, and rename paths without truncation; it fails clearly when `git rev-parse` or `git status --porcelain` fails.
+- `verify` aggregates post-edit evidence from git changed files, risk analysis, `check`, optional LSP diagnostics, and optional graph diff; it does not run project tests automatically and treats missing cache baseline as a non-fatal skipped graph diff. Use `--quick` to skip compiler/LSP checks for a faster change-risk-only report.
 - Member calls such as `obj.method()` avoid unrelated fallback targets unless same-file or import evidence exists.
 - JS/TS imports with explicit source extensions such as `./foo.js` resolve to the real target file before extension probing.
 - TS/JS config aliases respect `baseUrl` when resolving non-relative `paths` targets.
 - Python dotted imports such as `from pkg.sub import helper` resolve to package paths like `pkg/sub.py` or `pkg/sub/__init__.py`.
 - Unresolvable imported names are not silently rebound to same-named global symbols, which avoids misleading call-chain edges.
 - JS/TS object literal API methods such as `export const api = { getMetadata: () => ... }` are emitted as named method symbols.
+- `overview` is primarily a source-symbol graph. It also lists a small `支撑文件（非符号图）` inventory for key docs, manifests, scripts, and service/config files such as `AGENTS.md`, `CLAUDE.md`, `README.md`, `SKILL.md`, `package.json`, `scripts/*.sh`, and `*.service`. This inventory does not parse or summarize those files and does not replace injected agent context.
 - `overview --with-heat` can mark recently changed files, and `overview --with-co-change` explicitly enables the heavier Git co-change section; default `overview` does not run Git history scans.
 - `.tsx` files use the dedicated TSX tree-sitter grammar, and `doctor` reports parser availability plus module load paths.
 - Anonymous default exports and CommonJS function exports are bound to stable anonymous symbols so default import / require call chains can resolve them.
@@ -357,10 +357,13 @@ uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-
 
 ### Cache + Diff
 
+Use `cache save` before the target edits when you know you will want a later graph-only comparison. After edits, use `diff` for the advanced graph comparison, or `verify --with-diff` for final evidence.
+
 ```bash
 uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
   python -m repomap_cli cache save --project /path/to/project
 
+# after the target edits
 uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
   python -m repomap_cli diff --project /path/to/project
 ```
@@ -465,94 +468,54 @@ uv run python -m repomap_cli verify --project /path/to/project
 
 Post-edit evidence gate: detects changed files, summarizes risk and suggested tests, runs `check`, and can include focused LSP diagnostics with `--with-lsp` or graph diff with `--with-diff`. Supports `--json`.
 
-### Change Risk Report (new)
+### Change Risk / Quick Verify
 
 ```bash
-uv run python -m repomap_cli diff-risk --project /path/to/project
+repomap verify --project /path/to/project --quick
+uv run python -m repomap_cli verify --project /path/to/project --quick
 ```
 
-Pre-commit safety check: detects all changed files (staged, unstaged, untracked, renamed), runs impact analysis on them, suggests de-duplicated tests to run, flags missing test coverage, and gives a risk level. Supports `--json`.
+Pre-commit safety check: detects all changed files (staged, unstaged, untracked, renamed), runs impact analysis on them, suggests de-duplicated tests to run, flags missing test coverage, and gives a risk level — without running compiler/LSP checks. Supports `--json`. For the full gate including diagnostics, use `verify` without `--quick`.
 
 ## Command Value Assessment
 
-### `check`
+Use the public commands by value tier, not by historical availability.
 
-Value: High
+### Primary workflow commands
 
-Best use:
+These should be the default choices for most agent work:
 
-- after edits
-- before commit
-- before handing work back to a skill or another agent
-- after cross-file refactors
+- `overview` — first-look project map. It prioritizes source graph reading order, module summaries, entry points, API routes, hotspots, key implementation symbols, and a small non-AST supporting-file inventory.
+- `query` — topic / feature discovery when you know business words but not exact files or symbols.
+- `file-detail` — focused inspection when the target file is already known.
+- `impact --with-symbols` — default pre-edit planning command for known files; combines key symbols, affected files, read-next guidance, likely tests, risk, and LSP availability hints.
+- `query-symbol` — exact/fuzzy symbol lookup.
+- `call-chain` — caller/callee context before changing behavior.
+- `refs` — reference discovery, with optional `--with-lsp` for local exact evidence.
+- `verify` — default post-edit evidence gate.
+- `verify --quick` — risk-only post-edit check for current Git changes; replaces the old public `diff-risk` command.
+- `check` — lower-level compiler/type/lint diagnostics.
+- `orphan` — dead-code candidate discovery.
 
-Why it helps:
+### Focused secondary commands
 
-- catches real compiler, type, and lint failures
-- gives a fast regression gate
-- can associate issues back to symbols when scan-based resolution is enabled
+Keep these, but use them only when the question is narrow:
 
-Tradeoff:
+- `routes` — direct HTTP/API route inventory with optional `--json` machine-readable output. Prefer this over generic `overview` when the task is “show routes/endpoints”; route inventory filters common test/e2e/spec DSL noise.
+- `diagnostics` — focused diagnostics for explicit files, usually `diagnostics --source lsp --files ...`.
+- `lsp doctor` — inspect local LSP availability; does not install or start project-wide daemons.
+- `hotspots` — dense-file inventory when complexity/churn triage is the explicit goal.
+- `git-history` — local history or ownership context; not part of the default first-pass workflow.
+- `diff` — advanced graph-only comparison against a baseline saved before the target edits.
 
-- depends on project toolchain availability
-- can be slower than pure graph queries on large repos
+### Low-level baseline command
 
-Recommendation:
+- `cache save` — prepare a graph baseline before target edits. It is intentionally narrow and only exposes `save`; graph comparison reads the baseline through `diff` or `verify --with-diff`.
 
-- keep as a primary command
-- in most real workflows this is more valuable than `git-history`
+### Removed public command surface
 
-### `file-detail`
-
-Value: Medium-High
-
-Best use:
-
-- when a skill already knows the target file
-- before opening a very dense file
-- when you want a file-level summary instead of raw source first
-
-Why it helps:
-
-- compresses one file's symbol layout
-- shows signatures and local structure
-- good for focused reading plans
-
-Tradeoff:
-
-- less useful than `overview` for first contact with an unfamiliar repo
-- less useful than `query-symbol` when you do not know the file yet
-
-Recommendation:
-
-- keep it
-- position it as a "focused inspection" command, not a first-step command
-
-### `git-history`
-
-Value: Medium-Low
-
-Best use:
-
-- when behavior changed recently and you need commit context
-- when the same symbol has churn or ownership questions
-- when debugging regressions tied to a recent change window
-
-Why it helps:
-
-- gives local blame and recent commit trail
-- useful for "why was this changed?" questions
-
-Tradeoff:
-
-- only works well in a healthy git repo
-- usually less important than `overview`, `call-chain`, `refs`, or `check`
-- commit history often explains context, but not current runtime impact
-
-Recommendation:
-
-- keep it as a secondary command
-- do not make it part of the default first-pass workflow unless the user explicitly asks for history
+- `diff-risk` is no longer public. Use `verify --quick` for current-change risk analysis.
+- `cache load` is no longer public. Baseline reads are internal to `diff` and `verify --with-diff`.
 
 ## Product Roadmap For Agent Workflows
 
@@ -617,7 +580,9 @@ Do not auto-install servers, run `npx`/`pnpx`/`bunx`, create a daemon, or make L
 
 ### P4 — Improve `query` / `overview` feature slices
 
-Agents need the smallest useful reading set, not a long list. Future `query` and `overview` output should improve:
+Status: partially implemented for `overview` through the lightweight `支撑文件（非符号图）` inventory.
+
+Agents need the smallest useful reading set, not a long list. Current `overview` now separates source-symbol graph output from non-AST supporting files such as injected context docs, README/SKILL files, manifests, scripts, and service/config files. Future work should keep improving:
 
 - core files vs supporting files
 - tests and config files
@@ -854,9 +819,11 @@ Examples:
 
 ```bash
 repomap overview --project /repo
-repomap call-chain --project /repo --symbol build_query
-repomap check --project /repo --since-commit HEAD~1
-repomap diff --project /repo
+repomap routes --project /repo --json
+repomap diagnostics --project /repo --source lsp --files src/foo.ts
+repomap cache save --project /repo      # before target edits, if graph diff evidence is needed
+repomap verify --project /repo --quick  # after edits, risk-only
+repomap verify --project /repo --with-diff
 ```
 
 Recommended pattern:
@@ -865,8 +832,11 @@ Recommended pattern:
 - use `query-symbol` or `file-detail` for pinpoint navigation
 - use `query` (topic search) when you know the feature area but not the symbol names
 - use `impact --with-symbols` before modifying known files to assess change blast radius, key symbols, read-next order, tests, risk, and LSP availability
-- use `verify` after edits as the default final evidence gate
-- use `diff-risk`, `check`, `diagnostics`, and `diff` when you need their lower-level details
+- use `verify` after edits as the default final evidence gate; use `verify --quick` for change-risk only (skips compiler/LSP)
+- use `routes` when the question is specifically API/HTTP endpoint inventory; add `--json` for smoke tests or other machine-readable checks
+- use `diagnostics` when you need focused LSP diagnostics for explicit files
+- use `check` when you need lower-level diagnostics details
+- use `cache save` before target edits only when later graph diff evidence is valuable
 - use `git-history` only when history or ownership context is the actual question
 - when another skill needs repo understanding, prefer delegating to the `repomap` skill so command selection stays consistent
 
@@ -912,11 +882,13 @@ cli-created/
 
 - Dynamic dispatch, reflection, runtime-generated code, and string-built calls can still be missed.
 - Windows/macOS binaries are defined in workflow, but not produced locally on Linux.
-- `diff` still depends on an existing saved cache baseline.
+- `diff` still depends on an existing saved cache baseline created with `cache save` before the target edits.
+- `routes` intentionally focuses on production HTTP/API route definitions and filters common test/e2e/spec DSL noise; use `query` or `file-detail` if you need mock route strings inside tests.
+- `overview` lists non-AST supporting files as a lightweight inventory only; it does not parse Markdown/shell/service files and does not replace `AGENTS.md` / `CLAUDE.md` context.
 - `query` uses hand-weighted keyword scoring (path + filename + symbol name). Will upgrade to BM25 in a future iteration for better multi-keyword ranking.
-- `impact` and `diff-risk` identify affected files via graph edge analysis; event-level coupling (CustomEvent, postMessage) is not yet detected (planned as `event-map` command).
+- `impact` and `verify --quick` identify affected files via graph edge analysis; event-level coupling (CustomEvent, postMessage) is not yet detected (planned as `event-map` command).
 - Test matching uses 5-level heuristics (name → path → import → symbol → git co-change). Coverage depends on project structure and git history depth.
-- `diff-risk` depends on `git status` and works best within a git repository.
+- `verify --quick` depends on `git status` and works best within a git repository.
 
 ## Delivery Status
 

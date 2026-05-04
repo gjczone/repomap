@@ -16,7 +16,6 @@ from repomap_ai import (
     _build_query_reading_order,
     _get_hot_files,
     _rank_symbols_for_file,
-    render_diff_risk_report,
     render_impact_report,
     render_query_report,
     render_routes_report,
@@ -36,7 +35,7 @@ from repomap_support import (
     serialize_edge,
     serialize_symbol,
 )
-from repomap_toolkit import diff_project, load_cache, save_cache, scan_project
+from repomap_toolkit import diff_project, save_cache, scan_project
 from repomap_topic import (
     FileMatch,
     TestMatch,
@@ -66,7 +65,7 @@ PYINSTALLER_BINDINGS = [
 
 _SCAN_CACHE: dict[tuple[str, int, int, str], tuple[str, RepoMapEngine]] = {}
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
-SESSION_CACHE_VERSION = 4
+SESSION_CACHE_VERSION = 5
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
 DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
 DEFAULT_CALL_CHAIN_MAX_CHARS = 4000
@@ -77,6 +76,7 @@ DEFAULT_OVERVIEW_JSON_READING_ORDER = 6
 DEFAULT_OVERVIEW_JSON_MODULES = 6
 DEFAULT_OVERVIEW_JSON_SUMMARY_FILES = 4
 DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE = 3
+DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -152,11 +152,6 @@ def build_parser() -> argparse.ArgumentParser:
     impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
     impact_parser.add_argument("--with-symbols", action="store_true", help="Include edit-planning key symbols, read-next order, and LSP availability hint.")
 
-    # ── 新增: diff-risk（变更风险报告）─────────────────────────────────────────
-    diff_risk_parser = subparsers.add_parser("diff-risk", help="Show risk report for current changes.")
-    diff_risk_parser.add_argument("--project", "-p", default=".", help="Project root path.")
-    diff_risk_parser.add_argument("--json", action="store_true")
-
     verify_parser = subparsers.add_parser("verify", help="Aggregate post-edit evidence before final handoff.")
     verify_parser.add_argument("--project", "-p", default=".", help="Project root path.")
     verify_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
@@ -167,6 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     verify_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum changed files to open through LSP.")
     verify_parser.add_argument("--with-diff", action="store_true", help="Include graph diff when a cache baseline exists.")
+    verify_parser.add_argument("--quick", action="store_true", help="Risk-only mode for current Git changes; skips compiler and LSP checks.")
 
     file_parser = subparsers.add_parser("file-detail", help="Scan a repository and print file detail.")
     _add_project_args(file_parser)
@@ -188,11 +184,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_project_args(hotspots_parser)
     hotspots_parser.add_argument("--limit", type=int, default=15, help="Number of files to print.")
 
-    cache_parser = subparsers.add_parser("cache", help="Save or load scan cache.")
-    cache_parser.add_argument("action", choices=["save", "load"], help="Cache action.")
+    cache_parser = subparsers.add_parser("cache", help="Prepare a graph baseline before the target edits.")
+    cache_parser.add_argument("action", choices=["save"], help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.")
     cache_parser.add_argument("--project", "-p", default=".", help="Project root path.")
 
-    diff_parser = subparsers.add_parser("diff", help="Compare current graph with the saved cache baseline.")
+    diff_parser = subparsers.add_parser("diff", help="Advanced graph-only comparison against a baseline saved before the target edits.")
     diff_parser.add_argument("--project", "-p", default=".", help="Project root path.")
     diff_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
@@ -211,6 +207,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     orphan_parser = subparsers.add_parser("orphan", help="Scan a repository and find orphaned symbols.")
     _add_project_args(orphan_parser)
+    orphan_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    orphan_parser.add_argument("--limit", type=int, default=20, help="Max candidates per confidence tier in text mode (default 20).")
+    orphan_parser.add_argument("--min-confidence", type=int, default=0, help="Minimum confidence score 0-100 to include in output (default 0).")
 
     check_parser = subparsers.add_parser("check", help="Run compiler/static analysis diagnostics.")
     check_parser.add_argument("--project", "-p", default=".", help="Project root path.")
@@ -228,7 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     check_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum explicit files to open through LSP.")
 
-    diagnostics_parser = subparsers.add_parser("diagnostics", help="Collect diagnostics from optional evidence sources.")
+    diagnostics_parser = subparsers.add_parser("diagnostics", help="Focused diagnostics for explicit files from optional evidence sources.")
     diagnostics_parser.add_argument("--project", "-p", default=".", help="Project root path.")
     diagnostics_parser.add_argument("--source", choices=["lsp"], default="lsp", help="Diagnostics source.")
     diagnostics_parser.add_argument("--files", nargs="+", required=True, help="Project files to check with the diagnostics source.")
@@ -242,8 +241,9 @@ def build_parser() -> argparse.ArgumentParser:
     lsp_doctor_parser.add_argument("--project", "-p", default=".", help="Project root path.")
     lsp_doctor_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
-    routes_parser = subparsers.add_parser("routes", help="Extract and display HTTP route definitions.")
+    routes_parser = subparsers.add_parser("routes", help="Extract direct HTTP/API route inventory.")
     _add_project_args(routes_parser)
+    routes_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
     subparsers.add_parser("doctor", help="Validate runtime and build prerequisites.")
 
@@ -316,8 +316,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.project, 8000, args.files,
             getattr(args, "max_files", 20), args.json, getattr(args, "with_symbols", False),
         )
-    if command == "diff-risk":
-        return run_diff_risk(args.project, args.json)
     if command == "verify":
         return run_verify(
             project=args.project,
@@ -329,6 +327,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
             with_diff=args.with_diff,
+            quick=args.quick,
         )
     if command == "file-detail":
         return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars)
@@ -343,7 +342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "refs":
         return run_refs(args.project, args.max_files, args.symbol, args.file_path, args.json, args.with_lsp, args.lsp_timeout)
     if command == "orphan":
-        return run_orphan(args.project, args.max_files)
+        return run_orphan(args.project, args.max_files, args.json, args.limit, args.min_confidence)
     if command == "check":
         return run_check(
             project=args.project,
@@ -364,7 +363,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(f"unknown lsp command: {args.lsp_command}")
         return 2
     if command == "routes":
-        return run_routes(args.project, args.max_files)
+        return run_routes(args.project, args.max_files, args.json)
     if command == "doctor":
         return run_doctor()
     if command == "build-binary":
@@ -529,8 +528,7 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             for file_path, imports in engine.graph.file_imports.items()
         },
         "routes": [
-            {"method": r.method, "path": r.path, "handler": r.handler,
-             "file": r.file, "line": r.line, "framework": r.framework}
+            _route_payload(r)
             for r in engine.routes
         ],
     }
@@ -741,6 +739,18 @@ def run_scan(project: str, max_files: int) -> int:
         return 1
 
 
+def _route_payload(route: HttpRoute) -> dict[str, Any]:
+    return {
+        "method": route.method,
+        "path": route.path,
+        "handler": route.handler,
+        "file": route.file,
+        "line": route.line,
+        "framework": route.framework,
+    }
+
+
+
 def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
     return {
         "listed_source_files": engine.scan_stats.listed_source_files,
@@ -775,6 +785,7 @@ def run_overview(project: str, max_files: int, max_chars: int, as_json: bool,
                     DEFAULT_OVERVIEW_JSON_SUMMARY_FILES,
                     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
                 ),
+                "supporting_files": engine.supporting_files(DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES),
                 "hot_files": list(_get_hot_files(str(engine.project_root))) if with_heat else [],
             }
             print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -931,9 +942,18 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
         return 1
 
 
-def run_routes(project: str, max_files: int) -> int:
+def run_routes(project: str, max_files: int, as_json: bool) -> int:
     try:
         engine = _scan_engine(project, max_files)
+        if as_json:
+            payload = {
+                "command": "routes",
+                "project": str(engine.project_root),
+                "scanStats": _scan_stats_payload(engine),
+                "routes": [_route_payload(route) for route in engine.list_routes()],
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
         print(render_routes_report(engine))
         return 0
     except Exception as exc:
@@ -958,31 +978,24 @@ def run_hotspots(project: str, max_files: int, limit: int) -> int:
 
 def run_cache(project: str, action: str) -> int:
     project_path = _resolve_project(project)
-    if action == "save":
-        try:
-            symbols, edges = scan_project(project_path)
-            cache_path = save_cache(project_path, symbols, edges)
-            print(f"✅ 缓存已保存\n- 路径: `{cache_path}`\n- 符号数: {len(symbols)}\n- 依赖边: {len(edges)}")
-            return 0
-        except Exception as exc:
-            print(f"[{CLI_NAME}] cache save failed: {exc}", file=sys.stderr)
-            return 1
-    cache = load_cache(project_path)
-    if cache is None:
-        print("❌ 缓存不存在，请先执行 `repomap cache save --project <path>`", file=sys.stderr)
-        return 1
-    print(
-        "\n".join(
-            [
-                "📂 缓存信息",
-                f"- 扫描时间: {cache.scan_time}",
-                f"- 文件数: {cache.file_count}",
-                f"- 符号数: {cache.symbol_count}",
-                f"- 依赖边: {cache.edge_count}",
-            ]
+    if action != "save":
+        print(f"[{CLI_NAME}] unsupported cache action: {action}", file=sys.stderr)
+        return 2
+    try:
+        symbols, edges = scan_project(project_path)
+        cache_path = save_cache(project_path, symbols, edges)
+        print(
+            "✅ Graph baseline saved for a future comparison\n"
+            f"- Path: `{cache_path}`\n"
+            f"- Symbols: {len(symbols)}\n"
+            f"- Edges: {len(edges)}\n"
+            "- Use before the target edits; saving after edits cannot prove those edits are safe."
         )
-    )
-    return 0
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] cache save failed: {exc}", file=sys.stderr)
+        return 1
+
 
 
 def run_diff(project: str, as_json: bool) -> int:
@@ -1471,63 +1484,6 @@ def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict
     }
 
 
-def _diff_risk_json_payload(engine: RepoMapEngine, changed_files: list[str], evidence: dict[str, Any]) -> dict[str, Any]:
-    affected_list = evidence["affectedList"]
-    tests = evidence["tests"]
-    return {
-        "command": "diff-risk",
-        "project": str(engine.project_root),
-        "scanStats": _scan_stats_payload(engine),
-        "result": {
-            "changedFiles": changed_files,
-            "affectedFiles": [
-                {"file": file_path, "why": why, "confidence": confidence}
-                for file_path, why, confidence in affected_list
-            ],
-            "tests": [
-                {"testFile": test.test_file, "targetFile": test.target_file,
-                 "confidence": test.confidence, "reason": test.reason}
-                for test in tests
-            ],
-            "riskLevel": evidence["riskLevel"],
-            "riskReasons": evidence["riskReasons"],
-            "missingChecks": evidence["missingChecks"],
-        },
-    }
-
-
-def run_diff_risk(project: str, as_json: bool) -> int:
-    try:
-        project_root = _resolve_project(project)
-        changed_files, error = _collect_changed_files(project_root)
-        if error:
-            print(error, file=sys.stderr)
-            return 1
-        if not changed_files:
-            print("没有检测到当前项目内的变更")
-            return 0
-
-        engine = _scan_engine(project_root, 8000)
-        evidence = _diff_risk_evidence(engine, changed_files)
-
-        if as_json:
-            print(json.dumps(_diff_risk_json_payload(engine, changed_files, evidence), ensure_ascii=False, indent=2))
-            return 0
-
-        print(render_diff_risk_report(
-            engine,
-            changed_files,
-            evidence["affectedList"],
-            evidence["tests"],
-            evidence["riskLevel"],
-            evidence["riskReasons"],
-            evidence["missingChecks"],
-        ))
-        return 0
-    except Exception as exc:
-        print(f"[{CLI_NAME}] diff-risk failed: {exc}", file=sys.stderr)
-        return 1
-
 
 
 def _run_check_payload(
@@ -1634,6 +1590,7 @@ def run_verify(
     lsp_timeout: float,
     lsp_max_files: int,
     with_diff: bool,
+    quick: bool = False,
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -1644,17 +1601,23 @@ def run_verify(
 
         engine = _scan_engine(project_root, 8000)
         evidence = _diff_risk_evidence(engine, changed_files)
-        check_payload = _run_check_payload(
-            project_root=project_root,
-            types=types,
-            max_issues=max_issues,
-            modified_files=changed_files,
-            resolve_symbols=resolve_symbols,
-            with_lsp=False,
-            lsp_timeout=lsp_timeout,
-            lsp_max_files=lsp_max_files,
-        )
-        lsp_payload = _verify_lsp_payload(project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files)
+
+        if quick:
+            check_payload = {"status": "skipped", "summary": {}, "runs": [], "reason": "verify --quick"}
+            lsp_payload = {"enabled": False, "status": "skipped", "runs": [], "summary": {}, "reason": "verify --quick"}
+        else:
+            check_payload = _run_check_payload(
+                project_root=project_root,
+                types=types,
+                max_issues=max_issues,
+                modified_files=changed_files,
+                resolve_symbols=resolve_symbols,
+                with_lsp=False,
+                lsp_timeout=lsp_timeout,
+                lsp_max_files=lsp_max_files,
+            )
+            lsp_payload = _verify_lsp_payload(project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files)
+
         graph_diff_payload = _verify_graph_diff_payload(project_root, with_diff)
         status = _overall_verify_status(
             changed_files,
@@ -1890,7 +1853,97 @@ def run_refs(
         return 1
 
 
-def run_orphan(project: str, max_files: int) -> int:
+# Kinds that are always structural noise, never dead code.
+_ORPHAN_EXCLUDED_KINDS: set[str] = {
+    "element",        # HTML tags in JSX/HTML files
+    "json_key",       # JSON object keys in config files
+    "module",         # mod declarations, import wrappers
+    "handler",        # web route handlers (framework-dispatched)
+}
+
+# File extensions that are pure config — skip orphan detection entirely.
+_ORPHAN_EXCLUDED_EXTENSIONS: set[str] = {
+    ".json", ".toml", ".yaml", ".yml", ".html", ".css", ".scss", ".less",
+}
+
+# Test-related path markers.
+_TEST_PATH_MARKERS: tuple[str, ...] = ("test", "spec", "e2e", "__test__", "__tests__")
+
+# Base confidence by symbol kind (0-100). Higher = more likely truly dead.
+_ORPHAN_KIND_BASE: dict[str, int] = {
+    "function": 60,
+    "method": 60,
+    "struct": 40,
+    "enum": 40,
+    "class": 40,
+    "type": 40,
+    "interface": 35,
+    "anonymous_function": 30,
+    "variable": 30,
+    "const": 30,
+    "impl": 15,
+    "trait": 35,
+}
+
+
+def _orphan_confidence(symbol: Symbol, orphan_names: set[str]) -> int:
+    """Compute a confidence score (0-100) that a symbol is truly dead code."""
+    score = _ORPHAN_KIND_BASE.get(symbol.kind, 30)
+
+    # File-level signals
+    file_lower = symbol.file.lower()
+    for marker in _TEST_PATH_MARKERS:
+        if marker in file_lower:
+            score -= 20
+            break
+
+    # Extension-based filtering (should already be excluded, defensive)
+    if any(file_lower.endswith(ext) for ext in _ORPHAN_EXCLUDED_EXTENSIONS):
+        score -= 50
+
+    # Name-based signals for test helpers
+    name_lower = symbol.name.lower()
+    if any(name_lower.startswith(prefix) for prefix in ("test_", "it_", "should_", "test")):
+        score -= 30
+
+    # Visibility signal: private symbols are more likely truly dead
+    if symbol.visibility == "private":
+        score += 10
+
+    # Struct/impl pairing heuristics
+    if symbol.kind == "impl":
+        # impl block whose struct also appears as orphan → the pair might all be dead
+        if symbol.name in orphan_names:
+            score += 25
+    elif symbol.kind in ("struct", "enum", "class", "type"):
+        # Struct whose impl also appears → more likely truly dead (entire unit unused)
+        if symbol.name in orphan_names:
+            score += 25
+
+    return max(0, min(100, score))
+
+
+def _orphan_note(symbol: Symbol) -> str:
+    """Generate a brief reason string for the confidence score."""
+    reasons: list[str] = []
+    file_lower = symbol.file.lower()
+    for marker in _TEST_PATH_MARKERS:
+        if marker in file_lower:
+            reasons.append("测试文件")
+            break
+    name_lower = symbol.name.lower()
+    if any(name_lower.startswith(prefix) for prefix in ("test_", "it_", "should_")):
+        reasons.append("测试辅助函数")
+    if symbol.kind == "impl":
+        reasons.append("实现块(可能宏驱动)")
+    if symbol.kind in ("struct", "enum", "class"):
+        reasons.append("类型定义(可能反射/宏使用)")
+    if not reasons:
+        reasons.append("无调用者和被调用者")
+    return "; ".join(reasons)
+
+
+def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int = 20, min_confidence: int = 0) -> int:
     try:
         engine = _scan_engine(project, max_files)
         symbol_ids = set(engine.graph.symbols.keys())
@@ -1902,7 +1955,9 @@ def run_orphan(project: str, max_files: int) -> int:
                     continue
                 calls_out.setdefault(source_id, set()).add(edge.target)
                 calls_in.setdefault(edge.target, set()).add(source_id)
-        orphans = []
+
+        candidates: list[Symbol] = []
+        filtered_structural_count = 0
         for sid in symbol_ids:
             if len(calls_in[sid]) == 0 and len(calls_out[sid]) == 0:
                 symbol = engine.graph.symbols[sid]
@@ -1910,17 +1965,93 @@ def run_orphan(project: str, max_files: int) -> int:
                     continue
                 if symbol.visibility == "exported":
                     continue
-                if symbol.kind == "handler":
+                if symbol.kind in _ORPHAN_EXCLUDED_KINDS:
+                    filtered_structural_count += 1
                     continue
-                orphans.append(symbol)
-        orphans.sort(key=lambda symbol: (symbol.file, symbol.line, symbol.name))
-        lines = ["## 死代码检测\n"]
-        lines.append(f"发现 {len(orphans)} 个孤立符号（不被调用也不调用别人）:\n")
-        for symbol in orphans[:20]:
-            lines.append(f"- `{symbol.name}` ({symbol.kind}) — `{symbol.file}:{symbol.line}`")
-        if len(orphans) > 20:
-            lines.append(f"\n... 还有 {len(orphans) - 20} 个")
-        lines.append("\n> ⚠️ 注意：类型定义、数据结构等可能是正常的孤立符号")
+                if any(symbol.file.lower().endswith(ext) for ext in _ORPHAN_EXCLUDED_EXTENSIONS):
+                    filtered_structural_count += 1
+                    continue
+                candidates.append(symbol)
+
+        # Build orphan name set for struct/impl pairing heuristic
+        orphan_names: set[str] = {s.name for s in candidates}
+
+        # Compute confidence for each candidate
+        scored: list[dict] = []
+        for symbol in candidates:
+            conf = _orphan_confidence(symbol, orphan_names)
+            scored.append({
+                "symbol": symbol,
+                "confidence": conf,
+                "note": _orphan_note(symbol),
+            })
+
+        scored.sort(key=lambda x: (-x["confidence"], x["symbol"].file, x["symbol"].line, x["symbol"].name))
+
+        # Filter by min_confidence
+        if min_confidence > 0:
+            scored = [s for s in scored if s["confidence"] >= min_confidence]
+
+        # Tier classification
+        high = [s for s in scored if s["confidence"] >= 70]
+        medium = [s for s in scored if 40 <= s["confidence"] < 70]
+        low = [s for s in scored if s["confidence"] < 40]
+
+        if as_json:
+            def _to_dict(item):
+                sym = item["symbol"]
+                return {
+                    "name": sym.name,
+                    "kind": sym.kind,
+                    "file": sym.file,
+                    "line": sym.line,
+                    "confidence": item["confidence"],
+                    "note": item["note"],
+                    "visibility": sym.visibility,
+                }
+
+            payload = {
+                "project_root": str(engine.project_root),
+                "total_candidates": len(candidates),
+                "filtered_structural": filtered_structural_count,
+                "high_confidence": [_to_dict(s) for s in high],
+                "medium_confidence": [_to_dict(s) for s in medium],
+                "low_confidence": [_to_dict(s) for s in low],
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
+
+        # Text output
+        lines = ["## 死代码分析\n"]
+        lines.append(f"总计 {len(candidates)} 候选（已过滤 module/element/json_key 等 {filtered_structural_count} 个结构元素）")
+        if min_confidence > 0:
+            lines.append(f"置信度阈值: {min_confidence}（已过滤低置信项）")
+        lines.append("")
+
+        def _render_tier(title: str, emoji: str, items: list[dict], max_items: int):
+            if not items:
+                return []
+            tier_lines = [f"### {emoji} {title} — {len(items)} 个"]
+            if not items:
+                return tier_lines
+            tier_lines.append("")
+            tier_lines.append("| 符号 | 类型 | 文件:行 | 置信度 | 理由 |")
+            tier_lines.append("| --- | --- | --- | --- | --- |")
+            for item in items[:max_items]:
+                sym = item["symbol"]
+                tier_lines.append(f"| `{sym.name}` | {sym.kind} | `{sym.file}:{sym.line}` | {item['confidence']} | {item['note']} |")
+            if len(items) > max_items:
+                tier_lines.append(f"| … | | 还有 {len(items) - max_items} 个 | | |")
+            tier_lines.append("")
+            return tier_lines
+
+        lines.extend(_render_tier("高置信（建议审查）", "🔴", high, limit))
+        lines.extend(_render_tier("中置信（需要确认）", "🟡", medium, limit))
+        lines.extend(_render_tier("低置信（可能为活跃代码）", "🟢", low, limit))
+
+        if low:
+            lines.append("> 使用 `--min-confidence 40` 过滤低置信项。")
+        lines.append("> 不能仅据此删除，需要额外代码/业务验证。使用 `--json` 获取完整结构化输出。")
         print("\n".join(lines))
         return 0
     except Exception as exc:

@@ -666,11 +666,19 @@ class RepoMapEngineTests(unittest.TestCase):
                 ),
             )
 
+            write_file(project_root, "README.md", "# Demo\n")
+            write_file(project_root, "scripts/validate.sh", "#!/usr/bin/env bash\necho ok\n")
+            write_file(project_root, ".env", "SECRET=hidden\n")
+
             engine = RepoMapEngine(project_root)
             engine.scan()
             overview = engine.render_overview()
 
             self.assertIn("## 推荐阅读顺序", overview)
+            self.assertIn("## 支撑文件（非符号图）", overview)
+            self.assertIn("README.md", overview)
+            self.assertIn("scripts/validate.sh", overview)
+            self.assertNotIn(".env", overview)
             self.assertIn("## 模块摘要", overview)
             self.assertIn("## 关键实现符号", overview)
             self.assertIn("main.py", overview)

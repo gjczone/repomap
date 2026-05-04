@@ -22,7 +22,7 @@ import logging
 import os
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from repomap_ai import (
@@ -101,6 +101,43 @@ SKIP_FILE_NAMES = {
     "yarn.lock",
     "pnpm-lock.yaml",
     "Cargo.lock",
+}
+
+SUPPORTING_FILE_NAMES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "SKILL.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "Makefile",
+    "Dockerfile",
+    "docker-compose.yml",
+    "compose.yml",
+    "package.json",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+    "requirements.txt",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.node.json",
+    "vitest.config.ts",
+    "vitest.config.js",
+    "vite.config.ts",
+    "vite.config.js",
+    "eslint.config.js",
+    "eslint.config.mjs",
+    "pytest.ini",
+    "tox.ini",
+}
+
+SENSITIVE_SUPPORTING_FILE_NAMES = {
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+    ".env.test",
 }
 
 
@@ -264,6 +301,95 @@ class RepoMapEngine:
         selected_files = filtered_files[:max_files]
         self.scan_stats.selected_source_files = len(selected_files)
         return selected_files
+
+    def supporting_files(self, limit: int = 8) -> list[dict[str, Any]]:
+        """列出符号图之外也值得先看的文档、脚本和配置文件。"""
+        rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for file in self._list_supporting_file_candidates():
+            if file in seen:
+                continue
+            seen.add(file)
+            classified = self._classify_supporting_file(file)
+            if not classified:
+                continue
+            priority, role, reason = classified
+            rows.append({"file": file, "role": role, "reason": reason, "priority": priority})
+        rows.sort(key=lambda row: (row["priority"], row["file"]))
+        return [
+            {"file": row["file"], "role": row["role"], "reason": row["reason"]}
+            for row in rows[:limit]
+        ]
+
+    def _list_supporting_file_candidates(self) -> list[str]:
+        """快速列出仓库文件，用于轻量支撑文件清单；不读取文件内容。"""
+        try:
+            result = subprocess.run(
+                ["rg", "--files", "--hidden", "-g", "!**/*.min.js"],
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            candidates = sorted(line for line in result.stdout.strip().split("\n") if line)
+        except Exception:
+            candidates = sorted(
+                str(p.relative_to(self.project_root))
+                for p in self.project_root.rglob("*")
+                if p.is_file()
+            )
+        root_context_files = [
+            name
+            for name in ("AGENTS.md", "CLAUDE.md", "README.md", "SKILL.md")
+            if (self.project_root / name).is_file()
+        ]
+        candidates = sorted(set(root_context_files + candidates))
+        return [file for file in candidates if not self._should_skip_supporting_path(file)]
+
+    def _should_skip_supporting_path(self, file: str) -> bool:
+        path = Path(file)
+        name = path.name
+        name_lower = name.lower()
+        if self._should_skip_path(file):
+            return True
+        if name in SENSITIVE_SUPPORTING_FILE_NAMES or name_lower.startswith(".env."):
+            return True
+        if name_lower.endswith((".pem", ".key", ".p12", ".pfx")):
+            return True
+        return False
+
+    @staticmethod
+    def _classify_supporting_file(file: str) -> tuple[int, str, str] | None:
+        path = PurePosixPath(file)
+        parts = path.parts
+        name = path.name
+        name_lower = name.lower()
+        suffix = path.suffix.lower()
+        depth = len(parts)
+
+        if name in {"AGENTS.md", "CLAUDE.md"}:
+            return 0, "agent-context", "注入的项目结构、规则和工作流上下文"
+        if name == "SKILL.md":
+            return 1, "skill-doc", "技能入口说明，通常是 skill 仓库核心"
+        if name == "README.md":
+            return 2, "readme", "用户/项目说明入口"
+        if name in {"package.json", "pyproject.toml", "Cargo.toml", "go.mod", "requirements.txt"}:
+            return 3, "manifest", "依赖、脚本或包元数据"
+        if name.startswith("tsconfig") and suffix == ".json":
+            return 4, "tooling-config", "TypeScript 编译配置"
+        if name_lower.startswith(("vite.config", "vitest.config", "eslint.config")):
+            return 4, "tooling-config", "构建、测试或 lint 配置"
+        if name in {"Makefile", "Dockerfile", "docker-compose.yml", "compose.yml"}:
+            return 5, "automation", "构建、容器或自动化入口"
+        if suffix == ".service":
+            return 5, "service", "服务部署/启动配置"
+        if suffix == ".sh" and (depth <= 2 or (parts and parts[0] in {"scripts", "bin"})):
+            return 6, "script", "启动、验证或维护脚本"
+        if suffix == ".md" and (depth <= 2 or (parts and parts[0] in {"docs", "references"})):
+            return 7, "docs", "补充文档或参考资料"
+        if name in SUPPORTING_FILE_NAMES:
+            return 8, "supporting", "项目支撑文件"
+        return None
 
     def _should_skip_path(self, file: str) -> bool:
         path = Path(file)

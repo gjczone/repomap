@@ -215,11 +215,11 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     # 根据粒度调整各板块的数量限制
     if granularity == "compact":
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 0, 5, 0, 3, 2
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 0, 5, 0, 3, 2, 3
     elif granularity == "medium":
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 5, 5, 5, 4, 3
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 5, 5, 5, 4, 3, 6
     else:  # full
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 8, 8, 10, 6, 4
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 8, 8, 10, 6, 4, 8
 
     lines: list[str] = []
     lines.append(f"# 项目地图 — {engine.project_root.name}")
@@ -274,6 +274,19 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
             lines.append(
                 f"{index}. `{item['file']}`{hot_tag} — {item['reason']}；"
                 f"{count_text}{highlights}"
+            )
+        lines.append("")
+
+    supporting_files = engine.supporting_files(supporting_limit)
+    if supporting_files:
+        lines.append("## 支撑文件（非符号图）\n")
+        lines.append(
+            "> 符号图优先覆盖源码；以下仅动态列出关键文档、脚本和配置，不能替代 AGENTS.md/CLAUDE.md 的人工上下文。\n"
+        )
+        for item in supporting_files:
+            lines.append(
+                f"- `{item['file']}` — {item['reason']}"
+                f"（{item['role']}）"
             )
         lines.append("")
 
