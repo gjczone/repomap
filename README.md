@@ -20,7 +20,8 @@ AI 代码助手经常会遇到三个问题：
 - 按业务词找代码：`query`
 - 看某个文件里有什么：`file-detail`
 - 改文件前看影响和风险：`impact --with-symbols`
-- 改完后看变更风险：`diff-risk`
+- 改完后做交付前证据汇总：`verify`
+- 需要更细节时看变更风险：`diff-risk`
 - 做质量检查：`check`
 - 有本地语言服务器时，再额外用 LSP 做更精确的诊断或引用证据
 
@@ -49,16 +50,14 @@ AI 代码助手经常会遇到三个问题：
 repomap file-detail --project /path/to/project --file-path src/foo.ts
 repomap impact --project /path/to/project --files src/foo.ts --with-symbols
 # 修改代码后
-repomap diff-risk --project /path/to/project
-repomap check --project /path/to/project
+repomap verify --project /path/to/project
 ```
 
 通俗解释：
 
 1. 先看这个文件里面有哪些关键结构。
 2. 再看改它会影响哪些文件、哪些符号、哪些测试，以及风险高不高。
-3. 改完后看当前变更风险。
-4. 最后跑项目诊断，确认没有明显破坏。
+3. 改完后用 `verify` 汇总变更、风险、建议测试、诊断结果和可选 LSP / graph diff 证据。
 
 ### 为什么 `impact --with-symbols` 很重要？
 
@@ -109,6 +108,7 @@ This project replaces the old MCP protocol surface with direct CLI commands so s
 | *(new)* | `repomap query --project <path> --query <keyword>` |
 | *(new)* | `repomap impact --project <path> --files <file...> [--with-symbols]` |
 | *(new)* | `repomap diff-risk --project <path>` |
+| *(new)* | `repomap verify --project <path> [--with-lsp] [--with-diff]` |
 | *(new)* | `repomap diagnostics --project <path> --source lsp --files <file...>` |
 | *(new)* | `repomap lsp doctor --project <path>` |
 
@@ -129,6 +129,7 @@ The old MCP server kept an in-memory scan state between tool calls. This CLI is 
 - `query --paths` and `query --exclude` match path segments (`src` matches `src/a.py` but not `src2/a.py`).
 - `diff-risk` preserves porcelain status spacing, so staged, unstaged, untracked, and rename paths are reported without truncation.
 - `diff-risk` fails clearly when `git rev-parse` or `git status --porcelain` fails instead of treating failed git output as an empty diff.
+- `verify` aggregates post-edit evidence from git changed files, risk analysis, `check`, optional LSP diagnostics, and optional graph diff; it does not run project tests automatically and treats missing cache baseline as a non-fatal skipped graph diff.
 - Member calls such as `obj.method()` avoid unrelated fallback targets unless same-file or import evidence exists.
 - JS/TS imports with explicit source extensions such as `./foo.js` resolve to the real target file before extension probing.
 - TS/JS config aliases respect `baseUrl` when resolving non-relative `paths` targets.
@@ -221,12 +222,12 @@ This is the best default pre-edit command because it combines local file symbols
 ### Validate after edits
 
 ```bash
-repomap diff-risk --project /path/to/project
-repomap check --project /path/to/project
-repomap diagnostics --project /path/to/project --source lsp --files src/foo.ts
+repomap verify --project /path/to/project
+repomap verify --project /path/to/project --with-lsp
+repomap verify --project /path/to/project --with-diff
 ```
 
-Use this before final handoff. `diff-risk` summarizes changed-file risk and suggested tests; `check` and LSP diagnostics provide verification evidence.
+Use this before final handoff. `verify` summarizes changed files, risk, suggested tests, `check` results, optional focused LSP diagnostics, and optional graph diff evidence in one report. It does not run your suggested tests automatically; run or account for them separately when needed.
 
 ## Reading Value Policy
 
@@ -401,6 +402,38 @@ repomap impact --project /path/to/project --files src/foo.ts --with-symbols --js
 
 Important: `--with-symbols` only detects whether LSP help is available. It does not start an LSP server. To actually use LSP evidence, run focused commands such as `diagnostics --source lsp`, `query-symbol --with-lsp`, or `refs --with-lsp`.
 
+### Verify / Post-edit Evidence Gate
+
+Use this after edits and before final handoff:
+
+```bash
+repomap verify --project /path/to/project
+```
+
+Plain-language meaning:
+
+- “I changed code; collect the evidence I need before saying the work is done.”
+
+The report includes:
+
+- changed files from Git
+- risk level and missing-check warnings
+- affected files and suggested tests
+- `check` result from project diagnostics
+- optional LSP diagnostics when `--with-lsp` is enabled
+- optional graph diff when `--with-diff` is enabled and a cache baseline exists
+- a final checklist that tells the AI what evidence is still missing
+
+Useful variants:
+
+```bash
+repomap verify --project /path/to/project --json
+repomap verify --project /path/to/project --with-lsp
+repomap verify --project /path/to/project --with-diff
+```
+
+Important: `verify` does not automatically run your project test suite. It suggests likely tests and reports diagnostics; the agent still needs to run or explicitly account for real tests when the change requires them.
+
 ### Diagnostics
 
 ```bash
@@ -423,6 +456,14 @@ uv run python -m repomap_cli impact --project /path/to/project --files src/foo.t
 ```
 
 File-level change impact: shows who references your symbols, who your symbols call, related tests, and a three-layer risk assessment (structural + domain + change-type). Add `--with-symbols` for edit planning: key symbols in target files, ordered read-next guidance, and local LSP availability hints. Supports `--json`.
+
+### Verify / Post-edit Evidence Gate (new)
+
+```bash
+uv run python -m repomap_cli verify --project /path/to/project
+```
+
+Post-edit evidence gate: detects changed files, summarizes risk and suggested tests, runs `check`, and can include focused LSP diagnostics with `--with-lsp` or graph diff with `--with-diff`. Supports `--json`.
 
 ### Change Risk Report (new)
 
@@ -554,15 +595,15 @@ repomap impact --project /path/to/project --symbol helper --file-path src/foo.ts
 
 ### P2 — Add a post-edit evidence gate
 
-Agents need a final structured check before saying work is complete. A future command could aggregate changed files, risks, diagnostics, test suggestions, and graph diffs:
+Status: implemented as `verify`.
 
 ```bash
-repomap post-edit --project /path/to/project
-# or
 repomap verify --project /path/to/project
+repomap verify --project /path/to/project --with-lsp
+repomap verify --project /path/to/project --with-diff
 ```
 
-This should not replace real tests. It should tell agents what changed, what is risky, and what evidence exists.
+This does not replace real tests. It tells agents what changed, what is risky, what diagnostics say, which tests are suggested, and what evidence is still missing.
 
 ### P3 — Make LSP evidence easier to choose, still opt-in
 
@@ -570,7 +611,7 @@ Keep LSP startup explicit, but make recommendations smarter:
 
 - `lsp doctor` can explain which commands can benefit from available servers.
 - `impact` can suggest `refs --with-lsp` for risky symbols.
-- `diff-risk` can suggest focused `diagnostics --source lsp --files ...` for changed files.
+- `verify` can add focused LSP diagnostics through `--with-lsp` for changed files.
 
 Do not auto-install servers, run `npx`/`pnpx`/`bunx`, create a daemon, or make LSP mandatory.
 
@@ -715,7 +756,7 @@ repomap doctor
 repomap overview --project /some/repo
 repomap query --project /some/repo --query main
 repomap impact --project /some/repo --files src/main.ts --with-symbols
-repomap check --project /some/repo
+repomap verify --project /some/repo
 ```
 
 There is also an AI-ready smoke-check guide here:
@@ -824,8 +865,8 @@ Recommended pattern:
 - use `query-symbol` or `file-detail` for pinpoint navigation
 - use `query` (topic search) when you know the feature area but not the symbol names
 - use `impact --with-symbols` before modifying known files to assess change blast radius, key symbols, read-next order, tests, risk, and LSP availability
-- use `diff-risk` before committing to validate changes and suggest tests
-- use `call-chain`, `refs`, `diff`, `check` for change impact
+- use `verify` after edits as the default final evidence gate
+- use `diff-risk`, `check`, `diagnostics`, and `diff` when you need their lower-level details
 - use `git-history` only when history or ownership context is the actual question
 - when another skill needs repo understanding, prefer delegating to the `repomap` skill so command selection stays consistent
 

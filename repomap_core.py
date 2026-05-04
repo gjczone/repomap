@@ -135,6 +135,8 @@ class RepoMapEngine:
         # 子组件
         self._resolver: ImportResolver | None = None
         self._analyzer = GraphAnalyzer(self.graph)
+        # 路由提取结果
+        self.routes: list = []
 
     @staticmethod
     def _read_max_file_bytes() -> int:
@@ -169,6 +171,7 @@ class RepoMapEngine:
         self.graph = RepoGraph()
         self._cache = {}
         self.scan_stats = ScanStats()
+        self.routes = []
         # _analyzer 延迟到 graph 构建完成后初始化
 
         files = self._list_files(max_files)
@@ -206,6 +209,8 @@ class RepoMapEngine:
         
         # 构建扫描摘要日志
         summary_parts = [f"Scan complete — {sym_count} symbols, {edge_count} edges, {self.scan_stats.scan_duration_ms}ms"]
+        if self.scan_stats.skipped_files:
+            summary_parts.append(f", {self.scan_stats.skipped_files} skipped (unchanged)")
         if self.scan_stats.failed_files:
             summary_parts.append(f", {len(self.scan_stats.failed_files)} failed files")
         if self.scan_stats.timeout_triggered:
@@ -288,6 +293,7 @@ class RepoMapEngine:
         mtime = path.stat().st_mtime
         cached_mtime = self._cache.get(file)
         if cached_mtime == mtime:
+            self.scan_stats.skipped_files += 1
             return  # 未变更，复用缓存
 
         ext = Path(file).suffix.lower()
@@ -316,6 +322,11 @@ class RepoMapEngine:
         self._mark_exported_symbols(file)
 
         self.graph.file_calls[file] = self.ts.extract_calls(tree, lang)
+
+        # 提取 HTTP 路由（Python/JS/TS/Rust）
+        routes = self.ts.extract_http_routes(tree, lang, file)
+        if routes:
+            self.routes.extend(routes)
 
         # 立即释放 tree 对象以避免内存泄漏，只缓存 mtime
         del tree
@@ -391,6 +402,10 @@ class RepoMapEngine:
         """为 AI 生成推荐阅读顺序。"""
         return self._analyzer.suggested_reading_order(limit)
 
+    def list_routes(self) -> list:
+        """返回提取到的 HTTP 路由列表。"""
+        return self.routes
+
     def summary_symbols(self, limit_files: int = 6, per_file: int = 4) -> list[dict[str, Any]]:
         """返回适合 overview 展示的关键实现符号。"""
         return self._analyzer.summary_symbols(limit_files, per_file)
@@ -419,8 +434,11 @@ class RepoMapEngine:
     # AI 输出格式（委托给 repomap_ai）
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def render_overview(self, max_chars: int = 16000) -> str:
-        return render_overview_report(self, max_chars)
+    def render_overview(self, max_chars: int = 16000, with_heat: bool = False,
+                        with_co_change: bool = False, granularity: str = "auto") -> str:
+        return render_overview_report(self, max_chars, with_heat=with_heat,
+                                      with_co_change=with_co_change,
+                                      granularity=granularity)
 
     def render_call_chain(self, symbol_name: str, max_depth: int = 3) -> str:
         return render_call_chain_report(self, symbol_name, max_depth)

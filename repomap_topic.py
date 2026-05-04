@@ -419,14 +419,39 @@ def _file_to_module_path(file_path: str) -> str:
 _co_change_cache: dict[str, dict[tuple[str, str], int]] = {}
 
 
-def _get_co_change_score(project_root: str, file_a: str, file_b: str) -> int:
-    """查询两个文件的 git 共变更次数（带缓存）。"""
+def get_co_change_score(project_root: str, file_a: str, file_b: str) -> int:
+    """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
     cache = _co_change_cache.get(project_root)
     if cache is None:
         cache = _load_co_change_scores(project_root)
         _co_change_cache[project_root] = cache
     a, b = sorted([file_a, file_b])
     return cache.get((a, b), 0)
+
+
+# 向后兼容别名
+_get_co_change_score = get_co_change_score
+
+
+def get_co_change_neighbors(
+    project_root: str, file_path: str, top_n: int = 5,
+) -> list[tuple[str, int]]:
+    """返回与指定文件共变频率最高的文件列表（降序）。
+
+    用途：识别隐式耦合——两个文件在 git 历史中频繁一起修改，
+    即使代码上没有显式依赖，也可能存在隐含关联。
+    """
+    cache = _co_change_cache.get(project_root)
+    if cache is None:
+        cache = _load_co_change_scores(project_root)
+        _co_change_cache[project_root] = cache
+    neighbors: dict[str, int] = {}
+    for (a, b), count in cache.items():
+        if a == file_path:
+            neighbors[b] = count
+        elif b == file_path:
+            neighbors[a] = count
+    return sorted(neighbors.items(), key=lambda x: -x[1])[:top_n]
 
 
 def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:

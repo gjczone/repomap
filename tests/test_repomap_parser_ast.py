@@ -105,6 +105,73 @@ class RepoMapParserAstTests(unittest.TestCase):
         self.assertIn("getKpi", by_name)
         self.assertNotIn("<anonymous@2>", by_name)
         self.assertEqual(by_name["getMetadata"].kind, "method")
+
+    def test_tsx_parser_handles_jsx_without_losing_component_symbol(self) -> None:
+        adapter = TreeSitterAdapter()
+        if "tsx" not in adapter.parsers:
+            self.skipTest("tree-sitter TSX parser unavailable in current interpreter")
+        content = (
+            b"import { helper } from './helper';\n"
+            b"export function App() {\n"
+            b"  return <div data-testid=\"app\">{helper()}</div>;\n"
+            b"}\n"
+        )
+        tree = adapter.parse(content, "tsx")
+        self.assertIsNotNone(tree)
+
+        symbols = adapter.extract_symbols(tree, "tsx", "App.tsx", content)
+        calls = adapter.extract_calls(tree, "tsx")
+
+        imports = adapter.extract_imports(tree, "tsx")
+
+        self.assertIn("App", {item.name for item in symbols})
+        self.assertIn("helper", {name for name, _, _ in calls})
+        self.assertEqual(imports, [("./helper", 1)])
+
+    def test_tsx_http_route_uses_express_framework(self) -> None:
+        adapter = TreeSitterAdapter()
+        if "tsx" not in adapter.parsers:
+            self.skipTest("tree-sitter TSX parser unavailable in current interpreter")
+        content = b"router.get('/items', handler);\n"
+        tree = adapter.parse(content, "tsx")
+        assert tree is not None
+
+        routes = adapter.extract_http_routes(tree, "tsx", "routes.tsx")
+
+        self.assertEqual(len(routes), 1)
+        self.assertEqual(routes[0].framework, "express")
+        self.assertEqual(routes[0].path, "/items")
+
+    def test_default_anonymous_export_binding_points_to_anonymous_symbol(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = b"export default () => helper();\n"
+
+        bindings = adapter.extract_js_ts_export_bindings(content, "typescript")
+
+        self.assertIn(
+            ("default", "<anonymous@1>", None, "local"),
+            [(item.exported_name, item.source_name, item.module, item.kind) for item in bindings],
+        )
+
+    def test_extract_calls_returns_only_call_names(self) -> None:
+        adapter = TreeSitterAdapter()
+        content = (
+            b"function foo() { return 1; }\n"
+            b"const obj = { bar: () => 2 };\n"
+            b"foo();\n"
+            b"obj.bar();\n"
+        )
+        tree = adapter.parse(content, "typescript")
+        assert tree is not None
+
+        calls = adapter.extract_calls(tree, "typescript")
+
+        call_names = [item[0] for item in calls]
+        self.assertIn("foo", call_names)
+        self.assertIn("bar", call_names)
+        self.assertNotIn("foo()", call_names)
+        self.assertNotIn("obj.bar()", call_names)
+
     def test_nested_function_end_lines_are_stable_when_parent_is_also_captured(self) -> None:
         adapter = TreeSitterAdapter()
         content = (

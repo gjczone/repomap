@@ -47,7 +47,18 @@ uv run --with pyinstaller python -m repomap_cli build-binary --output dist
 ln -sf /home/guojiancheng/.A1/ai/cli-created/cli/repomap/dist/repomap /home/guojiancheng/.local/bin/repomap
 command -v repomap
 repomap doctor
+repomap lsp doctor --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap
+repomap diagnostics --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --source lsp --files repomap_parser.py
+repomap query-symbol --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --symbol LspRunResult --file-path repomap_lsp.py --with-lsp
+repomap refs --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --symbol LspRunResult --file-path repomap_lsp.py --with-lsp --json
 ```
+
+Expected LSP behavior:
+
+- `lsp doctor` exits with code `0` and reports local server availability.
+- If no local LSP server is installed, diagnostics and symbol evidence report a skipped LSP run instead of crashing.
+- `query-symbol --with-lsp` and `refs --with-lsp` keep AST graph output and add a separate LSP evidence section/object.
+- `repomap` must not install LSP servers, run `npx`/`pnpx`/`bunx`, or require plugin/MCP.
 
 Expected PATH target:
 

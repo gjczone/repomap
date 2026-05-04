@@ -11,9 +11,10 @@ CACHE_DIR = Path.home() / ".cache" / "repomap"
 
 
 def get_project_cache_dir(project_path: str) -> Path:
-    """获取项目的缓存目录（基于路径哈希避免特殊字符）"""
-    path_hash = hashlib.md5(project_path.encode()).hexdigest()[:8]
-    project_name = Path(project_path).name
+    """获取项目的缓存目录（基于规范化后的项目路径哈希隔离）。"""
+    canonical_path = str(Path(project_path).expanduser().resolve())
+    path_hash = hashlib.md5(canonical_path.encode()).hexdigest()[:8]
+    project_name = Path(canonical_path).name
     cache_dir = CACHE_DIR / f"{project_name}_{path_hash}"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
@@ -103,6 +104,18 @@ class ScanStats:
     failed_files: list[str] = field(default_factory=list)  # 记录失败的文件路径（前N个）
     scan_duration_ms: int = 0  # 扫描耗时（毫秒）
     timeout_triggered: bool = False  # 是否触发超时熔断
+    skipped_files: int = 0  # 因 mtime 未变跳过的文件数（增量扫描）
+
+
+@dataclass
+class HttpRoute:
+    """HTTP 路由定义（从 AST 中提取）"""
+    method: str       # GET, POST, PUT, DELETE, PATCH
+    path: str         # /api/users/:id
+    handler: str      # 处理函数名
+    file: str         # 文件路径
+    line: int         # 行号
+    framework: str    # fastapi, flask, express, axum
 
 
 @dataclass

@@ -44,6 +44,19 @@ QUERIES: dict[str, dict[str, str]] = {
             (call function: (identifier) @name) @reference.call
             (call function: (attribute attribute: (identifier) @name)) @reference.call
         """,
+        "http_route": """
+            ;; FastAPI: @app.get("/path") or @router.post("/path")
+            (decorated_definition
+              (decorator
+                (call
+                  function: (attribute
+                    object: (identifier) @_obj
+                    attribute: (identifier) @method)
+                  arguments: (argument_list (string) @path)))
+              definition: (function_definition name: (identifier) @handler))
+            (#match? @_obj "^(app|router|api)$")
+            (#match? @method "^(get|post|put|delete|patch|head|options)$")
+        """,
     },
     "javascript": {
         "function": """
@@ -67,6 +80,19 @@ QUERIES: dict[str, dict[str, str]] = {
         "call": """
             (call_expression function: (identifier) @name) @reference.call
             (call_expression function: (member_expression property: (property_identifier) @name)) @reference.call
+        """,
+        "http_route": """
+            ;; Express: app.get("/path", handler) / router.post("/path", handler)
+            (call_expression
+              function: (member_expression
+                object: (identifier) @_router
+                property: (property_identifier) @method)
+              arguments: (arguments
+                (string) @path
+                .
+                [(identifier) @handler (arrow_function) @handler (function_expression) @handler]))
+            (#match? @_router "^(app|router)$")
+            (#match? @method "^(get|post|put|delete|patch|use|all)$")
         """,
     },
     # TypeScript：使用专用绑定时节点名不同；回退到 JS parser 时 TS 特有语法会报 ERROR，
@@ -92,6 +118,19 @@ QUERIES: dict[str, dict[str, str]] = {
         "call": """
             (call_expression function: (identifier) @name) @reference.call
             (call_expression function: (member_expression property: (property_identifier) @name)) @reference.call
+        """,
+        "http_route": """
+            ;; Express: app.get("/path", handler) / router.post("/path", handler)
+            (call_expression
+              function: (member_expression
+                object: (identifier) @_router
+                property: (property_identifier) @method)
+              arguments: (arguments
+                (string) @path
+                .
+                [(identifier) @handler (arrow_function) @handler (function_expression) @handler]))
+            (#match? @_router "^(app|router)$")
+            (#match? @method "^(get|post|put|delete|patch|use|all)$")
         """,
     },
     "go": {
@@ -149,11 +188,25 @@ QUERIES: dict[str, dict[str, str]] = {
             (call_expression function: (field_expression field: (field_identifier) @name)) @reference.call
             (call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call
         """,
+        "http_route": """
+            ;; Axum: .route("/path", get(handler))
+            (call_expression
+              function: (field_expression
+                field: (field_identifier) @_method_name)
+              arguments: (arguments
+                (string_literal) @path
+                (call_expression
+                  function: (identifier) @http_method
+                  arguments: (arguments (identifier) @handler))))
+            (#eq? @_method_name "route")
+            (#match? @http_method "^(get|post|put|delete|patch|head|options)$")
+        """,
     },
     "html": {},
     "css": {},
     "json": {},
 }
+QUERIES["tsx"] = QUERIES["typescript"]
 
 EXT_TO_LANG: dict[str, str] = {
     ".py": "python",
@@ -163,7 +216,7 @@ EXT_TO_LANG: dict[str, str] = {
     ".mjs": "javascript",
     ".cjs": "javascript",
     ".ts": "typescript",
-    ".tsx": "typescript",
+    ".tsx": "tsx",
     ".mts": "typescript",
     ".cts": "typescript",
     ".go": "go",
@@ -217,16 +270,24 @@ class TreeSitterAdapter:
             except Exception as e:
                 logger.debug(f"Parser unavailable [{lang}]: {e}")
 
-        # TypeScript：优先专用绑定，回退到 JavaScript parser
+        # TypeScript / TSX：优先专用绑定，TypeScript 回退到 JavaScript parser，TSX 不回退以避免误解析 JSX。
         try:
-            from tree_sitter_typescript import language_typescript  # type: ignore
+            from tree_sitter_typescript import language_typescript, language_tsx  # type: ignore
             from tree_sitter import Language, Parser  # type: ignore
             self.parsers["typescript"] = Parser(Language(language_typescript()))
+            self.parsers["tsx"] = Parser(Language(language_tsx()))
             logger.debug("Parser loaded: typescript (dedicated)")
+            logger.debug("Parser loaded: tsx (dedicated)")
         except Exception:
-            if "javascript" in self.parsers:
-                self.parsers["typescript"] = self.parsers["javascript"]
-                logger.debug("Parser loaded: typescript (fallback to javascript)")
+            try:
+                from tree_sitter_typescript import language_typescript  # type: ignore
+                from tree_sitter import Language, Parser  # type: ignore
+                self.parsers["typescript"] = Parser(Language(language_typescript()))
+                logger.debug("Parser loaded: typescript (dedicated)")
+            except Exception:
+                if "javascript" in self.parsers:
+                    self.parsers["typescript"] = self.parsers["javascript"]
+                    logger.debug("Parser loaded: typescript (fallback to javascript)")
 
         # 预编译 queries —— 只对已加载的语言
         self._precompile_queries()
@@ -363,6 +424,9 @@ class TreeSitterAdapter:
                     )
                     break
 
+        for symbol in self._extract_exported_function_expression_symbols(tree, lang, file):
+            symbols_by_id.setdefault(symbol.id, symbol)
+
         for symbol in self._extract_object_literal_method_symbols(tree, lang, file):
             symbols_by_id.setdefault(symbol.id, symbol)
 
@@ -381,8 +445,34 @@ class TreeSitterAdapter:
             ),
         )
 
+    def _extract_exported_function_expression_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+        if lang not in ("javascript", "typescript", "tsx"):
+            return []
+        symbols_by_id: dict[str, Symbol] = {}
+        for node in self._walk_tree(tree.root_node):
+            if node.type not in {"function_expression", "arrow_function"}:
+                continue
+            if not self._is_exported_anonymous_expression(node):
+                continue
+            explicit_name = self._declaration_primary_name(node)
+            name = explicit_name or self._anonymous_symbol_name(node)
+            line = node.start_point[0] + 1
+            symbol_id = f"{file}::{name}::{line}"
+            symbols_by_id[symbol_id] = Symbol(
+                id=symbol_id,
+                name=name,
+                kind="anonymous_function",
+                file=file,
+                line=line,
+                end_line=node.end_point[0] + 1,
+                col=node.start_point[1],
+                visibility="private",
+                signature=self._signature(node, lang),
+            )
+        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+
     def _extract_object_literal_method_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
-        if lang not in ("javascript", "typescript"):
+        if lang not in ("javascript", "typescript", "tsx"):
             return []
         symbols_by_id: dict[str, Symbol] = {}
         for node in self._walk_tree(tree.root_node):
@@ -416,7 +506,7 @@ class TreeSitterAdapter:
         return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
 
     def _extract_anonymous_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
-        if lang not in ("javascript", "typescript"):
+        if lang not in ("javascript", "typescript", "tsx"):
             return []
 
         query = self._queries.get(lang, {}).get("anonymous_function")
@@ -424,16 +514,19 @@ class TreeSitterAdapter:
             return []
 
         anonymous_symbols: dict[str, Symbol] = {}
-        for cap_name, node in self._run_query(query, tree.root_node):
-            if cap_name != "definition.anonymous_function":
+        for node in self._walk_tree(tree.root_node):
+            if node.type not in {"arrow_function", "function_expression"}:
                 continue
-            if self._has_named_owner(node):
+            if self._has_named_owner(node) and not self._is_exported_anonymous_expression(node):
                 continue
-            if node.end_point[0] <= node.start_point[0]:
+            if node.end_point[0] <= node.start_point[0] and not self._is_exported_anonymous_expression(node):
                 continue
 
+            explicit_name = self._declaration_primary_name(node)
+            if explicit_name is not None and not self._is_exported_anonymous_expression(node):
+                continue
             line = node.start_point[0] + 1
-            name = f"<anonymous@{line}>"
+            name = explicit_name or self._anonymous_symbol_name(node)
             symbol_id = f"{file}::{name}::{line}"
             anonymous_symbols[symbol_id] = Symbol(
                 id=symbol_id,
@@ -448,6 +541,20 @@ class TreeSitterAdapter:
             )
 
         return list(anonymous_symbols.values())
+
+    def _is_exported_anonymous_expression(self, node: Any) -> bool:
+        current = getattr(node, "parent", None)
+        depth = 0
+        while current is not None and depth < 4:
+            if current.type == "export_statement" and self._first_child_of_type(current, "default") is not None:
+                return True
+            if current.type == "assignment_expression":
+                left_node = current.child_by_field_name("left")
+                if left_node is not None and self._commonjs_export_target(left_node) is not None:
+                    return True
+            current = getattr(current, "parent", None)
+            depth += 1
+        return False
 
     def _has_named_owner(self, node: Any) -> bool:
         current = getattr(node, "parent", None)
@@ -496,7 +603,7 @@ class TreeSitterAdapter:
                         results.add((name, line))
         else:
             for cap_name, node in self._run_query(query, tree.root_node):
-                if lang in ("javascript", "typescript") and cap_name != "source":
+                if lang in ("javascript", "typescript", "tsx") and cap_name != "source":
                     continue
                 text = self._text(node).strip("\"'")
                 if text:
@@ -507,9 +614,9 @@ class TreeSitterAdapter:
     def _call_reference_kind(node: Any) -> str:
         parent = getattr(node, "parent", None)
         while parent is not None:
-            if parent.type == "call_expression":
+            if parent.type in {"call_expression", "call"}:
                 function_node = parent.child_by_field_name("function")
-                if function_node is not None and function_node.type in {"member_expression", "field_expression", "selector_expression"}:
+                if function_node is not None and function_node.type in {"member_expression", "field_expression", "selector_expression", "attribute"}:
                     return "member"
                 return "direct"
             parent = getattr(parent, "parent", None)
@@ -621,7 +728,7 @@ class TreeSitterAdapter:
         tree: Any | None = None,
     ) -> list[JSImportBinding]:
         """提取 JS/TS import 绑定信息。"""
-        if lang not in ("javascript", "typescript"):
+        if lang not in ("javascript", "typescript", "tsx"):
             return []
         parsed_tree = tree or self.parse(content, lang)
         if not parsed_tree:
@@ -645,7 +752,7 @@ class TreeSitterAdapter:
         tree: Any | None = None,
     ) -> list[JSExportBinding]:
         """提取 JS/TS export 绑定信息。"""
-        if lang not in ("javascript", "typescript"):
+        if lang not in ("javascript", "typescript", "tsx"):
             return []
         parsed_tree = tree or self.parse(content, lang)
         if not parsed_tree:
@@ -800,7 +907,7 @@ class TreeSitterAdapter:
                         add_binding(name, name, None, line, "local")
                     elif child.type == "pair":
                         exported_name = self._identifier_text(child.child_by_field_name("key"))
-                        source_name = self._identifier_text(child.child_by_field_name("value"))
+                        source_name = self._identifier_text(child.child_by_field_name("value")) or self._expression_binding_name(child.child_by_field_name("value"))
                         if exported_name and source_name:
                             add_binding(exported_name, source_name, None, line, "local")
                 return
@@ -926,9 +1033,15 @@ class TreeSitterAdapter:
             return None
         if node.type in {"identifier", "property_identifier", "type_identifier"}:
             return node.text.decode("utf-8")
-        if node.type in {"function_declaration", "class_declaration"}:
-            return self._declaration_primary_name(node)
+        if node.type in {"function_declaration", "class_declaration", "function_expression"}:
+            return self._declaration_primary_name(node) or self._anonymous_symbol_name(node)
+        if node.type == "arrow_function":
+            return self._anonymous_symbol_name(node)
         return None
+
+    @staticmethod
+    def _anonymous_symbol_name(node: Any) -> str:
+        return f"<anonymous@{node.start_point[0] + 1}>"
 
     def _string_literal_value(self, node: Any) -> str:
         return self._text(node).strip("\"'")
@@ -969,11 +1082,73 @@ class TreeSitterAdapter:
             return []
         results = []
         for cap_name, node in self._run_query(query, tree.root_node):
-            if "reference" in cap_name or "call" in cap_name or cap_name == "name":
-                name = self._text(node)
-                if name:
-                    results.append((name, node.start_point[0] + 1, self._call_reference_kind(node)))
-        return sorted(results, key=lambda item: (item[1], item[0]))
+            if cap_name != "name":
+                continue
+            name = self._text(node)
+            if name:
+                results.append((name, node.start_point[0] + 1, self._call_reference_kind(node)))
+        return sorted(set(results), key=lambda item: (item[1], item[0], item[2]))
+
+    def extract_http_routes(self, tree: Any, lang: str, file: str) -> list[Any]:
+        """从 AST 中提取 HTTP 路由定义。
+        
+        支持框架：FastAPI (Python), Express (JS/TS), Axum (Rust).
+        按字典捕获的索引对齐以确保 method/path/handler 正确配对。
+        """
+        from repomap_support import HttpRoute
+
+        query = self._queries.get(lang, {}).get("http_route")
+        if not query:
+            return []
+        
+        caps = self._run_query(query, tree.root_node)
+        if not caps:
+            return []
+
+        # 按 capture 名称分组，每个组内按文件位置排序
+        groups: dict[str, list[tuple[int, str]]] = {}
+        for cap_name, node in caps:
+            if cap_name.startswith("_"):
+                continue
+            text = self._text(node)
+            if not text:
+                continue
+            line = node.start_point[0] + 1
+            groups.setdefault(cap_name, []).append((line, text))
+        
+        # 获取各组并排序
+        handlers = sorted(groups.get("handler", []), key=lambda x: x[0])
+        paths = sorted(groups.get("path", []), key=lambda x: x[0])
+        methods = sorted(groups.get("method", []) + groups.get("http_method", []), key=lambda x: x[0])
+        
+        # 按索引对齐：paths[i] 和 handlers[i] 属于同一个匹配
+        n = min(len(handlers), len(paths))
+        routes: list[HttpRoute] = []
+        
+        for i in range(n):
+            handler_line, handler_name = handlers[i]
+            _, path = paths[i]
+            method = methods[i][1].upper() if i < len(methods) else "GET"
+            
+            if lang == "python":
+                framework = "fastapi"
+            elif lang in ("javascript", "typescript", "tsx"):
+                framework = "express"
+            elif lang == "rust":
+                framework = "axum"
+            else:
+                framework = lang
+            
+            routes.append(HttpRoute(
+                method=method,
+                path=path.strip('"').strip("'"),
+                handler=handler_name,
+                file=file,
+                line=handler_line,
+                framework=framework,
+            ))
+        
+        return routes
 
     def _parse_import_specifiers(self, spec: str, module: str, line: int) -> list[JSImportBinding]:
         bindings: list[JSImportBinding] = []

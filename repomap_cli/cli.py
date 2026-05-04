@@ -20,6 +20,7 @@ from repomap_ai import (
     render_impact_report,
     render_query_report,
     render_routes_report,
+    render_verify_report,
 )
 from repomap_check import RepoMapChecker
 from repomap_core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
@@ -155,6 +156,17 @@ def build_parser() -> argparse.ArgumentParser:
     diff_risk_parser = subparsers.add_parser("diff-risk", help="Show risk report for current changes.")
     diff_risk_parser.add_argument("--project", "-p", default=".", help="Project root path.")
     diff_risk_parser.add_argument("--json", action="store_true")
+
+    verify_parser = subparsers.add_parser("verify", help="Aggregate post-edit evidence before final handoff.")
+    verify_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    verify_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    verify_parser.add_argument("--types", nargs="*", choices=["typescript", "rust", "python", "go", "javascript"], help="Explicit project types to check.")
+    verify_parser.add_argument("--max-issues", type=int, default=50, help="Maximum issues per tool.")
+    verify_parser.add_argument("--no-symbols", action="store_true", help="Skip scan-based symbol resolution for diagnostics.")
+    verify_parser.add_argument("--with-lsp", action="store_true", help="Include focused LSP diagnostics for changed files.")
+    verify_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
+    verify_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum changed files to open through LSP.")
+    verify_parser.add_argument("--with-diff", action="store_true", help="Include graph diff when a cache baseline exists.")
 
     file_parser = subparsers.add_parser("file-detail", help="Scan a repository and print file detail.")
     _add_project_args(file_parser)
@@ -306,6 +318,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if command == "diff-risk":
         return run_diff_risk(args.project, args.json)
+    if command == "verify":
+        return run_verify(
+            project=args.project,
+            as_json=args.json,
+            types=args.types,
+            max_issues=args.max_issues,
+            resolve_symbols=not args.no_symbols,
+            with_lsp=args.with_lsp,
+            lsp_timeout=args.lsp_timeout,
+            lsp_max_files=args.lsp_max_files,
+            with_diff=args.with_diff,
+        )
     if command == "file-detail":
         return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars)
     if command == "hotspots":
@@ -1377,120 +1401,354 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
     return paths
 
 
+def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | None]:
+    project_path = Path(project_root).resolve()
+    git_root_result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=project_path, capture_output=True, text=True, timeout=10,
+    )
+    git_root = git_root_result.stdout.strip()
+    if git_root_result.returncode != 0 or not git_root:
+        return [], f"git root failed: {git_root_result.stderr.strip() or 'not a git repository'}"
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=project_path, capture_output=True, text=True, timeout=10,
+    )
+    if status.returncode != 0:
+        return [], f"git status failed: {status.stderr.strip() or status.stdout.strip()}"
+
+    changed_files: list[str] = []
+    for git_relative_path in _parse_git_status_porcelain_paths(status.stdout):
+        abs_path = Path(git_root, git_relative_path).resolve()
+        try:
+            changed_files.append(abs_path.relative_to(project_path).as_posix())
+        except ValueError:
+            pass
+    return changed_files, None
+
+
+def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict[str, Any]:
+    analysis = engine.file_analysis()
+
+    target_symbols: set[str] = set()
+    for file_path in changed_files:
+        for symbol_id in engine.graph.file_symbols.get(file_path, []):
+            target_symbols.add(symbol_id)
+
+    affected_files_dict: dict[str, tuple[str, str]] = {}
+    for symbol_id in target_symbols:
+        for edge in engine.graph.incoming.get(symbol_id, []):
+            caller = engine.graph.symbols.get(edge.source)
+            if caller and caller.file not in changed_files:
+                affected_files_dict[caller.file] = (
+                    f"引用了变更符号 {_sym_name(engine, symbol_id)}",
+                    "high",
+                )
+
+    affected_list = [(file_path, why, confidence) for file_path, (why, confidence) in affected_files_dict.items()]
+    affected_list.sort(key=lambda item: (item[2], item[0]))
+
+    source_files = [file_path for file_path in changed_files if not is_test_like_file(file_path)]
+    tests = find_related_tests(source_files, engine.graph, analysis, engine.project_root)
+    risk_level, risk_reasons = _assess_risk(source_files, set(file_path for file_path, _, _ in affected_list), engine)
+
+    missing_checks: list[str] = []
+    all_exts = set(Path(file_path).suffix for file_path in changed_files)
+    if ".ts" in all_exts or ".tsx" in all_exts:
+        if not any(test.test_file.endswith((".ts", ".tsx")) for test in tests):
+            missing_checks.append("没有检测到前端测试文件变更，建议补充前端测试")
+    if ".py" in all_exts:
+        if not any(test.test_file.endswith(".py") for test in tests):
+            missing_checks.append("没有检测到 Python 测试文件变更，建议补充后端测试")
+
+    return {
+        "affectedList": affected_list,
+        "tests": tests,
+        "riskLevel": risk_level,
+        "riskReasons": risk_reasons,
+        "missingChecks": missing_checks,
+    }
+
+
+def _diff_risk_json_payload(engine: RepoMapEngine, changed_files: list[str], evidence: dict[str, Any]) -> dict[str, Any]:
+    affected_list = evidence["affectedList"]
+    tests = evidence["tests"]
+    return {
+        "command": "diff-risk",
+        "project": str(engine.project_root),
+        "scanStats": _scan_stats_payload(engine),
+        "result": {
+            "changedFiles": changed_files,
+            "affectedFiles": [
+                {"file": file_path, "why": why, "confidence": confidence}
+                for file_path, why, confidence in affected_list
+            ],
+            "tests": [
+                {"testFile": test.test_file, "targetFile": test.target_file,
+                 "confidence": test.confidence, "reason": test.reason}
+                for test in tests
+            ],
+            "riskLevel": evidence["riskLevel"],
+            "riskReasons": evidence["riskReasons"],
+            "missingChecks": evidence["missingChecks"],
+        },
+    }
+
+
 def run_diff_risk(project: str, as_json: bool) -> int:
     try:
         project_root = _resolve_project(project)
-
-        # 找到 git root，用于把 git status 路径转换为 project root 相对路径
-        git_root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=project_root, capture_output=True, text=True, timeout=10,
-        )
-        git_root = git_root_result.stdout.strip()
-        if git_root_result.returncode != 0 or not git_root:
-            print(f"git root failed: {git_root_result.stderr.strip() or 'not a git repository'}", file=sys.stderr)
+        changed_files, error = _collect_changed_files(project_root)
+        if error:
+            print(error, file=sys.stderr)
             return 1
-
-        # 获取所有变更文件（路径相对于 git root）
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=project_root, capture_output=True, text=True, timeout=10,
-        )
-        if status.returncode != 0:
-            print(f"git status failed: {status.stderr.strip() or status.stdout.strip()}", file=sys.stderr)
-            return 1
-        git_relative_changed = _parse_git_status_porcelain_paths(status.stdout)
-
-        if not git_relative_changed:
-            print("没有检测到变更")
-            return 0
-
-        # 将 git-root 相对路径转换为 project-root 相对路径
-        _git_root_path = PurePosixPath(git_root)
-        changed_files: list[str] = []
-        for gf in git_relative_changed:
-            abs_path = str(PurePosixPath(git_root) / gf)
-            try:
-                rel = str(PurePosixPath(abs_path).relative_to(project_root))
-                changed_files.append(rel)
-            except ValueError:
-                # 不在 project_root 下的变更文件（如父目录的配置），跳过
-                pass
-
         if not changed_files:
             print("没有检测到当前项目内的变更")
             return 0
 
-        # 扫描项目
         engine = _scan_engine(project_root, 8000)
-        analysis = engine.file_analysis()
-
-        # 对变更文件执行影响分析
-        target_symbols: set[str] = set()
-        for f in changed_files:
-            for sid in engine.graph.file_symbols.get(f, []):
-                target_symbols.add(sid)
-
-        affected_files_dict: dict[str, tuple[str, str]] = {}
-        for sid in target_symbols:
-            for edge in engine.graph.incoming.get(sid, []):
-                caller = engine.graph.symbols.get(edge.source)
-                if caller and caller.file not in changed_files:
-                    affected_files_dict[caller.file] = (
-                        f"引用了变更符号 {_sym_name(engine, sid)}",
-                        "high",
-                    )
-
-        affected_list = [(f, why, conf) for f, (why, conf) in affected_files_dict.items()]
-
-        # 测试匹配
-        source_files = [f for f in changed_files if not is_test_like_file(f)]
-        tests = find_related_tests(source_files, engine.graph, analysis, project_root)
-
-        # 风险评估
-        risk_level, risk_reasons = _assess_risk(source_files, set(f for f, _, _ in affected_list), engine)
-
-        # 缺失检查
-        missing_checks: list[str] = []
-        all_exts = set(Path(f).suffix for f in changed_files)
-        if ".ts" in all_exts or ".tsx" in all_exts:
-            if not any(t.test_file.endswith((".ts", ".tsx")) for t in tests):
-                missing_checks.append("没有检测到前端测试文件变更，建议补充前端测试")
-        if ".py" in all_exts:
-            if not any(t.test_file.endswith(".py") for t in tests):
-                missing_checks.append("没有检测到 Python 测试文件变更，建议补充后端测试")
+        evidence = _diff_risk_evidence(engine, changed_files)
 
         if as_json:
-            payload = {
-                "command": "diff-risk",
-                "project": str(engine.project_root),
-                "scanStats": _scan_stats_payload(engine),
-                "result": {
-                    "changedFiles": changed_files,
-                    "affectedFiles": [
-                        {"file": f, "why": why, "confidence": conf}
-                        for f, why, conf in affected_list
-                    ],
-                    "tests": [
-                        {"testFile": t.test_file, "targetFile": t.target_file,
-                         "confidence": t.confidence, "reason": t.reason}
-                        for t in tests
-                    ],
-                    "riskLevel": risk_level,
-                    "riskReasons": risk_reasons,
-                    "missingChecks": missing_checks,
-                },
-            }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json.dumps(_diff_risk_json_payload(engine, changed_files, evidence), ensure_ascii=False, indent=2))
             return 0
 
         print(render_diff_risk_report(
-            engine, changed_files, affected_list, tests,
-            risk_level, risk_reasons, missing_checks,
+            engine,
+            changed_files,
+            evidence["affectedList"],
+            evidence["tests"],
+            evidence["riskLevel"],
+            evidence["riskReasons"],
+            evidence["missingChecks"],
         ))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] diff-risk failed: {exc}", file=sys.stderr)
+        return 1
+
+
+
+def _run_check_payload(
+    project_root: str,
+    types: list[str] | None,
+    max_issues: int,
+    modified_files: list[str] | None,
+    resolve_symbols: bool,
+    with_lsp: bool,
+    lsp_timeout: float,
+    lsp_max_files: int,
+) -> dict[str, Any]:
+    symbols_map = None
+    if resolve_symbols:
+        engine = _scan_engine(project_root, 8000)
+        symbols_map = engine.graph.symbols
+    checker = RepoMapChecker(project_root, max_issues)
+    return checker.check(
+        types=types,
+        resolve_symbols=resolve_symbols and symbols_map is not None,
+        symbols_map=symbols_map,
+        modified_files=modified_files,
+        with_lsp=with_lsp,
+        lsp_timeout=lsp_timeout,
+        lsp_max_files=lsp_max_files,
+    )
+
+
+def _verify_lsp_payload(
+    project_root: str,
+    changed_files: list[str],
+    enabled: bool,
+    timeout: float,
+    max_files: int,
+) -> dict[str, Any]:
+    if not enabled:
+        return {"enabled": False, "status": "skipped", "runs": [], "summary": {}}
+    if not changed_files:
+        return {"enabled": True, "status": "skipped", "runs": [], "summary": {}, "reason": "no changed files"}
+    try:
+        from repomap_lsp import collect_lsp_diagnostics, run_result_to_dict
+
+        runs = collect_lsp_diagnostics(project_root, changed_files, timeout=timeout, max_files=max_files)
+        run_dicts = [run_result_to_dict(run) for run in runs]
+        total_errors = sum(1 for run in runs for item in run.diagnostics if item.severity == "error")
+        total_warnings = sum(1 for run in runs for item in run.diagnostics if item.severity != "error")
+        failed_runs = sum(1 for run in runs if run.status in {"failed", "timeout"})
+        skipped_runs = sum(1 for run in runs if run.status == "skipped")
+        status = "failed" if total_errors or failed_runs else "passed"
+        if skipped_runs and skipped_runs == len(runs):
+            status = "skipped"
+        return {
+            "enabled": True,
+            "status": status,
+            "runs": run_dicts,
+            "summary": {
+                "totalErrors": total_errors,
+                "totalWarnings": total_warnings,
+                "failedRuns": failed_runs,
+                "skippedRuns": skipped_runs,
+            },
+        }
+    except Exception as exc:
+        return {"enabled": True, "status": "failed", "runs": [], "summary": {}, "reason": str(exc)}
+
+
+def _verify_graph_diff_payload(project_root: str, enabled: bool) -> dict[str, Any]:
+    if not enabled:
+        return {"enabled": False, "status": "skipped", "summary": {}}
+    result = diff_project(project_root)
+    if "error" in result:
+        return {"enabled": True, "status": "skipped", "summary": {}, "reason": result["error"]}
+    summary = result.get("summary", {})
+    changed = any(summary.get(key, 0) for key in ("added", "removed", "modified", "edges_added", "edges_removed"))
+    return {"enabled": True, "status": "changed" if changed else "unchanged", "summary": summary}
+
+
+def _overall_verify_status(
+    changed_files: list[str],
+    risk_level: str,
+    missing_checks: list[str],
+    check_payload: dict[str, Any],
+    lsp_payload: dict[str, Any],
+    graph_diff_payload: dict[str, Any],
+) -> str:
+    if check_payload.get("status") == "failed" or lsp_payload.get("status") == "failed":
+        return "failed"
+    if not changed_files:
+        return "warning"
+    if risk_level == "high" or missing_checks or graph_diff_payload.get("status") == "changed":
+        return "warning"
+    if check_payload.get("status") in {"warning", "unknown"}:
+        return "warning"
+    return "passed"
+
+
+def run_verify(
+    project: str,
+    as_json: bool,
+    types: list[str] | None,
+    max_issues: int,
+    resolve_symbols: bool,
+    with_lsp: bool,
+    lsp_timeout: float,
+    lsp_max_files: int,
+    with_diff: bool,
+) -> int:
+    try:
+        project_root = _resolve_project(project)
+        changed_files, error = _collect_changed_files(project_root)
+        if error:
+            print(f"[{CLI_NAME}] verify failed: {error}", file=sys.stderr)
+            return 1
+
+        engine = _scan_engine(project_root, 8000)
+        evidence = _diff_risk_evidence(engine, changed_files)
+        check_payload = _run_check_payload(
+            project_root=project_root,
+            types=types,
+            max_issues=max_issues,
+            modified_files=changed_files,
+            resolve_symbols=resolve_symbols,
+            with_lsp=False,
+            lsp_timeout=lsp_timeout,
+            lsp_max_files=lsp_max_files,
+        )
+        lsp_payload = _verify_lsp_payload(project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files)
+        graph_diff_payload = _verify_graph_diff_payload(project_root, with_diff)
+        status = _overall_verify_status(
+            changed_files,
+            evidence["riskLevel"],
+            evidence["missingChecks"],
+            check_payload,
+            lsp_payload,
+            graph_diff_payload,
+        )
+        payload = {
+            "command": "verify",
+            "project": str(engine.project_root),
+            "scanStats": _scan_stats_payload(engine),
+            "result": {
+                "status": status,
+                "changedFiles": changed_files,
+                "risk": {
+                    "level": evidence["riskLevel"],
+                    "reasons": evidence["riskReasons"],
+                    "missingChecks": evidence["missingChecks"],
+                },
+                "affectedFiles": [
+                    {"file": file_path, "why": why, "confidence": confidence}
+                    for file_path, why, confidence in evidence["affectedList"]
+                ],
+                "tests": [
+                    {"testFile": test.test_file, "targetFile": test.target_file,
+                     "confidence": test.confidence, "reason": test.reason}
+                    for test in evidence["tests"]
+                ],
+                "check": {
+                    "status": check_payload.get("status", "unknown"),
+                    "summary": check_payload.get("summary", {}),
+                    "incremental": check_payload.get("incremental", {}),
+                    "runs": check_payload.get("runs", []),
+                    "errorsByFile": check_payload.get("errors_by_file", {}),
+                },
+                "lsp": lsp_payload,
+                "graphDiff": graph_diff_payload,
+            },
+        }
+        if as_json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(render_verify_report(payload))
+        return 1 if status == "failed" else 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        engine = _scan_engine(project, max_files)
+        selected, error = _select_symbol_match(engine, symbol, file_path=file_path)
+        if error:
+            print(error, file=sys.stderr)
+            return 1
+        assert selected is not None
+        target = selected
+        result = subprocess.run(
+            ["git", "blame", "-L", f"{target.line},{target.line}", "-p", target.file],
+            cwd=engine.project_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            print(
+                f"📍 符号: `{target.name}`\n📁 位置: `{target.file}:{target.line}`\n\n❌ Git 信息获取失败（可能不是 git 仓库）",
+                file=sys.stderr,
+            )
+            return 1
+        commit_hash = result.stdout.split()[0] if result.stdout else "unknown"
+        file_commits = subprocess.run(
+            ["git", "log", "--follow", "-10", "--format=%H|%an|%ad|%s", "--", target.file],
+            cwd=engine.project_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        lines = [f"## Git 历史 — `{target.name}`\n"]
+        lines.append(f"📍 位置: `{target.file}:{target.line}`")
+        lines.append(f"🔖 当前版本: `{commit_hash[:8]}`\n")
+        if file_commits.returncode == 0 and file_commits.stdout:
+            lines.append("**最近提交**:")
+            for row in file_commits.stdout.strip().split("\n")[:5]:
+                parts = row.split("|", 3)
+                if len(parts) >= 4:
+                    lines.append(f"  - `[{parts[0][:8]}]` {parts[2][:10]} by {parts[1]}: {parts[3][:50]}")
+        print("\n".join(lines))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] git-history failed: {exc}", file=sys.stderr)
         return 1
 
 

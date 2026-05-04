@@ -58,13 +58,37 @@ Pass condition:
 
 - command exits with code `0`
 - output lists tree-sitter parsers
+- output mentions that the LSP client is available and that LSP servers are not bundled
 
 Fail meaning:
 
 - runtime dependencies are broken
 - wrong binary may be on `PATH`
 
-### Check 3: Real Repository Overview
+### Check 3: Local LSP Detection
+
+Run:
+
+```bash
+repomap lsp doctor --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap
+repomap diagnostics --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --source lsp --files repomap_parser.py
+repomap query-symbol --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --symbol LspRunResult --file-path repomap_lsp.py --with-lsp
+repomap refs --project /home/guojiancheng/.A1/ai/cli-created/cli/repomap --symbol LspRunResult --file-path repomap_lsp.py --with-lsp --json
+```
+
+Pass condition:
+
+- both commands complete normally
+- `lsp doctor` reports local server availability or missing servers
+- if no local LSP server exists, diagnostics and symbol evidence report a skipped run instead of failing
+- `query-symbol --with-lsp` and `refs --with-lsp` preserve AST graph output while adding separated LSP definition/reference evidence
+- no plugin/MCP, network installer, or background daemon is required
+
+Fail meaning:
+
+- LSP client integration or path normalization may be broken
+
+### Check 4: Real Repository Overview
 
 Run:
 
@@ -83,7 +107,7 @@ Fail meaning:
 - parsing/runtime is broken
 - binary and source may be out of sync
 
-### Check 4: Quality Gate
+### Check 5: Quality Gate
 
 Run:
 
@@ -102,7 +126,7 @@ Important:
 - the command is considered healthy if it runs and produces a coherent report
 - if an underlying tool exits non-zero and no structured issue is parsed, the overall status must still be failed and the output should mention the non-zero exit code/raw excerpt
 
-### Check 5: Object Literal API Symbol
+### Check 6: Object Literal API Symbol
 
 Run:
 
@@ -120,7 +144,7 @@ Fail meaning:
 - JS/TS object literal arrow/function property extraction may be broken
 - binary and source may be out of sync
 
-### Check 6: Cache/Diff Stability
+### Check 7: Cache/Diff Stability
 
 Run:
 
@@ -137,7 +161,7 @@ Fail meaning:
 
 - cache save and diff may be using inconsistent scan semantics
 
-### Check 7: New Commands (query / impact / diff-risk)
+### Check 8: New Commands (query / impact / diff-risk)
 
 Run:
 

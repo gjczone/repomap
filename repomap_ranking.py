@@ -20,6 +20,7 @@ from pathlib import PurePosixPath
 from typing import Any, TYPE_CHECKING
 
 from repomap_support import Edge, RepoGraph, Symbol, call_reference_parts
+from repomap_topic import is_test_like_file
 
 if TYPE_CHECKING:
     from repomap_core import RepoMapEngine
@@ -520,11 +521,7 @@ class GraphAnalyzer:
     @staticmethod
     def _is_test_like_file(file_path: str) -> bool:
         """判断是否为测试文件。"""
-        path = PurePosixPath(file_path)
-        name = path.name.lower()
-        if any(part.lower() in {"test", "tests", "__tests__"} for part in path.parts):
-            return True
-        return name.startswith("test_") or name.endswith("_test.py") or name.endswith(".spec.ts")
+        return is_test_like_file(file_path)
 
 
 class EdgeBuilder:

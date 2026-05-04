@@ -187,6 +187,7 @@ class ImportResolver:
         self.import_configs: list[ProjectImportConfig] = []
         self.bundler_aliases = BundlerAliasConfig(project_root)
         self.package_exports: dict[str, PackageJsonExports] = {}  # package name -> exports
+        self.package_export_roots: dict[str, PurePosixPath] = {}  # package name -> project-relative package root
 
         # 构建文件索引: stem -> [files]
         self._file_map: dict[str, list[str]] = defaultdict(list)
@@ -215,7 +216,7 @@ class ImportResolver:
                         target
                         for raw_target in targets
                         if isinstance(raw_target, str)
-                        for target in [self._resolve_config_relative_path(config_path, raw_target)]
+                        for target in [self._resolve_config_relative_path(config_path, raw_target, base_url)]
                         if target is not None
                     )
                     if resolved_targets:
@@ -245,33 +246,44 @@ class ImportResolver:
     def _load_package_json_exports(self) -> None:
         """扫描 package.json 并解析 exports 字段。"""
         package_json_path = self.project_root / "package.json"
-        if not package_json_path.exists():
-            return
-        try:
-            data = json.loads(package_json_path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                return
-            # 解析本项目自身的 exports
-            if "exports" in data:
-                self.package_exports["."] = PackageJsonExports(data["exports"])
-            # 解析子包的 package.json（monorepo 场景）
-            for sub_package_path in self.project_root.rglob("*/package.json"):
-                if sub_package_path == package_json_path:
+        if package_json_path.exists():
+            try:
+                data = json.loads(package_json_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and "exports" in data:
+                    self._register_package_exports(".", data["exports"], PurePosixPath("."))
+                    package_name = data.get("name")
+                    if isinstance(package_name, str) and package_name:
+                        self._register_package_exports(package_name, data["exports"], PurePosixPath("."))
+            except Exception as e:
+                logger.debug(f"Failed to parse package.json: {e}")
+
+        # 解析子包的 package.json（monorepo 场景），跳过依赖和构建目录，避免读取海量无关 package。
+        for root, dir_names, file_names in os.walk(self.project_root):
+            dir_names[:] = [name for name in dir_names if name not in SKIP_DIR_NAMES]
+            if "package.json" not in file_names:
+                continue
+            sub_package_path = Path(root) / "package.json"
+            if sub_package_path == package_json_path:
+                continue
+            try:
+                sub_data = json.loads(sub_package_path.read_text(encoding="utf-8"))
+                if not isinstance(sub_data, dict) or "exports" not in sub_data:
                     continue
-                try:
-                    sub_data = json.loads(sub_package_path.read_text(encoding="utf-8"))
-                    if isinstance(sub_data, dict) and "exports" in sub_data:
-                        # 计算相对于项目根的路径作为包名
-                        try:
-                            rel_path = sub_package_path.parent.relative_to(self.project_root)
-                            package_name = f"./{rel_path.as_posix()}"
-                            self.package_exports[package_name] = PackageJsonExports(sub_data["exports"])
-                        except ValueError:
-                            pass
-                except Exception as e:
-                    logger.debug(f"Failed to parse {sub_package_path}: {e}")
-        except Exception as e:
-            logger.debug(f"Failed to parse package.json: {e}")
+                rel_path = sub_package_path.parent.relative_to(self.project_root)
+                package_root = PurePosixPath(rel_path.as_posix())
+                path_package_name = f"./{rel_path.as_posix()}"
+                self._register_package_exports(path_package_name, sub_data["exports"], package_root)
+                package_name = sub_data.get("name")
+                if isinstance(package_name, str) and package_name:
+                    self._register_package_exports(package_name, sub_data["exports"], package_root)
+            except ValueError:
+                continue
+            except Exception as e:
+                logger.debug(f"Failed to parse {sub_package_path}: {e}")
+
+    def _register_package_exports(self, package_name: str, exports: Any, package_root: PurePosixPath) -> None:
+        self.package_exports[package_name] = PackageJsonExports(exports)
+        self.package_export_roots[package_name] = package_root
 
     def build_indices(self) -> None:
         """构建文件和符号索引，用于快速解析。"""
@@ -310,10 +322,16 @@ class ImportResolver:
 
         # 尝试 package.json exports 解析（用于自引用或子包）
         for package_name, exports in self.package_exports.items():
-            if imp.startswith(package_name) or (package_name == "." and imp.startswith("#")):
-                resolved = exports.resolve(imp if package_name == "." else imp[len(package_name):] or ".")
-                if resolved:
-                    return self._resolve_relative(source_file, resolved)
+            export_subpath = self._package_export_subpath(package_name, imp)
+            if export_subpath is None:
+                continue
+            resolved = exports.resolve(export_subpath)
+            if resolved:
+                return self._resolve_package_export_target(package_name, resolved)
+
+        python_matches = self._resolve_python_dotted_import(source_file, imp)
+        if python_matches:
+            return python_matches
 
         # 最后尝试模块名匹配（优先同语言）
         module_key = Path(imp).stem or imp.split(".")[-1]
@@ -337,14 +355,41 @@ class ImportResolver:
         # 兜底：返回所有匹配（但限制数量避免爆炸）
         return matches[:3]
 
+    def _package_export_subpath(self, package_name: str, imp: str) -> str | None:
+        if package_name == ".":
+            return imp if imp.startswith("#") else None
+        if imp == package_name:
+            return "."
+        prefix = package_name + "/"
+        if imp.startswith(prefix):
+            return "./" + imp[len(prefix):]
+        return None
+
+    def _resolve_package_export_target(self, package_name: str, target: str) -> list[str]:
+        package_root = self.package_export_roots.get(package_name, PurePosixPath("."))
+        target_path = PurePosixPath(target)
+        if target_path.is_absolute():
+            return []
+        normalized = self._normalize_posix_path(package_root / target_path)
+        if normalized is None:
+            return []
+        return self._candidate_files_for_base_path(normalized)
+
     def _resolve_relative(self, source_file: str, imp: str) -> list[str]:
         resolved = self._resolve_relative_base(source_file, imp)
+        if resolved is None:
+            return []
         return self._candidate_files_for_base_path(resolved)
 
     def _candidate_files_for_base_path(self, resolved: PurePosixPath) -> list[str]:
         matches = []
+        resolved_str = str(resolved)
+        if resolved_str in self.graph.file_symbols:
+            matches.append(resolved_str)
+            if resolved.suffix.lower() in EXT_TO_LANG:
+                return sorted(set(matches))
         for ext in EXT_TO_LANG:
-            direct = str(resolved) + ext
+            direct = resolved_str + ext
             index_file = str(resolved / f"index{ext}")
             if direct in self.graph.file_symbols:
                 matches.append(direct)
@@ -354,6 +399,14 @@ class ImportResolver:
         if init_file in self.graph.file_symbols:
             matches.append(init_file)
         return sorted(set(matches))
+
+    def _resolve_python_dotted_import(self, source_file: str, imp: str) -> list[str]:
+        if EXT_TO_LANG.get(Path(source_file).suffix.lower()) != "python" or "." not in imp:
+            return []
+        module_path = PurePosixPath(*[part for part in imp.split(".") if part])
+        if str(module_path) in ("", "."):
+            return []
+        return self._candidate_files_for_base_path(module_path)
 
     def _resolve_alias_or_baseurl_targets(self, source_file: str, imp: str) -> list[str]:
         for config in self._candidate_import_configs_for_file(source_file):
@@ -378,10 +431,12 @@ class ImportResolver:
 
     def _candidate_import_configs_for_file(self, source_file: str) -> list[ProjectImportConfig]:
         source_parent = self._normalize_posix_path(PurePosixPath(source_file).parent)
+        if source_parent is None:
+            return []
         ranked: list[tuple[int, ProjectImportConfig]] = []
         for config in self.import_configs:
             config_dir = self._normalize_posix_path(PurePosixPath(config.config_dir or "."))
-            if self._is_subpath(source_parent, config_dir):
+            if config_dir is not None and self._is_subpath(source_parent, config_dir):
                 ranked.append((self._path_depth(config.config_dir), config))
         ranked.sort(key=lambda item: (-item[0], item[1].config_path or ""))
         return [config for _, config in ranked]
@@ -403,7 +458,7 @@ class ImportResolver:
             return None
         return target_pattern
 
-    def _resolve_relative_base(self, source_file: str, imp: str) -> PurePosixPath:
+    def _resolve_relative_base(self, source_file: str, imp: str) -> PurePosixPath | None:
         source_parent = PurePosixPath(source_file).parent
         if "/" in imp:
             return self._normalize_posix_path(PurePosixPath(source_parent, imp))
@@ -418,14 +473,15 @@ class ImportResolver:
         return self._normalize_posix_path(base)
 
     @staticmethod
-    def _normalize_posix_path(path: PurePosixPath) -> PurePosixPath:
+    def _normalize_posix_path(path: PurePosixPath) -> PurePosixPath | None:
         normalized_parts: list[str] = []
         for part in path.parts:
             if part in ("", "."):
                 continue
             if part == "..":
-                if normalized_parts:
-                    normalized_parts.pop()
+                if not normalized_parts:
+                    return None
+                normalized_parts.pop()
                 continue
             normalized_parts.append(part)
         if not normalized_parts:
@@ -591,16 +647,14 @@ class ImportResolver:
         if not candidates:
             return None
 
-        same_file = [symbol_id for symbol_id in candidates if self._sym_file[symbol_id] == file]
-        if same_file:
-            return self._pick_best_target(same_file, file, call_line)
-
         imported_targets = [
             symbol_id
             for symbol_id in import_symbol_targets_by_file.get(file, {}).get(call_name, set())
             if self.graph.symbols[symbol_id].kind in CALLABLE_KINDS
         ]
         if imported_targets:
+            if len(imported_targets) == 1:
+                return imported_targets[0]
             return self._pick_best_target(imported_targets, file, call_line)
 
         imported_files = import_targets_by_file.get(file, set())
@@ -610,6 +664,13 @@ class ImportResolver:
 
         if call_kind == "member":
             return None
+
+        if any(binding.local_name == call_name for binding in self.graph.file_import_bindings.get(file, [])):
+            return None
+
+        same_file = [symbol_id for symbol_id in candidates if self._sym_file[symbol_id] == file]
+        if same_file:
+            return self._pick_best_target(same_file, file, call_line)
 
         if len(candidates) == 1:
             return candidates[0]
@@ -683,10 +744,14 @@ class ImportResolver:
             return None
         return resolved
 
-    def _resolve_config_relative_path(self, config_path: Path, value: Any) -> str | None:
+    def _resolve_config_relative_path(self, config_path: Path, value: Any, base_url: str | None = None) -> str | None:
         if not isinstance(value, str) or not value.strip():
             return None
-        resolved = (config_path.parent / value).resolve()
+        value_path = Path(value)
+        if base_url and not value.startswith(".") and not value_path.is_absolute():
+            resolved = (self.project_root / base_url / value).resolve()
+        else:
+            resolved = (config_path.parent / value).resolve()
         try:
             return resolved.relative_to(self.project_root).as_posix()
         except ValueError:

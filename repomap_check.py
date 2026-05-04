@@ -104,13 +104,12 @@ class ProjectDetector:
         except Exception:
             pass
 
-        # fallback: 简单遍历
-        for pattern in ["*.js", "*.jsx", "*.mjs", "*.cjs"]:
-            try:
-                next(project_root.rglob(pattern))
+        # fallback: 简单遍历，剪掉依赖和构建目录，避免只因 node_modules 内文件误判为 JS 项目
+        skip_dirs = {"node_modules", "dist", "build", ".git", ".venv", "venv", "__pycache__"}
+        for root, dir_names, file_names in os.walk(project_root):
+            dir_names[:] = [name for name in dir_names if name not in skip_dirs]
+            if any(Path(file_name).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs"} for file_name in file_names):
                 return True
-            except StopIteration:
-                continue
         return False
 
 
@@ -172,9 +171,32 @@ class DiagnosticRunner:
     """运行诊断工具"""
 
     def __init__(self, project_root: Path, max_items: int = 100, modified_files: list[str] | None = None):
-        self.project_root = project_root
+        self.project_root = project_root.resolve()
         self.max_items = max_items
-        self.modified_files = set(modified_files or [])  # 增量检查的文件列表
+        self.modified_files = {
+            normalized for file_path in (modified_files or [])
+            if (normalized := self._normalize_safe_path(file_path)) is not None
+        }  # 增量检查的文件列表统一为项目内相对路径
+
+    def _normalize_safe_path(self, file_path: str) -> str | None:
+        """将工具或 CLI 传入的文件路径归一为项目内相对路径；非法路径返回 None。"""
+        if not file_path or file_path.startswith("-"):
+            return None
+        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\\', '\x00']
+        if any(c in file_path for c in dangerous_chars):
+            return None
+        input_path = Path(file_path).expanduser()
+        abs_path = input_path.resolve() if input_path.is_absolute() else (self.project_root / input_path).resolve()
+        try:
+            rel_path = abs_path.relative_to(self.project_root).as_posix()
+        except ValueError:
+            return None
+        if rel_path in ("", ".") or any(part == ".." for part in Path(rel_path).parts):
+            return None
+        return rel_path
+
+    def _safe_modified_files(self, suffixes: tuple[str, ...]) -> list[str]:
+        return sorted(f for f in self.modified_files if f.endswith(suffixes))
 
     def run_all(self, types: list[str]) -> list[DiagnosticResult]:
         """运行所有适用的诊断工具"""
@@ -204,27 +226,16 @@ class DiagnosticRunner:
 
     def _is_safe_path(self, file_path: str) -> bool:
         """检查文件路径是否安全（防止路径遍历和命令注入）"""
-        # 检查是否包含路径遍历组件
-        if ".." in file_path:
-            return False
-        # 检查是否包含 shell 特殊字符
-        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\\', '\x00']
-        if any(c in file_path for c in dangerous_chars):
-            return False
-        # 检查是否以 - 开头（可能被解释为命令选项）
-        if file_path.startswith('-'):
-            return False
-        return True
+        return self._normalize_safe_path(file_path) is not None
 
     def _should_check_file(self, file_path: str) -> bool:
         """检查文件是否在增量检查列表中"""
-        # 首先进行安全校验
-        if not self._is_safe_path(file_path):
+        normalized = self._normalize_safe_path(file_path)
+        if normalized is None:
             return False
         if not self.modified_files:
             return True  # 没有指定则检查全部
-        # 支持部分匹配，但只对安全的路径
-        return any(f in file_path or file_path in f for f in self.modified_files if self._is_safe_path(f))
+        return normalized in self.modified_files
 
     def _has_eslint_config(self) -> bool:
         """检查是否有 ESLint 配置"""
@@ -350,11 +361,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            # 过滤出 JS/TS 文件
-            target_files = [
-                f for f in self.modified_files
-                if f.endswith(('.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx'))
-            ]
+            target_files = self._safe_modified_files(('.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx'))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -364,7 +371,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified JS/TS files",
                 )
-            cmd = ["eslint"] + target_files + ["--format", "json"]
+            cmd = ["eslint", "--format", "json", "--"] + target_files
         else:
             cmd = [
                 "eslint", ".",
@@ -380,7 +387,7 @@ class DiagnosticRunner:
 
         return DiagnosticResult(
             tool=tool,
-            command=" ".join(cmd[:5]) + "..." if len(cmd) > 5 else " ".join(cmd),
+            command=" ".join(cmd[:6]) + "..." if len(cmd) > 6 else " ".join(cmd),
             exit_code=exit_code,
             duration_ms=duration,
             errors=errors[: self.max_items],
@@ -534,7 +541,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = [f for f in self.modified_files if f.endswith('.py')]
+            target_files = self._safe_modified_files(('.py',))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -565,12 +572,12 @@ class DiagnosticRunner:
         else:
             cmd = [
                 "mypy",
-            ] + target_files + [
                 "--show-error-codes",
                 "--hide-error-context",
                 "--no-color-output",
                 "--ignore-missing-imports",
-            ]
+                "--",
+            ] + target_files
 
         exit_code, output, duration = self._run_command(cmd, tool)
         errors, warnings = self._parse_mypy_output(output)
@@ -638,7 +645,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = [f for f in self.modified_files if f.endswith('.py')]
+            target_files = self._safe_modified_files(('.py',))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -648,7 +655,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Python files",
                 )
-            cmd = ["ruff", "check"] + target_files + ["--output-format", "json"]
+            cmd = ["ruff", "check", "--output-format", "json", "--"] + target_files
         else:
             cmd = ["ruff", "check", ".", "--output-format", "json"]
 
@@ -715,7 +722,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = [f for f in self.modified_files if f.endswith('.go')]
+            target_files = self._safe_modified_files(('.go',))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -725,7 +732,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Go files",
                 )
-            cmd = ["go", "vet"] + target_files
+            cmd = ["go", "vet", "--"] + target_files
         else:
             cmd = ["go", "vet", "./..."]
 
@@ -759,7 +766,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = [f for f in self.modified_files if f.endswith('.go')]
+            target_files = self._safe_modified_files(('.go',))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -830,6 +837,9 @@ class RepoMapChecker:
         symbols_map: dict[str, Any] | None = None,
         since_commit: str | None = None,
         modified_files: list[str] | None = None,
+        with_lsp: bool = False,
+        lsp_timeout: float = 8.0,
+        lsp_max_files: int = 20,
     ) -> dict[str, Any]:
         """
         运行诊断检查
@@ -872,6 +882,8 @@ class RepoMapChecker:
 
         # 运行所有诊断工具
         results = self.runner.run_all(detected_types)
+        if with_lsp:
+            results.extend(self._run_lsp_diagnostics(target_files, lsp_timeout, lsp_max_files))
 
         # 解析符号关联
         if resolve_symbols and symbols_map:
@@ -880,6 +892,54 @@ class RepoMapChecker:
         # 构建报告
         report = self._build_report(results, detected_types, target_files)
         return report
+
+    def _run_lsp_diagnostics(
+        self,
+        target_files: list[str] | None,
+        lsp_timeout: float,
+        lsp_max_files: int,
+    ) -> list[DiagnosticResult]:
+        if not target_files:
+            return [DiagnosticResult(
+                tool="lsp",
+                command="repomap lsp diagnostics",
+                exit_code=0,
+                duration_ms=0,
+                skipped=True,
+                skip_reason="no explicit files; pass --modified-file or use diagnostics --files",
+            )]
+        from repomap_lsp import collect_lsp_diagnostics
+
+        diagnostic_results: list[DiagnosticResult] = []
+        for run in collect_lsp_diagnostics(self.project_root, target_files, timeout=lsp_timeout, max_files=lsp_max_files):
+            issues = [
+                DiagnosticIssue(
+                    tool=f"lsp:{run.server}",
+                    file=item.file,
+                    line=item.line,
+                    col=item.col,
+                    severity=item.severity,
+                    code=item.code,
+                    message=item.message,
+                )
+                for item in run.diagnostics
+            ]
+            errors = [issue for issue in issues if issue.severity == "error"]
+            warnings = [issue for issue in issues if issue.severity != "error"]
+            skipped = run.status == "skipped"
+            exit_code = 1 if run.status in {"failed", "timeout"} else 0
+            diagnostic_results.append(DiagnosticResult(
+                tool=f"lsp:{run.server}",
+                command=" ".join(run.command) if run.command else "repomap lsp diagnostics",
+                exit_code=exit_code,
+                duration_ms=run.duration_ms,
+                skipped=skipped,
+                skip_reason=run.reason if skipped else "",
+                errors=errors,
+                warnings=warnings,
+                raw_excerpt=[run.reason] if run.reason and not skipped else [],
+            ))
+        return diagnostic_results
 
     def _get_timestamp(self) -> str:
         """获取 ISO 格式时间戳"""
@@ -1023,6 +1083,7 @@ class RepoMapChecker:
                 "total_warnings": total_warnings,
                 "files_with_errors": len(errors_by_file),
                 "tools_run": len([r for r in results if not r.skipped]),
+                "tools_skipped": len([r for r in results if r.skipped]),
                 "tool_failures": len(tool_failures),
             },
             "errors_by_file": dict(sorted(errors_by_file.items(), key=lambda x: len(x[1]), reverse=True)[:20]),
@@ -1036,6 +1097,9 @@ def check_project(
     symbols_map: dict[str, Any] | None = None,
     since_commit: str | None = None,
     modified_files: list[str] | None = None,
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+    lsp_max_files: int = 20,
 ) -> dict[str, Any]:
     """
     便捷函数：检查项目诊断
@@ -1058,6 +1122,9 @@ def check_project(
         symbols_map=symbols_map,
         since_commit=since_commit,
         modified_files=modified_files,
+        with_lsp=with_lsp,
+        lsp_timeout=lsp_timeout,
+        lsp_max_files=lsp_max_files,
     )
 
 

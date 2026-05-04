@@ -20,6 +20,113 @@ from repomap_check import RepoMapChecker
 
 
 class RepoMapCliTests(unittest.TestCase):
+    def test_verify_json_outputs_post_edit_evidence(self) -> None:
+        from repomap_cli import main
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        def fake_check(self, **kwargs):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/repo",
+                "status": "passed",
+                "types": ["python"],
+                "incremental": {"enabled": True, "files_checked": kwargs.get("modified_files") or [], "files_count": 1},
+                "runs": [],
+                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "errors_by_file": {},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            stdout = io.StringIO()
+            with patch("repomap_cli.cli.subprocess.run", side_effect=fake_run):
+                with patch.object(RepoMapChecker, "check", fake_check):
+                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                        exit_code = main(["verify", "--project", project_root, "--json"])
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        result = payload["result"]
+        self.assertEqual(payload["command"], "verify")
+        self.assertEqual(result["changedFiles"], ["main.py"])
+        self.assertEqual(result["check"]["status"], "passed")
+        self.assertIn(result["status"], {"passed", "warning"})
+
+    def test_verify_returns_nonzero_when_check_fails(self) -> None:
+        from repomap_cli import main
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        def fake_check(self, **kwargs):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/repo",
+                "status": "failed",
+                "types": ["python"],
+                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "runs": [{"tool": "pytest", "exit_code": 1, "skipped": False, "error_count": 1, "warning_count": 0}],
+                "summary": {"total_errors": 1, "total_warnings": 0, "files_with_errors": 1, "tools_run": 1, "tools_skipped": 0, "tool_failures": 1},
+                "errors_by_file": {"main.py": []},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            stdout = io.StringIO()
+            with patch("repomap_cli.cli.subprocess.run", side_effect=fake_run):
+                with patch.object(RepoMapChecker, "check", fake_check):
+                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                        exit_code = main(["verify", "--project", project_root, "--json"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(json.loads(stdout.getvalue())["result"]["status"], "failed")
+
+    def test_verify_with_diff_without_cache_is_nonfatal(self) -> None:
+        from repomap_cli import main
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        def fake_check(self, **kwargs):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/repo",
+                "status": "passed",
+                "types": ["python"],
+                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "runs": [],
+                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "errors_by_file": {},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            stdout = io.StringIO()
+            with patch("repomap_cli.cli.subprocess.run", side_effect=fake_run):
+                with patch("repomap_cli.cli.diff_project", return_value={"error": "没有缓存，请先运行 cache --save"}):
+                    with patch.object(RepoMapChecker, "check", fake_check):
+                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                            exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])
+
+        self.assertEqual(exit_code, 0)
+        graph_diff = json.loads(stdout.getvalue())["result"]["graphDiff"]
+        self.assertTrue(graph_diff["enabled"])
+        self.assertEqual(graph_diff["status"], "skipped")
+
     def test_check_marks_nonzero_tool_exit_as_failed_even_without_parsed_issues(self) -> None:
         from repomap_cli import main
 
@@ -265,7 +372,7 @@ class RepoMapCliTests(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             completed = subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="/tmp/repo\n", stderr="")
+                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
             if cmd[:3] == ["git", "status", "--porcelain"]:
                 return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal: not a git repository")
             return completed

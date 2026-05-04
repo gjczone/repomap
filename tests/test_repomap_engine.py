@@ -14,6 +14,31 @@ def write_file(root: str, relative_path: str, content: str) -> None:
 
 
 class RepoMapEngineTests(unittest.TestCase):
+    def test_tsx_test_file_is_marked_as_test_file_in_analysis(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/App.tsx", "export function App() {\n  return <div />;\n}\n")
+            write_file(project_root, "src/App.test.tsx", "export function renders() {\n  return <div />;\n}\n")
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            analysis = engine.file_analysis()
+
+            self.assertFalse(analysis["src/App.tsx"]["is_test_file"])
+            self.assertTrue(analysis["src/App.test.tsx"]["is_test_file"])
+
+    def test_package_exports_scan_skips_dependency_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "package.json", "{}\n")
+            write_file(project_root, "node_modules/pkg/package.json", '{"exports":"./index.js"}\n')
+            write_file(project_root, "packages/pkg/package.json", '{"exports":"./src/index.js"}\n')
+            write_file(project_root, "packages/pkg/src/index.js", "export function helper() { return 1; }\n")
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+
+            self.assertIn("./packages/pkg", engine._resolver.package_exports)
+            self.assertNotIn("./node_modules/pkg", engine._resolver.package_exports)
+
     def test_large_files_are_skipped_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "small.py", "def keep_me():\n    return 1\n")
@@ -353,6 +378,143 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertIn("caller", package_callers)
             self.assertNotIn("caller", root_callers)
 
+    def test_tsconfig_alias_paths_target_respects_base_url(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "tsconfig.json",
+                (
+                    "{\n"
+                    "  \"compilerOptions\": {\n"
+                    "    \"baseUrl\": \"src\",\n"
+                    "    \"paths\": {\n"
+                    "      \"@/*\": [\"*\"]\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                ),
+            )
+            write_file(project_root, "src/utils/foo.ts", "export function foo(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/main.ts",
+                (
+                    "import { foo } from '@/utils/foo';\n\n"
+                    "export function run(): number {\n"
+                    "  return foo();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "src/utils/foo.ts")
+            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+
+            self.assertIn("run", callers)
+
+    def test_explicit_extension_import_resolves_target_file(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "foo.js", "export function foo() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "import { foo } from './foo.js';\n\n"
+                    "export function run(): number {\n"
+                    "  return foo();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "foo.js")
+            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+
+            self.assertIn("run", callers)
+
+    def test_python_dotted_import_resolves_package_file(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "pkg/sub.py", "def helper():\n    return 1\n")
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "from pkg.sub import helper\n\n"
+                    "def run():\n"
+                    "    return helper()\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "pkg/sub.py")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("run", callers)
+
+    def test_relative_import_above_project_root_does_not_remap_inside_project(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "outside.ts", "export function outside(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/main.ts",
+                (
+                    "import { outside } from '../../outside';\n\n"
+                    "export function run(): number {\n"
+                    "  return outside();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            outside = next(symbol for symbol in engine.query_symbol("outside") if symbol.file == "outside.ts")
+            callers = {symbol.name for symbol in engine.call_chain(outside.id, "callers", 2)["callers"]}
+
+            self.assertNotIn("run", callers)
+
+    def test_python_member_call_does_not_fall_back_to_global_function(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "helper.py", "def send():\n    return None\n")
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "def run(client):\n"
+                    "    return client.send()\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            send = next(symbol for symbol in engine.query_symbol("send") if symbol.file == "helper.py")
+            callers = {symbol.name for symbol in engine.call_chain(send.id, "callers", 2)["callers"]}
+
+            self.assertNotIn("run", callers)
+
+    def test_typescript_member_call_does_not_fall_back_to_same_file_function(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "function save(): void {\n"
+                    "}\n\n"
+                    "export function run(api: { save(): void }): void {\n"
+                    "  api.save();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            save = next(symbol for symbol in engine.query_symbol("save") if symbol.file == "main.ts")
+            callers = {symbol.name for symbol in engine.call_chain(save.id, "callers", 2)["callers"]}
+
+            self.assertNotIn("run", callers)
+
     def test_commonjs_require_and_module_exports_resolve_local_symbol(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
@@ -379,6 +541,105 @@ class RepoMapEngineTests(unittest.TestCase):
             engine = RepoMapEngine(project_root)
             engine.scan()
             helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "lib.js")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("caller", callers)
+
+    def test_default_anonymous_export_resolves_default_import_call_target(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.ts", "export default () => 1;\n")
+            write_file(
+                project_root,
+                "main.ts",
+                "import run from './lib';\n\nexport function caller() {\n  return run();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            default_symbol = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.ts" and symbol.name.startswith("<anonymous@"))
+            incoming = {(edge.source, edge.kind) for edge in engine.graph.incoming[default_symbol.id]}
+
+            self.assertIn(("main.ts::caller::3", "import"), incoming)
+
+    def test_commonjs_function_export_resolves_require_default(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.js", "module.exports = function run() {\n  return 1;\n};\n")
+            write_file(
+                project_root,
+                "main.js",
+                "const run = require('./lib');\n\nfunction caller() {\n  return run();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            default_symbol = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.js" and symbol.name == "run")
+            callers = {symbol.name for symbol in engine.call_chain(default_symbol.id, "callers", 2)["callers"]}
+
+            self.assertIn("caller", callers)
+
+    def test_commonjs_named_function_export_resolves_destructured_require(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.js", "exports.helper = function helper() {\n  return 1;\n};\n")
+            write_file(
+                project_root,
+                "main.js",
+                "const { helper } = require('./lib');\n\nfunction caller() {\n  return helper();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.js" and symbol.name == "helper")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("caller", callers)
+
+    def test_package_self_reference_resolves_root_export(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "package.json", '{"name":"@scope/app","exports":{".":"./src/index.ts"}}\n')
+            write_file(project_root, "src/index.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/consumer.ts",
+                "import { helper } from '@scope/app';\n\nexport function caller() {\n  return helper();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/index.ts")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("caller", callers)
+
+    def test_package_self_reference_resolves_subpath_export(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "package.json", '{"name":"@scope/app","exports":{"./feature":"./src/feature.ts"}}\n')
+            write_file(project_root, "src/feature.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/consumer.ts",
+                "import { helper } from '@scope/app/feature';\n\nexport function caller() {\n  return helper();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/feature.ts")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("caller", callers)
+
+    def test_monorepo_package_name_exports_resolves_without_root_package_json(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "packages/pkg/package.json", '{"name":"@scope/pkg","exports":{".":"./src/index.ts"}}\n')
+            write_file(project_root, "packages/pkg/src/index.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "apps/app/main.ts",
+                "import { helper } from '@scope/pkg';\n\nexport function caller() {\n  return helper();\n}\n",
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "packages/pkg/src/index.ts")
             callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
 
             self.assertIn("caller", callers)

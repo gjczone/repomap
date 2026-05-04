@@ -711,6 +711,114 @@ def _extract_impact_areas(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# verify 报告渲染
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str:
+    result = payload.get("result", {})
+    status = result.get("status", "unknown")
+    status_label = {"passed": "PASS", "warning": "WARNING", "failed": "FAILED"}.get(status, status.upper())
+    lines: list[str] = ["# Verify Report\n"]
+
+    lines.append("## Overall Status\n")
+    lines.append(f"**{status_label}**")
+    if status == "passed":
+        lines.append("- Evidence looks sufficient for final handoff, assuming required project tests were actually run when needed.")
+    elif status == "warning":
+        lines.append("- Do not claim full confidence yet; review the warnings and missing evidence below.")
+    else:
+        lines.append("- Do not claim completion; at least one verification source failed.")
+    lines.append("")
+
+    changed_files = result.get("changedFiles", [])
+    lines.append("## Changed Files\n")
+    if changed_files:
+        for file_path in changed_files[:30]:
+            lines.append(f"- `{file_path}` ({classify_file_role(file_path)})")
+        if len(changed_files) > 30:
+            lines.append(f"- …还有 {len(changed_files) - 30} 个")
+    else:
+        lines.append("- No changed files detected in the project.")
+    lines.append("")
+
+    risk = result.get("risk", {})
+    lines.append("## Risk Summary\n")
+    lines.append(f"- Level: **{str(risk.get('level', 'unknown')).upper()}**")
+    for reason in risk.get("reasons", []):
+        lines.append(f"- {reason}")
+    for missing in risk.get("missingChecks", []):
+        lines.append(f"- Missing evidence: {missing}")
+    lines.append("")
+
+    tests = result.get("tests", [])
+    if tests:
+        lines.append("## Suggested Tests\n")
+        for command in _test_commands_for_files([
+            TestMatch(
+                test_file=item.get("testFile", ""),
+                target_file=item.get("targetFile", ""),
+                confidence=item.get("confidence", ""),
+                reason=item.get("reason", ""),
+            )
+            for item in tests
+        ]):
+            lines.append(f"- `{command}`")
+        lines.append("")
+
+    check = result.get("check", {})
+    lines.append("## Check Result\n")
+    lines.append(f"- Status: **{str(check.get('status', 'unknown')).upper()}**")
+    summary = check.get("summary", {})
+    if summary:
+        lines.append(
+            f"- Errors: {summary.get('total_errors', 0)} | Warnings: {summary.get('total_warnings', 0)} | Tool failures: {summary.get('tool_failures', 0)}"
+        )
+    for run in check.get("runs", [])[:8]:
+        marker = "skipped" if run.get("skipped") else f"exit={run.get('exit_code')}"
+        lines.append(f"- {run.get('tool')}: {marker}")
+    lines.append("")
+
+    lsp = result.get("lsp", {})
+    lines.append("## LSP Diagnostics\n")
+    lines.append(f"- Status: **{str(lsp.get('status', 'skipped')).upper()}**")
+    if lsp.get("reason"):
+        lines.append(f"- Reason: {lsp['reason']}")
+    lsp_summary = lsp.get("summary", {})
+    if lsp_summary:
+        lines.append(
+            f"- Errors: {lsp_summary.get('totalErrors', 0)} | Warnings: {lsp_summary.get('totalWarnings', 0)} | Failed runs: {lsp_summary.get('failedRuns', 0)} | Skipped runs: {lsp_summary.get('skippedRuns', 0)}"
+        )
+    lines.append("")
+
+    graph_diff = result.get("graphDiff", {})
+    lines.append("## Graph Diff\n")
+    lines.append(f"- Status: **{str(graph_diff.get('status', 'skipped')).upper()}**")
+    if graph_diff.get("reason"):
+        lines.append(f"- Reason: {graph_diff['reason']}")
+    if graph_diff.get("summary"):
+        summary = graph_diff["summary"]
+        lines.append(
+            f"- Symbols +{summary.get('added', 0)} / -{summary.get('removed', 0)} / modified {summary.get('modified', 0)}; edges +{summary.get('edges_added', 0)} / -{summary.get('edges_removed', 0)}"
+        )
+    lines.append("")
+
+    lines.append("## Final Evidence Checklist\n")
+    if status == "passed":
+        lines.append("- [x] Static diagnostics did not fail.")
+        lines.append("- [x] Risk gate did not find high-risk or missing-check blockers.")
+    else:
+        lines.append("- [ ] Review failed/warning sections before final handoff.")
+    if tests:
+        lines.append("- [ ] Run or explicitly account for the suggested tests above.")
+    if lsp.get("status") == "skipped":
+        lines.append("- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed.")
+    return _truncate_output("\n".join(lines), max_chars)
+
+
 def render_diff_risk_report(
     engine: "RepoMapEngine",
     changed_files: list[str],
