@@ -14,16 +14,19 @@ from typing import Any, Sequence
 
 from repomap_ai import (
     _build_query_reading_order,
+    _get_hot_files,
     _rank_symbols_for_file,
     render_diff_risk_report,
     render_impact_report,
     render_query_report,
+    render_routes_report,
 )
 from repomap_check import RepoMapChecker
 from repomap_core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
 from repomap_parser import EXT_TO_LANG
 from repomap_support import (
     Edge,
+    HttpRoute,
     RepoGraph,
     ScanStats,
     Symbol,
@@ -57,6 +60,7 @@ PYINSTALLER_BINDINGS = [
     "tree_sitter_html",
     "tree_sitter_css",
     "tree_sitter_json",
+    "repomap_lsp",
 ]
 
 _SCAN_CACHE: dict[tuple[str, int, int, str], tuple[str, RepoMapEngine]] = {}
@@ -93,6 +97,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum overview size for AI-friendly output.",
     )
     overview_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    overview_parser.add_argument("--with-heat", action="store_true", default=False,
+                                help="Mark files changed in the last 30 days with [HOT].")
+    overview_parser.add_argument("--with-co-change", action="store_true", default=False,
+                                help="Include Git co-change coupling section; disabled by default for speed.")
+    overview_parser.add_argument("--granularity", choices=["full", "medium", "compact", "auto"],
+                                default="auto",
+                                help="Report granularity (default: auto, based on project size).")
 
     chain_parser = subparsers.add_parser("call-chain", help="Scan a repository and print a symbol call chain.")
     _add_project_args(chain_parser)
@@ -118,6 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_QUERY_SYMBOL_MAX_CHARS,
         help="Maximum text output size.",
     )
+    query_parser.add_argument("--with-lsp", action="store_true", help="Also query local LSP definition/reference evidence for the best match.")
+    query_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     # ── 新增: query（主题关键词搜索）──────────────────────────────────────────
     topic_query_parser = subparsers.add_parser("query", help="Search repository by topic keyword.")
@@ -136,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     impact_parser.add_argument("--files", required=True, nargs="+", help="Files to analyze (one or more).")
     impact_parser.add_argument("--json", action="store_true")
     impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
+    impact_parser.add_argument("--with-symbols", action="store_true", help="Include edit-planning key symbols, read-next order, and LSP availability hint.")
 
     # ── 新增: diff-risk（变更风险报告）─────────────────────────────────────────
     diff_risk_parser = subparsers.add_parser("diff-risk", help="Show risk report for current changes.")
@@ -180,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument("--symbol", help="Optional symbol name.")
     refs_parser.add_argument("--file-path", help="Disambiguate symbol analysis by relative file path.")
     refs_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    refs_parser.add_argument("--with-lsp", action="store_true", help="Also query local LSP definition/reference evidence for the selected symbol.")
+    refs_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     orphan_parser = subparsers.add_parser("orphan", help="Scan a repository and find orphaned symbols.")
     _add_project_args(orphan_parser)
@@ -194,8 +210,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check_parser.add_argument("--max-issues", type=int, default=50, help="Maximum issues per tool.")
     check_parser.add_argument("--since-commit", help="Only check files changed since the given commit.")
-    check_parser.add_argument("--modified-file", action="append", dest="modified_files", help="Explicit modified file path.")
+    check_parser.add_argument("--modified-file", action="append", dest="modified_files", metavar="PATH", help="Explicit modified file path.")
     check_parser.add_argument("--no-symbols", action="store_true", help="Skip scan-based symbol resolution.")
+    check_parser.add_argument("--with-lsp", action="store_true", help="Also collect diagnostics from local LSP servers for explicit files.")
+    check_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
+    check_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum explicit files to open through LSP.")
+
+    diagnostics_parser = subparsers.add_parser("diagnostics", help="Collect diagnostics from optional evidence sources.")
+    diagnostics_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    diagnostics_parser.add_argument("--source", choices=["lsp"], default="lsp", help="Diagnostics source.")
+    diagnostics_parser.add_argument("--files", nargs="+", required=True, help="Project files to check with the diagnostics source.")
+    diagnostics_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    diagnostics_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
+    diagnostics_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum files to open through LSP.")
+
+    lsp_parser = subparsers.add_parser("lsp", help="Inspect local LSP server availability.")
+    lsp_subparsers = lsp_parser.add_subparsers(dest="lsp_command", required=True)
+    lsp_doctor_parser = lsp_subparsers.add_parser("doctor", help="Detect local LSP servers without starting analysis.")
+    lsp_doctor_parser.add_argument("--project", "-p", default=".", help="Project root path.")
+    lsp_doctor_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+
+    routes_parser = subparsers.add_parser("routes", help="Extract and display HTTP route definitions.")
+    _add_project_args(routes_parser)
 
     subparsers.add_parser("doctor", help="Validate runtime and build prerequisites.")
 
@@ -211,10 +247,28 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-files", type=int, default=8000, help="Maximum number of files to scan.")
 
 
+def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
+    if argv is None:
+        raw_args = sys.argv[1:]
+    else:
+        raw_args = list(argv)
+    prepared: list[str] = []
+    i = 0
+    while i < len(raw_args):
+        item = raw_args[i]
+        if item == "--modified-file" and i + 1 < len(raw_args):
+            prepared.append(f"--modified-file={raw_args[i + 1]}")
+            i += 2
+            continue
+        prepared.append(item)
+        i += 1
+    return prepared
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     try:
-        args = parser.parse_args(list(argv) if argv is not None else None)
+        args = parser.parse_args(_prepare_argv(argv))
     except SystemExit as exc:
         return int(exc.code or 0)
 
@@ -222,7 +276,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "scan":
         return run_scan(args.project, args.max_files)
     if command == "overview":
-        return run_overview(args.project, args.max_files, args.max_chars, args.json)
+        return run_overview(args.project, args.max_files, args.max_chars, args.json,
+                           with_heat=getattr(args, "with_heat", False),
+                           with_co_change=getattr(args, "with_co_change", False),
+                           granularity=getattr(args, "granularity", "auto"))
     if command == "call-chain":
         return run_call_chain(
             args.project,
@@ -235,7 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.json,
         )
     if command == "query-symbol":
-        return run_query_symbol(args.project, args.max_files, args.symbol, args.file_path, args.max_chars)
+        return run_query_symbol(args.project, args.max_files, args.symbol, args.file_path, args.max_chars, args.with_lsp, args.lsp_timeout)
     if command == "query":
         return run_query(
             args.project, 8000, args.query,
@@ -245,7 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "impact":
         return run_impact(
             args.project, 8000, args.files,
-            getattr(args, "max_files", 20), args.json,
+            getattr(args, "max_files", 20), args.json, getattr(args, "with_symbols", False),
         )
     if command == "diff-risk":
         return run_diff_risk(args.project, args.json)
@@ -260,7 +317,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "git-history":
         return run_git_history(args.project, args.max_files, args.symbol, args.file_path)
     if command == "refs":
-        return run_refs(args.project, args.max_files, args.symbol, args.file_path, args.json)
+        return run_refs(args.project, args.max_files, args.symbol, args.file_path, args.json, args.with_lsp, args.lsp_timeout)
     if command == "orphan":
         return run_orphan(args.project, args.max_files)
     if command == "check":
@@ -271,7 +328,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             since_commit=args.since_commit,
             modified_files=args.modified_files,
             resolve_symbols=not args.no_symbols,
+            with_lsp=args.with_lsp,
+            lsp_timeout=args.lsp_timeout,
+            lsp_max_files=args.lsp_max_files,
         )
+    if command == "diagnostics":
+        return run_diagnostics(args.project, args.source, args.files, args.json, args.lsp_timeout, args.lsp_max_files)
+    if command == "lsp":
+        if args.lsp_command == "doctor":
+            return run_lsp_doctor(args.project, args.json)
+        parser.error(f"unknown lsp command: {args.lsp_command}")
+        return 2
+    if command == "routes":
+        return run_routes(args.project, args.max_files)
     if command == "doctor":
         return run_doctor()
     if command == "build-binary":
@@ -281,7 +350,43 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _resolve_project(project: str) -> str:
-    return str(Path(project).resolve())
+    project_path = Path(project).expanduser().resolve()
+    if not project_path.is_dir():
+        raise ValueError(f"project path is not a directory: {project_path}")
+    return str(project_path)
+
+
+def _normalize_project_relative_path(project_root: str | Path, value: str, *, must_exist: bool = False) -> str:
+    raw = value.strip()
+    if not raw:
+        raise ValueError("path is empty")
+    if raw.startswith("-"):
+        raise ValueError(f"unsafe path starts with '-': {value}")
+    project_path = Path(project_root).resolve()
+    input_path = Path(raw).expanduser()
+    abs_path = input_path.resolve() if input_path.is_absolute() else (project_path / input_path).resolve()
+    try:
+        rel = abs_path.relative_to(project_path)
+    except ValueError:
+        raise ValueError(f"path is outside project: {value}") from None
+    if must_exist and not abs_path.exists():
+        raise ValueError(f"path does not exist: {value}")
+    rel_path = rel.as_posix()
+    if rel_path in ("", "."):
+        raise ValueError(f"path must reference a project file or subdirectory: {value}")
+    return rel_path
+
+
+def _normalize_project_relative_paths(project_root: str | Path, values: list[str], *, must_exist: bool = False) -> list[str]:
+    return [_normalize_project_relative_path(project_root, value, must_exist=must_exist) for value in values]
+
+
+def _normalize_path_prefix(project_root: str | Path, prefix: str) -> str:
+    return _normalize_project_relative_path(project_root, prefix.rstrip("/"), must_exist=False)
+
+
+def _path_matches_prefix(file_path: str, prefix: str) -> bool:
+    return file_path == prefix or file_path.startswith(prefix.rstrip("/") + "/")
 
 
 def _read_max_file_bytes() -> int:
@@ -355,6 +460,7 @@ def _scan_engine(project: str, max_files: int) -> RepoMapEngine:
     session_engine = _load_session_engine(resolved_project, fingerprint)
     if session_engine is not None:
         _SCAN_CACHE[cache_key] = (fingerprint, session_engine)
+        print(f"[{CLI_NAME}] 从磁盘恢复会话缓存", file=sys.stderr)
         return session_engine
 
     engine = RepoMapEngine(resolved_project)
@@ -386,6 +492,7 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             "failed_files": list(engine.scan_stats.failed_files),
             "scan_duration_ms": engine.scan_stats.scan_duration_ms,
             "timeout_triggered": engine.scan_stats.timeout_triggered,
+            "skipped_files": engine.scan_stats.skipped_files,
         },
         "symbols": symbols,
         "outgoing": outgoing,
@@ -397,6 +504,11 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             file_path: list(imports)
             for file_path, imports in engine.graph.file_imports.items()
         },
+        "routes": [
+            {"method": r.method, "path": r.path, "handler": r.handler,
+             "file": r.file, "line": r.line, "framework": r.framework}
+            for r in engine.routes
+        ],
     }
 
 
@@ -455,9 +567,14 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
         failed_files=list(stats_row.get("failed_files", [])),
         scan_duration_ms=stats_row.get("scan_duration_ms", 0),
         timeout_triggered=bool(stats_row.get("timeout_triggered", False)),
+        skipped_files=stats_row.get("skipped_files", 0),
     )
     engine.scan_state = payload.get("scan_state", "scanned")
     engine._analyzer = type(engine._analyzer)(engine.graph)
+    # 恢复路由数据
+    engine.routes = [
+        HttpRoute(**r) for r in payload.get("routes", [])
+    ]
     return engine if engine.scan_state == "scanned" else None
 
 
@@ -468,6 +585,8 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     try:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
     except Exception:
+        return None
+    if payload.get("project_root") != project_root:
         return None
     if payload.get("fingerprint") != fingerprint:
         return None
@@ -614,9 +733,12 @@ def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
     }
 
 
-def run_overview(project: str, max_files: int, max_chars: int, as_json: bool) -> int:
+def run_overview(project: str, max_files: int, max_chars: int, as_json: bool,
+                with_heat: bool = False, with_co_change: bool = False,
+                granularity: str = "auto") -> int:
     try:
         engine = _scan_engine(project, max_files)
+
         if as_json:
             payload = {
                 "project_root": str(engine.project_root),
@@ -629,10 +751,11 @@ def run_overview(project: str, max_files: int, max_chars: int, as_json: bool) ->
                     DEFAULT_OVERVIEW_JSON_SUMMARY_FILES,
                     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
                 ),
+                "hot_files": list(_get_hot_files(str(engine.project_root))) if with_heat else [],
             }
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
-        print(engine.render_overview(max_chars))
+        print(engine.render_overview(max_chars, with_heat=with_heat, with_co_change=with_co_change, granularity=granularity))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] overview failed: {exc}", file=sys.stderr)
@@ -689,7 +812,46 @@ def run_call_chain(
         return 1
 
 
-def run_query_symbol(project: str, max_files: int, symbol: str, file_path: str | None, max_chars: int) -> int:
+def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout: float) -> dict[str, Any]:
+    from repomap_lsp import collect_lsp_symbol_evidence, run_result_to_dict
+
+    run = collect_lsp_symbol_evidence(
+        engine.project_root,
+        symbol.file,
+        symbol.line,
+        symbol.name,
+        timeout=timeout,
+    )
+    return run_result_to_dict(run)
+
+
+def _format_lsp_evidence(evidence: dict[str, Any]) -> list[str]:
+    lines = ["", "### LSP evidence", ""]
+    lines.append(f"- Status: {evidence.get('status')}")
+    if evidence.get("server"):
+        lines.append(f"- Server: {evidence['server']}")
+    if evidence.get("reason"):
+        lines.append(f"- Reason: {evidence['reason']}")
+    definitions = evidence.get("definitions", [])
+    references = evidence.get("references", [])
+    lines.append(f"- Definitions: {len(definitions)}")
+    for item in definitions[:10]:
+        lines.append(f"  - `{item['file']}:{item['line']}:{item['col']}`")
+    lines.append(f"- References: {len(references)}")
+    for item in references[:20]:
+        lines.append(f"  - `{item['file']}:{item['line']}:{item['col']}`")
+    return lines
+
+
+def run_query_symbol(
+    project: str,
+    max_files: int,
+    symbol: str,
+    file_path: str | None,
+    max_chars: int,
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         results = engine.query_symbol(symbol)
@@ -724,6 +886,9 @@ def run_query_symbol(project: str, max_files: int, symbol: str, file_path: str |
 
         if len(results) > 10 and (len(exact_matches) > 10 or len(fuzzy_matches) > 10):
             lines.append("\n> 结果较多，建议补 `--file-path` 缩小范围。")
+        if with_lsp:
+            selected = (exact_matches or results)[0]
+            lines.extend(_format_lsp_evidence(_collect_lsp_evidence_for_symbol(engine, selected, lsp_timeout)))
         print(_truncate_output("\n".join(lines), max_chars))
         return 0
     except Exception as exc:
@@ -734,10 +899,21 @@ def run_query_symbol(project: str, max_files: int, symbol: str, file_path: str |
 def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: int, max_chars: int) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        print(engine.render_file_detail(file_path, max_symbols=max_symbols, max_chars=max_chars))
+        normalized_file_path = _normalize_project_relative_path(engine.project_root, file_path, must_exist=True)
+        print(engine.render_file_detail(normalized_file_path, max_symbols=max_symbols, max_chars=max_chars))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] file-detail failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def run_routes(project: str, max_files: int) -> int:
+    try:
+        engine = _scan_engine(project, max_files)
+        print(render_routes_report(engine))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] routes failed: {exc}", file=sys.stderr)
         return 1
 
 
@@ -832,11 +1008,11 @@ def run_query(
         # 过滤搜索范围
         candidate_files = list(engine.graph.file_symbols.keys())
         if paths:
-            allowed = set(p.strip() for p in paths.split(",") if p.strip())
-            candidate_files = [f for f in candidate_files if any(f.startswith(a) for a in allowed)]
+            allowed = {_normalize_path_prefix(engine.project_root, p) for p in paths.split(",") if p.strip()}
+            candidate_files = [f for f in candidate_files if any(_path_matches_prefix(f, a) for a in allowed)]
         if exclude:
-            excluded = set(e.strip() for e in exclude.split(",") if e.strip())
-            candidate_files = [f for f in candidate_files if not any(f.startswith(e) for e in excluded)]
+            excluded = {_normalize_path_prefix(engine.project_root, e) for e in exclude.split(",") if e.strip()}
+            candidate_files = [f for f in candidate_files if not any(_path_matches_prefix(f, e) for e in excluded)]
         if no_tests:
             candidate_files = [f for f in candidate_files if not is_test_like_file(f)]
 
@@ -939,15 +1115,102 @@ def _query_symbols_json(
     return result
 
 
+def _impact_key_symbols(engine: RepoMapEngine, target_files: list[str], limit_per_file: int = 8) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for file_path in target_files:
+        symbols = [
+            engine.graph.symbols[sid]
+            for sid in engine.graph.file_symbols.get(file_path, [])
+            if sid in engine.graph.symbols
+        ]
+        symbols.sort(
+            key=lambda symbol: (
+                -symbol.pagerank,
+                -len(engine.graph.incoming.get(symbol.id, [])),
+                symbol.line,
+                symbol.name,
+            )
+        )
+        for symbol in symbols[:limit_per_file]:
+            result.append({
+                "name": symbol.name,
+                "kind": symbol.kind,
+                "file": symbol.file,
+                "line": symbol.line,
+                "pagerank": symbol.pagerank,
+                "incomingCount": len(engine.graph.incoming.get(symbol.id, [])),
+                "outgoingCount": len(engine.graph.outgoing.get(symbol.id, [])),
+                "signature": symbol.signature,
+            })
+    return result
+
+
+def _impact_read_next(
+    target_files: list[str],
+    affected_list: list[tuple[str, str, str]],
+    tests: list[TestMatch],
+    limit: int = 10,
+) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(path: str, reason: str, role: str) -> None:
+        if len(result) >= limit or path in seen:
+            return
+        seen.add(path)
+        result.append({"file": path, "reason": reason, "role": role})
+
+    for file_path in target_files:
+        add(file_path, "target file", "target")
+    for file_path, why, confidence in affected_list:
+        if confidence == "high":
+            add(file_path, why, "affected")
+    for test in tests:
+        add(test.test_file, test.reason, "test")
+    for file_path, why, _confidence in affected_list:
+        add(file_path, why, "affected")
+    return result
+
+
+def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[str, Any]:
+    try:
+        from repomap_lsp import detect_lsp_server, detection_to_dict, language_for_file
+    except Exception as exc:
+        return {"available": False, "servers": [], "suggestedCommands": [], "reason": str(exc)}
+
+    servers: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for file_path in target_files:
+        language = language_for_file(file_path)
+        if not language:
+            continue
+        detection = detect_lsp_server(project_root, language, file_path)
+        key = (detection.language, detection.server_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        servers.append(detection_to_dict(detection))
+    available = any(server.get("status") == "available" for server in servers)
+    suggested: list[str] = []
+    if available and target_files:
+        files_arg = " ".join(target_files)
+        suggested.append(f"repomap diagnostics --project {project_root} --source lsp --files {files_arg}")
+        suggested.append(f"repomap refs --project {project_root} --symbol <symbol> --file-path <file> --with-lsp")
+    return {"available": available, "servers": servers, "suggestedCommands": suggested}
+
+
 def run_impact(
     project: str,
     max_files: int,
     target_files: list[str],
     max_affected_files: int,
     as_json: bool,
+    with_symbols: bool = False,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
+
+        target_files = _normalize_project_relative_paths(engine.project_root, target_files)
 
         # 收集目标文件符号
         target_symbols: set[str] = set()
@@ -987,6 +1250,9 @@ def run_impact(
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
         affected_list.sort(key=lambda x: (x[2], x[0]))
         affected_list = affected_list[:max_affected_files]
+        key_symbols = _impact_key_symbols(engine, target_files) if with_symbols else []
+        read_next = _impact_read_next(target_files, affected_list, tests)
+        lsp_hint = _impact_lsp_hint(engine.project_root, target_files) if with_symbols else {}
 
         if as_json:
             payload = {
@@ -1006,12 +1272,25 @@ def run_impact(
                     ],
                     "riskLevel": risk_level,
                     "riskNotes": risk_notes,
+                    "keySymbols": key_symbols,
+                    "readNext": read_next,
+                    "lspHint": lsp_hint,
                 },
             }
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
-        print(render_impact_report(engine, target_files, affected_list, tests, risk_level, risk_notes))
+        print(render_impact_report(
+            engine,
+            target_files,
+            affected_list,
+            tests,
+            risk_level,
+            risk_notes,
+            key_symbols=key_symbols,
+            read_next=read_next,
+            lsp_hint=lsp_hint,
+        ))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
@@ -1100,7 +1379,7 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
 
 def run_diff_risk(project: str, as_json: bool) -> int:
     try:
-        project_root = str(Path(project).resolve())
+        project_root = _resolve_project(project)
 
         # 找到 git root，用于把 git status 路径转换为 project root 相对路径
         git_root_result = subprocess.run(
@@ -1108,8 +1387,8 @@ def run_diff_risk(project: str, as_json: bool) -> int:
             cwd=project_root, capture_output=True, text=True, timeout=10,
         )
         git_root = git_root_result.stdout.strip()
-        if not git_root:
-            print("不是 git 仓库", file=sys.stderr)
+        if git_root_result.returncode != 0 or not git_root:
+            print(f"git root failed: {git_root_result.stderr.strip() or 'not a git repository'}", file=sys.stderr)
             return 1
 
         # 获取所有变更文件（路径相对于 git root）
@@ -1117,6 +1396,9 @@ def run_diff_risk(project: str, as_json: bool) -> int:
             ["git", "status", "--porcelain"],
             cwd=project_root, capture_output=True, text=True, timeout=10,
         )
+        if status.returncode != 0:
+            print(f"git status failed: {status.stderr.strip() or status.stdout.strip()}", file=sys.stderr)
+            return 1
         git_relative_changed = _parse_git_status_porcelain_paths(status.stdout)
 
         if not git_relative_changed:
@@ -1260,7 +1542,15 @@ def run_git_history(project: str, max_files: int, symbol: str, file_path: str | 
         return 1
 
 
-def run_refs(project: str, max_files: int, symbol: str | None, file_path: str | None, as_json: bool) -> int:
+def run_refs(
+    project: str,
+    max_files: int,
+    symbol: str | None,
+    file_path: str | None,
+    as_json: bool,
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         symbol_ids = set(engine.graph.symbols.keys())
@@ -1290,6 +1580,8 @@ def run_refs(project: str, max_files: int, symbol: str | None, file_path: str | 
                 "is_entry": len(calls_in[sid]) == 0,
                 "is_leaf": len(calls_out[sid]) == 0,
             }
+            if with_lsp:
+                payload["lsp"] = _collect_lsp_evidence_for_symbol(engine, target, lsp_timeout)
             if as_json:
                 print(json.dumps(payload, ensure_ascii=False, indent=2))
             else:
@@ -1306,6 +1598,8 @@ def run_refs(project: str, max_files: int, symbol: str | None, file_path: str | 
                     lines.append("\n**调用** (Top 10):")
                     for row in payload["calls"][:10]:
                         lines.append(f"  - `{row['name']}` ({row['file']}:{row['line']})")
+                if with_lsp:
+                    lines.extend(_format_lsp_evidence(payload["lsp"]))
                 print("\n".join(lines))
             return 0
 
@@ -1386,6 +1680,114 @@ def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
     return {"name": symbol.name, "file": symbol.file, "line": symbol.line}
 
 
+def run_lsp_doctor(project: str, as_json: bool = False) -> int:
+    try:
+        project_root = _resolve_project(project)
+        from repomap_lsp import detect_lsp_servers, detection_to_dict
+
+        detections = detect_lsp_servers(project_root)
+        payload = {
+            "command": "lsp doctor",
+            "project": project_root,
+            "lspClient": "available",
+            "bundledServers": [],
+            "servers": [detection_to_dict(item) for item in detections],
+        }
+        if as_json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
+        lines = ["## LSP Doctor\n"]
+        lines.append(f"Project: `{project_root}`")
+        lines.append("LSP client: available")
+        lines.append("Bundled LSP servers: none")
+        if not detections:
+            lines.append("\nNo supported source files detected.")
+        else:
+            lines.append("\n| Language | Server | Status | Source | Workspace |")
+            lines.append("|---|---|---|---|---|")
+            for item in detections:
+                status = "available" if item.status == "available" else f"missing ({item.reason or 'not found'})"
+                lines.append(
+                    f"| {item.language} | {item.server_name or '-'} | {status} | {item.source or '-'} | `{item.workspace_root or project_root}` |"
+                )
+        lines.append("\n> repomap checks project-local executables, PATH, and trusted user tool bins such as npm/pnpm/yarn/bun/pipx/uv/mason/cargo/go directories; it does not install or bundle servers.")
+        print("\n".join(lines))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] lsp doctor failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def run_diagnostics(
+    project: str,
+    source: str,
+    files: list[str],
+    as_json: bool,
+    lsp_timeout: float,
+    lsp_max_files: int,
+) -> int:
+    try:
+        project_root = _resolve_project(project)
+        normalized_files = _normalize_project_relative_paths(project_root, files, must_exist=True)
+        if source != "lsp":
+            print(f"[{CLI_NAME}] unsupported diagnostics source: {source}", file=sys.stderr)
+            return 2
+        from repomap_lsp import collect_lsp_diagnostics, run_result_to_dict
+
+        runs = collect_lsp_diagnostics(project_root, normalized_files, timeout=lsp_timeout, max_files=lsp_max_files)
+        payload = {
+            "command": "diagnostics",
+            "project": project_root,
+            "source": source,
+            "files": normalized_files,
+            "runs": [run_result_to_dict(run) for run in runs],
+        }
+        total_errors = sum(1 for run in runs for item in run.diagnostics if item.severity == "error")
+        total_warnings = sum(1 for run in runs for item in run.diagnostics if item.severity != "error")
+        payload["summary"] = {
+            "totalErrors": total_errors,
+            "totalWarnings": total_warnings,
+            "failedRuns": sum(1 for run in runs if run.status in {"failed", "timeout"}),
+            "skippedRuns": sum(1 for run in runs if run.status == "skipped"),
+        }
+        if as_json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(_format_lsp_diagnostics_report(payload))
+        return 1 if total_errors or payload["summary"]["failedRuns"] else 0
+    except ValueError as exc:
+        print(f"[{CLI_NAME}] diagnostics failed: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"[{CLI_NAME}] diagnostics failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _format_lsp_diagnostics_report(payload: dict[str, Any]) -> str:
+    lines = ["## LSP Diagnostics\n"]
+    lines.append(f"Project: `{payload['project']}`")
+    lines.append(f"Files: {len(payload.get('files', []))}")
+    summary = payload.get("summary", {})
+    lines.append(f"Errors: **{summary.get('totalErrors', 0)}** | Warnings: **{summary.get('totalWarnings', 0)}**")
+    lines.append("")
+    for run in payload.get("runs", []):
+        status = run.get("status")
+        lines.append(f"### {run.get('language')} / {run.get('server')} — {status}")
+        if run.get("reason"):
+            lines.append(f"- Reason: {run['reason']}")
+        if run.get("workspaceRoot"):
+            lines.append(f"- Workspace: `{run['workspaceRoot']}`")
+        diagnostics = run.get("diagnostics", [])
+        if diagnostics:
+            for item in diagnostics[:20]:
+                icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(item.get("severity"), "ℹ️")
+                lines.append(f"  {icon} `{item['file']}:{item['line']}:{item['col']}` [{item.get('code', '')}] {item.get('message', '')[:120]}")
+        else:
+            lines.append("- No diagnostics returned.")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def run_check(
     project: str,
     types: list[str] | None,
@@ -1393,9 +1795,19 @@ def run_check(
     since_commit: str | None,
     modified_files: list[str] | None,
     resolve_symbols: bool,
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+    lsp_max_files: int = 20,
 ) -> int:
     try:
         project_root = _resolve_project(project)
+        normalized_modified_files = None
+        if modified_files:
+            try:
+                normalized_modified_files = _normalize_project_relative_paths(project_root, modified_files, must_exist=False)
+            except ValueError as exc:
+                print(f"[{CLI_NAME}] check failed: unsafe modified file: {exc}", file=sys.stderr)
+                return 1
         symbols_map = None
         if resolve_symbols:
             engine = _scan_engine(project_root, 8000)
@@ -1407,7 +1819,10 @@ def run_check(
             resolve_symbols=resolve_symbols and symbols_map is not None,
             symbols_map=symbols_map,
             since_commit=since_commit,
-            modified_files=modified_files,
+            modified_files=normalized_modified_files,
+            with_lsp=with_lsp,
+            lsp_timeout=lsp_timeout,
+            lsp_max_files=lsp_max_files,
         )
         print(_format_check_report(result, max_issues))
         return 0 if result.get("status") in {"passed", "warning", "unknown"} else 1
@@ -1485,6 +1900,13 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     return "\n".join(lines)
 
 
+def _module_origin(module_name: str) -> str:
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
+        return "not found"
+    return spec.origin or "built-in"
+
+
 def run_doctor() -> int:
     from repomap_parser import TreeSitterAdapter
 
@@ -1496,6 +1918,19 @@ def run_doctor() -> int:
     else:
         print("tree-sitter bindings are missing", file=sys.stderr)
         return 1
+    if "tsx" not in adapter.parsers:
+        print("TSX parser: unavailable", file=sys.stderr)
+        return 1
+    print(f"repomap_cli: {_module_origin('repomap_cli')}")
+    print(f"repomap_parser: {_module_origin('repomap_parser')}")
+    print(f"repomap_core: {_module_origin('repomap_core')}")
+    print(f"tree_sitter: {_module_origin('tree_sitter')}")
+    print(f"tree_sitter_typescript: {_module_origin('tree_sitter_typescript')}")
+    print(f"PACKAGE_ROOT: {PACKAGE_ROOT}")
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print("LSP client: available")
+    print("Bundled LSP servers: none")
+    print("LSP server detection: run `repomap lsp doctor --project <path>`")
     if pyinstaller_spec is not None:
         print("PyInstaller: available")
     else:

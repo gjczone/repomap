@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from repomap_core import RepoMapEngine
 
-from repomap_topic import FileMatch, TestMatch, classify_file_role
+from repomap_topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
 
 
 RISK_MARK = {"high": "[high]", "medium": "[medium]", "low": "[low]"}
@@ -20,9 +20,212 @@ def _truncate_output(output: str, max_chars: int) -> str:
     return output[:max_chars] + "\n\n…（超出字符限制，已截断）"
 
 
-def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> str:
+def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
+    """通过 git diff 获取近 N 天修改过的文件集合（路径相对于 project_root）。"""
+    import subprocess
+    from pathlib import Path
+
+    try:
+        # 获取 git root 用于路径转换
+        git_root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project_root, capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+    except Exception:
+        return set()
+    if not git_root:
+        return set()
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", f"HEAD@{{{days}.days ago}}", "HEAD", "--", "."],
+            cwd=project_root, capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        return set()
+    if result.returncode != 0:
+        return set()
+
+    hot_files: set[str] = set()
+    if project_root.startswith(git_root):
+        rel = str(Path(project_root).relative_to(git_root))
+        prefix = f"{rel}/" if rel not in ("", ".") else ""
+    else:
+        prefix = ""
+
+    for line in result.stdout.strip().split("\n"):
+        path = line.strip()
+        if not path:
+            continue
+        # 去掉 git root 相对前缀，转为 project_root 相对路径
+        if prefix and path.startswith(prefix):
+            path = path[len(prefix):]
+        hot_files.add(path)
+    return hot_files
+
+
+def _auto_granularity(engine: "RepoMapEngine") -> str:
+    """根据项目规模自动选择报告粒度。
+
+    - full:    < 50 个文件 —— 完整报告
+    - medium:  50-300 个文件 —— 精简报告
+    - compact: > 300 个文件 —— 极简报告
+    """
+    file_count = engine.scan_stats.processed_files
+    if file_count < 50:
+        return "full"
+    elif file_count <= 300:
+        return "medium"
+    else:
+        return "compact"
+
+
+def render_routes_report(engine: "RepoMapEngine") -> str:
+    """渲染 HTTP 路由表（独立命令用）。"""
+    routes = engine.list_routes()
+    if not routes:
+        return "未检测到 HTTP 路由定义。"
+    return _format_route_table(routes)
+
+
+def _render_route_section(engine: "RepoMapEngine") -> list[str]:
+    """为 overview 渲染 API 路由板块。"""
+    routes = engine.list_routes()
+    if not routes:
+        return []
+    return _format_route_lines(routes, compact=True)
+
+
+def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
+    """格式化路由为 Markdown 行。"""
+    from collections import Counter
+
+    lines = ["## API 路由\n"]
+    method_order = {"GET": 0, "POST": 1, "PUT": 2, "PATCH": 3, "DELETE": 4, "HEAD": 5, "OPTIONS": 6, "USE": 7, "ALL": 8}
+    routes_sorted = sorted(routes, key=lambda r: (r.file, r.line))
+
+    if compact and len(routes) > 12:
+        # 压缩模式：按模块分组展示概览
+        by_file: dict[str, list] = {}
+        for r in routes_sorted:
+            by_file.setdefault(r.file, []).append(r)
+        for file, file_routes in list(by_file.items())[:6]:
+            methods = Counter(r.method for r in file_routes)
+            method_str = " ".join(f"{m}x{methods[m]}" for m in ("GET", "POST", "PUT", "DELETE", "PATCH") if methods[m])
+            lines.append(f"- `{file}` — {len(file_routes)} 个路由（{method_str}）")
+        if len(by_file) > 6:
+            lines.append(f"- …还有 {len(by_file) - 6} 个文件包含路由")
+    else:
+        if len(routes_sorted) > 20 and compact:
+            lines.append(f"> （共 {len(routes)} 个路由，以下展示 Top 20）\n")
+        lines.append("| Method | Path | Handler | File | Framework |")
+        lines.append("|--------|------|---------|------|-----------|")
+        for r in routes_sorted[:20]:
+            lines.append(f"| {r.method} | `{r.path}` | `{r.handler}` | `{r.file}:{r.line}` | {r.framework} |")
+        if len(routes_sorted) > 20 and compact:
+            lines.append(f"\n…还有 {len(routes_sorted) - 20} 个路由")
+    lines.append("")
+    return lines
+
+
+def _format_route_table(routes: list) -> str:
+    """格式化路由为纯文本表格。"""
+    lines = _format_route_lines(routes, compact=False)
+    return "\n".join(lines)
+
+
+def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
+    """为 overview 渲染隐式耦合板块（git 共变频率最高的文件对）。"""
+    import subprocess
+    from pathlib import Path
+
+    project_root = str(engine.project_root)
+
+    # 计算从 git root 到 project_root 的相对路径前缀
+    try:
+        git_root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project_root,
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+    except Exception:
+        return []
+    if not git_root:
+        return []
+    if project_root.startswith(git_root):
+        rel = str(Path(project_root).relative_to(git_root))
+        git_rel_prefix = rel if rel not in ("", ".") else ""
+    else:
+        git_rel_prefix = ""
+
+    # 选取分析得分最高的 8 个非测试文件作为种子
+    analysis = engine.file_analysis()
+    high_score_files = sorted(
+        [item for item in analysis.values() if not item.get("is_test_file")],
+        key=lambda item: -item.get("score", 0),
+    )[:8]
+
+    seen_pairs: set[tuple[str, str]] = set()
+    pairs: list[tuple[str, str, int]] = []
+    for entry in high_score_files:
+        file_path = entry["file"]
+        # 将分析路径（相对于 project_root）转换为 git 路径（相对于 git root）
+        git_path = f"{git_rel_prefix}/{file_path}" if git_rel_prefix else file_path
+        neighbors = get_co_change_neighbors(project_root, git_path, top_n=3)
+        if not neighbors:
+            continue
+        # 将 git 路径转换回分析路径用于展示
+        for neighbor_git_path, count in neighbors:
+            display_a = file_path
+            if git_rel_prefix:
+                display_b = neighbor_git_path[len(git_rel_prefix) + 1:] if neighbor_git_path.startswith(git_rel_prefix + "/") else neighbor_git_path
+            else:
+                display_b = neighbor_git_path
+            key = tuple(sorted([display_a, display_b]))
+            if key in seen_pairs:
+                continue
+            if count < 2:
+                continue
+            seen_pairs.add(key)
+            pairs.append((display_a, display_b, count))
+        if len(pairs) >= 10:
+            break
+
+    if not pairs:
+        return []
+
+    pairs.sort(key=lambda x: -x[2])
+    lines = [
+        "## 隐式耦合（Git 共变）\n",
+        "> 以下文件在 git 历史中频繁一起修改，可能存在未在代码中显式声明的隐含关联。\n",
+    ]
+    for file_a, file_b, count in pairs[:10]:
+        lines.append(f"- `{file_a}` ↔ `{file_b}` — 共变 {count} 次")
+    lines.append("")
+    return lines
+
+
+def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
+                          with_heat: bool = False,
+                          with_co_change: bool = False,
+                          granularity: str = "auto") -> str:
+    # 解析粒度
+    if granularity == "auto":
+        granularity = _auto_granularity(engine)
+
+    # 根据粒度调整各板块的数量限制
+    if granularity == "compact":
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 0, 5, 0, 3, 2
+    elif granularity == "medium":
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 5, 5, 5, 4, 3
+    else:  # full
+        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file = 8, 8, 10, 6, 4
+
     lines: list[str] = []
-    lines.append(f"# 项目地图 — {engine.project_root.name}\n")
+    lines.append(f"# 项目地图 — {engine.project_root.name}")
+    if granularity != "full":
+        lines[-1] += f"（{granularity} 模式）"
+    lines[-1] += "\n"
     file_analysis = engine.file_analysis()
     semantic_symbol_total = round(sum(row.get("semantic_symbol_count", 0.0) for row in file_analysis.values()), 1)
 
@@ -46,10 +249,16 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> s
     if engine.scan_stats.truncated_files:
         lines.append(f"> `max_files` 截断了 {engine.scan_stats.truncated_files} 个候选文件\n")
 
-    suggestions = engine.suggested_reading_order(8)
+    # 热度计算：如果启用，标记近 30 天频繁修改的文件
+    hot_files: set[str] = set()
+    if with_heat:
+        hot_files = _get_hot_files(str(engine.project_root))
+
+    suggestions = engine.suggested_reading_order(reading_limit)
     if suggestions:
         lines.append("## 推荐阅读顺序\n")
         for index, item in enumerate(suggestions, 1):
+            hot_tag = " [HOT]" if item["file"] in hot_files else ""
             highlights = f"；关键符号: {', '.join(item['top_symbols'])}" if item["top_symbols"] else ""
             count_text = (
                 f"有效符号 {item['semantic_symbol_count']}"
@@ -63,12 +272,12 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> s
             ):
                 count_text += f"（总符号 {item['symbol_count']}）"
             lines.append(
-                f"{index}. `{item['file']}` — {item['reason']}；"
+                f"{index}. `{item['file']}`{hot_tag} — {item['reason']}；"
                 f"{count_text}{highlights}"
             )
         lines.append("")
 
-    modules = engine.module_summary(8)
+    modules = engine.module_summary(module_limit)
     if modules:
         lines.append("## 模块摘要\n")
         for module in modules:
@@ -97,7 +306,12 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> s
             lines.append(f"- `{entry}`")
         lines.append("")
 
-    hotspots = engine.hotspots(10)
+    # API 路由板块
+    route_lines = _render_route_section(engine)
+    if route_lines:
+        lines.extend(route_lines)
+
+    hotspots = engine.hotspots(hotspot_limit)
     if hotspots:
         lines.append("## 高密度文件（按有效符号密度，默认降低标签/配置噪音）\n")
         for hotspot in hotspots:
@@ -118,7 +332,7 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> s
             )
         lines.append("")
 
-    summary_sections = engine.summary_symbols(6, 4)
+    summary_sections = engine.summary_symbols(summary_files, summary_per_file)
     if summary_sections:
         lines.append("## 关键实现符号\n")
         lines.append("> 这里优先展示更适合阅读和改动分析的实现符号，默认降低测试、HTML 标签、CSS selector、JSON key 等低语义噪音。\n")
@@ -135,6 +349,12 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000) -> s
                     f" L{symbol_row['line']} Score={symbol_row['summary_score']:.2f} PR={pagerank:.1f}{signature}"
                 )
             lines.append("")
+
+    # 隐式耦合：通过 git 共变历史发现的文件关联。默认关闭，避免普通 overview 触发重 git history。
+    if with_co_change:
+        co_change_lines = _render_co_change_section(engine)
+        if co_change_lines:
+            lines.extend(co_change_lines)
 
     return _truncate_output("\n".join(lines), max_chars)
 
@@ -401,6 +621,9 @@ def render_impact_report(
     risk_level: str,
     risk_notes: list[str],
     max_chars: int = 8000,
+    key_symbols: list[dict[str, Any]] | None = None,
+    read_next: list[dict[str, str]] | None = None,
+    lsp_hint: dict[str, Any] | None = None,
 ) -> str:
     lines: list[str] = []
     lines.append("# Impact Analysis\n")
@@ -409,6 +632,31 @@ def render_impact_report(
     for f in target_files:
         lines.append(f"- `{f}`")
     lines.append("")
+
+    if key_symbols or read_next:
+        lines.append("## Edit Plan\n")
+        lines.append("- Start with target files, then inspect high-confidence affected files and suggested tests.")
+        if key_symbols:
+            lines.append("- Review key symbols before changing behavior or signatures.")
+        if lsp_hint and lsp_hint.get("available"):
+            lines.append("- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters.")
+        lines.append("")
+
+    if key_symbols:
+        lines.append("## Key Symbols\n")
+        lines.append("| Symbol | Kind | Location | Incoming | Outgoing |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for item in key_symbols[:12]:
+            lines.append(
+                f"| `{item['name']}` | {item['kind']} | `{item['file']}:{item['line']}` | {item['incomingCount']} | {item['outgoingCount']} |"
+            )
+        lines.append("")
+
+    if read_next:
+        lines.append("## Read Next\n")
+        for item in read_next[:10]:
+            lines.append(f"- `{item['file']}` ({item['role']}): {item['reason']}")
+        lines.append("")
 
     if affected_files:
         lines.append("## Likely Affected Files\n")

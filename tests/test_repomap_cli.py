@@ -23,7 +23,7 @@ class RepoMapCliTests(unittest.TestCase):
     def test_check_marks_nonzero_tool_exit_as_failed_even_without_parsed_issues(self) -> None:
         from repomap_cli import main
 
-        def fake_check(self, types=None, resolve_symbols=True, symbols_map=None, since_commit=None, modified_files=None):
+        def fake_check(self, types=None, resolve_symbols=True, symbols_map=None, since_commit=None, modified_files=None, **kwargs):
             return {
                 "timestamp": "2026-01-01T00:00:00+00:00",
                 "project_root": "/tmp/demo",
@@ -66,7 +66,227 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("退出码: 2", output)
         self.assertIn("未解析到结构化错误", output)
 
-    def test_parse_git_status_porcelain_paths_preserves_unstaged_leading_space(self) -> None:
+    def test_lsp_doctor_reports_missing_servers_without_failing(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "print('hi')\n")
+            stdout = io.StringIO()
+            with patch("shutil.which", return_value=None):
+                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[]):
+                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                        exit_code = main(["lsp", "doctor", "--project", project_root, "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["command"], "lsp doctor")
+            self.assertEqual(payload["servers"][0]["status"], "missing")
+
+    def test_diagnostics_lsp_json_outputs_skipped_without_server(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "print('hi')\n")
+            stdout = io.StringIO()
+            with patch("shutil.which", return_value=None):
+                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[]):
+                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                        exit_code = main(["diagnostics", "--project", project_root, "--source", "lsp", "--files", "main.py", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["runs"][0]["status"], "skipped")
+
+    def test_check_with_lsp_passes_options_to_checker(self) -> None:
+        from repomap_cli import main
+
+        captured = {}
+
+        def fake_check(self, **kwargs):
+            captured.update(kwargs)
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/demo",
+                "status": "passed",
+                "types": ["python"],
+                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "runs": [],
+                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "errors_by_file": {},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "print('hi')\n")
+            with patch.object(RepoMapChecker, "check", fake_check):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    exit_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py", "--with-lsp", "--lsp-timeout", "1.5", "--lsp-max-files", "3"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(captured["with_lsp"])
+        self.assertEqual(captured["lsp_timeout"], 1.5)
+        self.assertEqual(captured["lsp_max_files"], 3)
+
+    def test_invalid_project_path_fails_clearly(self) -> None:
+        from repomap_cli import main
+
+        missing = str(Path(tempfile.gettempdir()) / "repomap-missing-project-for-test")
+        stderr = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+            exit_code = main(["overview", "--project", missing])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("project path is not a directory", stderr.getvalue())
+
+    def test_impact_normalizes_dot_relative_and_absolute_files(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def run():\n    return 1\n")
+
+            dot_stdout = io.StringIO()
+            with redirect_stdout(dot_stdout), redirect_stderr(io.StringIO()):
+                dot_code = main(["impact", "--project", project_root, "--files", "./main.py", "--json"])
+
+            abs_stdout = io.StringIO()
+            abs_path = str(Path(project_root, "main.py"))
+            with redirect_stdout(abs_stdout), redirect_stderr(io.StringIO()):
+                abs_code = main(["impact", "--project", project_root, "--files", abs_path, "--json"])
+
+            self.assertEqual(dot_code, 0)
+            self.assertEqual(abs_code, 0)
+            self.assertEqual(json.loads(dot_stdout.getvalue())["result"]["inputFiles"], ["main.py"])
+            self.assertEqual(json.loads(abs_stdout.getvalue())["result"]["inputFiles"], ["main.py"])
+
+    def test_impact_with_symbols_outputs_edit_plan_fields(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            write_file(project_root, "caller.py", "from main import target\n\ndef run():\n    return target()\n")
+            write_file(project_root, "test_main.py", "from main import target\n\ndef test_target():\n    assert target() == 1\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["impact", "--project", project_root, "--files", "main.py", "--with-symbols", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            result = payload["result"]
+            self.assertEqual(result["inputFiles"], ["main.py"])
+            self.assertTrue(any(item["name"] == "target" for item in result["keySymbols"]))
+            self.assertEqual(result["readNext"][0]["file"], "main.py")
+            self.assertEqual(result["readNext"][0]["role"], "target")
+            self.assertIn("lspHint", result)
+            self.assertIn("available", result["lspHint"])
+
+    def test_impact_without_symbols_keeps_compatible_json_fields(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(["impact", "--project", project_root, "--files", "main.py", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())["result"]
+            self.assertIn("affectedFiles", result)
+            self.assertIn("tests", result)
+            self.assertIn("riskLevel", result)
+            self.assertEqual(result["keySymbols"], [])
+            self.assertEqual(result["lspHint"], {})
+
+    def test_impact_rejects_outside_file_path(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def run():\n    return 1\n")
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["impact", "--project", project_root, "--files", "../outside.py"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("outside project", stderr.getvalue())
+
+    def test_query_paths_and_exclude_match_path_segments(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/main.py", "def target():\n    return 1\n")
+            write_file(project_root, "src2/main.py", "def target():\n    return 2\n")
+
+            paths_stdout = io.StringIO()
+            with redirect_stdout(paths_stdout), redirect_stderr(io.StringIO()):
+                paths_code = main(["query", "--project", project_root, "--query", "target", "--paths", "src", "--json"])
+
+            exclude_stdout = io.StringIO()
+            with redirect_stdout(exclude_stdout), redirect_stderr(io.StringIO()):
+                exclude_code = main(["query", "--project", project_root, "--query", "target", "--exclude", "src", "--json"])
+
+            self.assertEqual(paths_code, 0)
+            self.assertEqual(exclude_code, 0)
+            paths_payload = json.loads(paths_stdout.getvalue())
+            exclude_payload = json.loads(exclude_stdout.getvalue())
+            self.assertTrue(any(row["path"] == "src/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(row["path"] == "src2/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(row["path"] == "src2/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(row["path"] == "src/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+
+    def test_check_rejects_unsafe_modified_file_paths(self) -> None:
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "pyproject.toml", "[project]\nname = \"demo\"\n")
+            write_file(project_root, "main.py", "def run():\n    return 1\n")
+
+            for unsafe in ("../outside.py", "-bad.py"):
+                stderr = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    exit_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", unsafe])
+
+                self.assertEqual(exit_code, 1)
+                self.assertIn("unsafe modified file", stderr.getvalue())
+
+    def test_diagnostic_commands_put_modified_files_after_double_dash(self) -> None:
+        from repomap_check import DiagnosticRunner
+
+        with tempfile.TemporaryDirectory() as project_root:
+            runner = DiagnosticRunner(Path(project_root), modified_files=["src/main.py"])
+            with patch.object(runner, "_has_cmd", return_value=True), patch.object(runner, "_run_command", return_value=(0, "[]", 1)) as run_mock:
+                runner._run_ruff()
+
+            command = run_mock.call_args.args[0]
+            self.assertEqual(command[:5], ["ruff", "check", "--output-format", "json", "--"])
+            self.assertIn("src/main.py", command)
+
+    def test_diff_risk_fails_when_git_status_fails(self) -> None:
+        from repomap_cli import main
+
+        def fake_run(cmd, **kwargs):
+            completed = subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="/tmp/repo\n", stderr="")
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal: not a git repository")
+            return completed
+
+        with tempfile.TemporaryDirectory() as project_root:
+            stderr = io.StringIO()
+            with patch("repomap_cli.cli.subprocess.run", side_effect=fake_run):
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    exit_code = main(["diff-risk", "--project", project_root])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("git status failed", stderr.getvalue())
+
+    def test_js_detector_fallback_skips_dependency_directories(self) -> None:
+        from repomap_check import ProjectDetector
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "node_modules/pkg/index.js", "module.exports = {};\n")
+            with patch("repomap_check.subprocess.run", side_effect=FileNotFoundError()):
+                self.assertFalse(ProjectDetector._has_js_files(Path(project_root)))
+
         from repomap_cli.cli import _parse_git_status_porcelain_paths
 
         self.assertEqual(
@@ -91,6 +311,9 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("tree-sitter parsers", result.stdout)
+        self.assertIn("tsx", result.stdout)
+        self.assertIn("repomap_cli:", result.stdout)
+        self.assertIn("repomap_parser:", result.stdout)
         self.assertIn("only required for build-binary", result.stdout)
 
     def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
@@ -151,6 +374,68 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("# 项目地图", overview_stdout.getvalue())
             self.assertIn("helper", symbol_stdout.getvalue())
             self.assertIn("caller", chain_stdout.getvalue())
+
+    def test_query_symbol_with_lsp_appends_evidence(self) -> None:
+        from repomap_cli import main
+
+        fake_run = {
+            "server": "fake-lsp",
+            "language": "python",
+            "status": "ok",
+            "command": ["fake-lsp"],
+            "workspaceRoot": "/tmp/demo",
+            "reason": "",
+            "durationMs": 1,
+            "diagnostics": [],
+            "definitions": [{"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}],
+            "references": [{"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}],
+        }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
+            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            stdout = io.StringIO()
+            with patch("repomap_cli.cli._collect_lsp_evidence_for_symbol", return_value=fake_run):
+                with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                    exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper", "--with-lsp"])
+
+            self.assertEqual(exit_code, 0)
+            output = stdout.getvalue()
+            self.assertIn("### LSP evidence", output)
+            self.assertIn("Definitions: 1", output)
+            self.assertIn("References: 1", output)
+
+    def test_refs_with_lsp_json_includes_evidence(self) -> None:
+        from repomap_cli import main
+
+        fake_run = {
+            "server": "fake-lsp",
+            "language": "python",
+            "status": "ok",
+            "command": ["fake-lsp"],
+            "workspaceRoot": "/tmp/demo",
+            "reason": "",
+            "durationMs": 1,
+            "diagnostics": [],
+            "definitions": [{"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}],
+            "references": [{"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}],
+        }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
+            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            stdout = io.StringIO()
+            with patch("repomap_cli.cli._collect_lsp_evidence_for_symbol", return_value=fake_run):
+                with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                    exit_code = main([
+                        "refs", "--project", project_root, "--symbol", "helper",
+                        "--file-path", "lib.py", "--with-lsp", "--json",
+                    ])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["lsp"]["status"], "ok")
+            self.assertEqual(payload["lsp"]["references"][0]["file"], "main.py")
 
     def test_cache_save_and_diff_follow_standalone_cli_semantics(self) -> None:
         from repomap_cli import main
@@ -289,6 +574,29 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("`b.py:1`", text)
             self.assertNotIn("`a.py:1`", text)
 
+    def test_overview_git_co_change_requires_explicit_flag(self) -> None:
+        import repomap_ai
+        from repomap_cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def run():\n    return 1\n")
+
+            def fake_co_change_section(engine):
+                repomap_ai.get_co_change_neighbors(str(engine.project_root), "main.py")
+                return ["## 隐式耦合（Git 共变）\n"]
+
+            with patch.object(repomap_ai, "get_co_change_neighbors", return_value=[("other.py", 2)]) as co_change_mock:
+                with patch.object(repomap_ai, "_render_co_change_section", side_effect=fake_co_change_section):
+                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        default_code = main(["overview", "--project", project_root])
+                    self.assertEqual(default_code, 0)
+                    self.assertEqual(co_change_mock.call_count, 0)
+
+                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        enabled_code = main(["overview", "--project", project_root, "--with-co-change"])
+                    self.assertEqual(enabled_code, 0)
+                    self.assertGreater(co_change_mock.call_count, 0)
+
     def test_overview_json_returns_machine_readable_summary(self) -> None:
         from repomap_cli import main
 
@@ -394,6 +702,70 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 1)
+
+    def test_cache_paths_canonicalize_project_path(self) -> None:
+        from repomap_support import get_session_cache_path
+
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as temp_root:
+            project = Path(temp_root, "demo")
+            project.mkdir()
+            try:
+                os.chdir(temp_root)
+                relative_cache = get_session_cache_path("demo")
+                absolute_cache = get_session_cache_path(str(project))
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertEqual(relative_cache, absolute_cache)
+        self.assertEqual(relative_cache.name, "session_scan.json")
+
+    def test_cache_paths_isolate_same_name_projects(self) -> None:
+        from repomap_support import get_cache_paths, get_session_cache_path
+
+        with tempfile.TemporaryDirectory() as temp_root:
+            project_a = Path(temp_root, "a", "demo")
+            project_b = Path(temp_root, "b", "demo")
+            project_a.mkdir(parents=True)
+            project_b.mkdir(parents=True)
+
+            session_a = get_session_cache_path(str(project_a))
+            session_b = get_session_cache_path(str(project_b))
+            cache_paths_a = get_cache_paths(str(project_a))
+
+        self.assertNotEqual(session_a, session_b)
+        self.assertEqual(session_a.name, "session_scan.json")
+        self.assertEqual(session_a.parent, cache_paths_a[0].parent)
+        self.assertEqual([path.name for path in cache_paths_a], ["symbols.json", "git.json", "last_snapshot.json"])
+
+    def test_session_cache_rejects_mismatched_project_root_payload(self) -> None:
+        import repomap_cli.cli as cli_mod
+        from repomap_cli import main
+        from repomap_support import get_session_cache_path
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def helper():\n    return 1\n")
+            cli_mod._SCAN_CACHE.clear()
+            session_cache = get_session_cache_path(project_root)
+            if session_cache.exists():
+                session_cache.unlink()
+
+            original_scan = cli_mod.RepoMapEngine.scan
+            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code1 = main(["overview", "--project", project_root])
+
+                payload = json.loads(session_cache.read_text(encoding="utf-8"))
+                payload["project_root"] = str(Path(project_root).parent / "other-project")
+                session_cache.write_text(json.dumps(payload), encoding="utf-8")
+
+                cli_mod._SCAN_CACHE.clear()
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+
+            self.assertEqual(code1, 0)
+            self.assertEqual(code2, 0)
+            self.assertEqual(scan_mock.call_count, 2)
 
     def test_session_cache_reuses_scan_across_memory_cache_reset(self) -> None:
         import repomap_cli.cli as cli_mod
