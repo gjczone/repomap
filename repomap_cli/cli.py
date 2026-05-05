@@ -913,7 +913,7 @@ def run_query_symbol(
             results = [item for item in results if item.file == file_path]
         if not results:
             print(f"> 未找到匹配 `{symbol}` 的符号", file=sys.stderr)
-            return 1
+            return EXIT_NO_RESULTS
         exact_matches, fuzzy_matches = _group_symbol_matches(results, symbol)
 
         lines = [f"找到 {len(results)} 个匹配结果。\n"]
