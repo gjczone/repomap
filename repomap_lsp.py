@@ -466,8 +466,9 @@ class StdioLspClient:
     def close(self) -> None:
         if self.process is None:
             return
+        process = self.process
         try:
-            if self.process.poll() is None:
+            if process.poll() is None:
                 try:
                     self.request("shutdown", {})
                 except Exception:
@@ -477,10 +478,18 @@ class StdioLspClient:
                 except Exception:
                     pass
                 try:
-                    self.process.wait(timeout=2)
+                    process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    self.process.kill()
+                    process.kill()
+                    process.wait(timeout=2)
         finally:
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is None:
+                    continue
+                try:
+                    stream.close()
+                except Exception:
+                    pass
             self.process = None
 
 

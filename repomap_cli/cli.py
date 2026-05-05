@@ -1772,52 +1772,6 @@ def run_verify(
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
         return 1
 
-    try:
-        engine = _scan_engine(project, max_files)
-        selected, error = _select_symbol_match(engine, symbol, file_path=file_path)
-        if error:
-            print(error, file=sys.stderr)
-            return 1
-        assert selected is not None
-        target = selected
-        result = subprocess.run(
-            ["git", "blame", "-L", f"{target.line},{target.line}", "-p", target.file],
-            cwd=engine.project_root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode != 0:
-            print(
-                f"📍 符号: `{target.name}`\n📁 位置: `{target.file}:{target.line}`\n\n❌ Git 信息获取失败（可能不是 git 仓库）",
-                file=sys.stderr,
-            )
-            return 1
-        commit_hash = result.stdout.split()[0] if result.stdout else "unknown"
-        file_commits = subprocess.run(
-            ["git", "log", "--follow", "-10", "--format=%H|%an|%ad|%s", "--", target.file],
-            cwd=engine.project_root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        lines = [f"## Git 历史 — `{target.name}`\n"]
-        lines.append(f"📍 位置: `{target.file}:{target.line}`")
-        lines.append(f"🔖 当前版本: `{commit_hash[:8]}`\n")
-        if file_commits.returncode == 0 and file_commits.stdout:
-            lines.append("**最近提交**:")
-            for row in file_commits.stdout.strip().split("\n")[:5]:
-                parts = row.split("|", 3)
-                if len(parts) >= 4:
-                    lines.append(f"  - `[{parts[0][:8]}]` {parts[2][:10]} by {parts[1]}: {parts[3][:50]}")
-        print("\n".join(lines))
-        return 0
-    except Exception as exc:
-        print(f"[{CLI_NAME}] git-history failed: {exc}", file=sys.stderr)
-        return 1
-
 
 def run_git_history(project: str, max_files: int, symbol: str, file_path: str | None) -> int:
     try:
@@ -2341,9 +2295,14 @@ def run_check(
 def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     lines = ["## 编译器/静态分析诊断\n"]
     lines.append(f"**项目**: `{result['project_root']}`")
-    lines.append(
-        f"**状态**: {'✅ 通过' if result['status'] == 'passed' else ('⚠️ 有警告' if result['status'] == 'warning' else ('ℹ️ 未检测到支持类型' if result['status'] == 'unknown' else '❌ 有错误'))}"
-    )
+    status_label = {
+        "passed": "✅ 通过",
+        "warning": "⚠️ 有警告",
+        "unknown": "ℹ️ 未实际运行诊断工具" if result.get("message") else "ℹ️ 未检测到支持类型",
+    }.get(result["status"], "❌ 有错误")
+    lines.append(f"**状态**: {status_label}")
+    if result.get("message"):
+        lines.append(f"**说明**: {result['message']}")
     lines.append(f"**检测类型**: {', '.join(result.get('types', [])) or '自动检测'}")
     lines.append(f"**时间**: {result['timestamp']}\n")
 

@@ -315,15 +315,14 @@ class RepoMapEngine:
         except Exception:
             return None
 
-    @staticmethod
-    def _git_changed_files() -> tuple[list[str], list[str]]:
+    def _git_changed_files(self) -> tuple[list[str], list[str]]:
         """返回 (modified_files, deleted_files)，相对于项目根目录。"""
         modified, deleted = [], []
         try:
             # unstaged + staged modifications
             for status_cmd in (["git", "diff", "--name-only", "HEAD"],):
                 result = subprocess.run(
-                    status_cmd, capture_output=True, text=True, timeout=10,
+                    status_cmd, cwd=self.project_root, capture_output=True, text=True, timeout=10,
                 )
                 if result.returncode == 0:
                     for line in result.stdout.strip().split("\n"):
@@ -332,7 +331,7 @@ class RepoMapEngine:
             # deleted files
             result = subprocess.run(
                 ["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],
-                capture_output=True, text=True, timeout=10,
+                cwd=self.project_root, capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0:
                 for line in result.stdout.strip().split("\n"):

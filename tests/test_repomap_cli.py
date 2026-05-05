@@ -27,7 +27,7 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "ui_evaluate.js", "console.log('ok')\n")
             report = RepoMapChecker(project_root, max_items=10).check(types=["javascript"], resolve_symbols=False)
 
-        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["status"], "unknown")
         self.assertEqual(report["summary"]["tools_run"], 0)
         self.assertEqual(report["summary"]["tools_skipped"], 1)
         self.assertEqual(report["runs"][0]["tool"], "eslint")

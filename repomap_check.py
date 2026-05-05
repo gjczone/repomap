@@ -1087,12 +1087,24 @@ class RepoMapChecker:
             runs.append(run_data)
 
         tool_failures = [r for r in results if not r.skipped and r.exit_code != 0]
-        status = "failed" if total_errors > 0 or tool_failures else ("warning" if total_warnings > 0 else "passed")
+        tools_run = len([r for r in results if not r.skipped])
+        tools_skipped = len([r for r in results if r.skipped])
+        if total_errors > 0 or tool_failures:
+            status = "failed"
+        elif total_warnings > 0:
+            status = "warning"
+        elif tools_run == 0 and tools_skipped > 0:
+            status = "unknown"
+            message = "检测到项目类型，但没有实际运行任何诊断工具"
+        else:
+            status = "passed"
+            message = ""
 
         return {
             "timestamp": self._get_timestamp(),
             "project_root": str(self.project_root),
             "status": status,
+            "message": message,
             "types": types,
             "incremental": {
                 "enabled": modified_files is not None,
@@ -1104,8 +1116,8 @@ class RepoMapChecker:
                 "total_errors": total_errors,
                 "total_warnings": total_warnings,
                 "files_with_errors": len(errors_by_file),
-                "tools_run": len([r for r in results if not r.skipped]),
-                "tools_skipped": len([r for r in results if r.skipped]),
+                "tools_run": tools_run,
+                "tools_skipped": tools_skipped,
                 "tool_failures": len(tool_failures),
             },
             "errors_by_file": dict(sorted(errors_by_file.items(), key=lambda x: len(x[1]), reverse=True)[:20]),

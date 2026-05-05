@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,27 @@ def write_file(root: str, relative_path: str, content: str) -> None:
 
 
 class RepoMapEngineTests(unittest.TestCase):
+    def test_git_changed_files_uses_project_root_as_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def app():\n    return 1\n")
+            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, check=True)
+            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, check=True)
+            subprocess.run(["git", "add", "main.py"], cwd=project_root, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+            write_file(project_root, "main.py", "def app():\n    return 2\n")
+
+            with tempfile.TemporaryDirectory() as outside_cwd:
+                previous_cwd = os.getcwd()
+                try:
+                    os.chdir(outside_cwd)
+                    modified, deleted = RepoMapEngine(project_root)._git_changed_files()
+                finally:
+                    os.chdir(previous_cwd)
+
+            self.assertEqual(modified, ["main.py"])
+            self.assertEqual(deleted, [])
+
     def test_tsx_test_file_is_marked_as_test_file_in_analysis(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "src/App.tsx", "export function App() {\n  return <div />;\n}\n")
