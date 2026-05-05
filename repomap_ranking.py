@@ -83,12 +83,30 @@ class GraphAnalyzer:
         for s, score in pr.items():
             self.graph.symbols[s].pagerank = score
 
-    def query_symbol(self, name: str) -> list[Symbol]:
-        """按名称模糊查找符号，按 PageRank 降序返回。"""
+    def query_symbol(self, name: str, query_context: str | None = None) -> list[Symbol]:
+        """按名称模糊查找符号，按 PageRank 降序返回。
+
+        query_context: 可选的关键词上下文，用于为匹配到的符号做局部 boost。
+        当提供时，符号所在文件名命中关键词的会获得额外排序加分。
+        """
         nl = name.lower()
+        candidates = [s for s in self.graph.symbols.values() if nl in s.name.lower()]
+        if not query_context or len(candidates) <= 1:
+            return sorted(candidates, key=lambda s: s.pagerank, reverse=True)
+
+        # 局部 boost：文件名或路径命中 query_context 关键词的符号获得加分
+        context_keywords = query_context.lower().split()
         return sorted(
-            [s for s in self.graph.symbols.values() if nl in s.name.lower()],
-            key=lambda s: s.pagerank, reverse=True,
+            candidates,
+            key=lambda s: (
+                s.pagerank
+                + sum(
+                    0.05
+                    for kw in context_keywords
+                    if kw in s.file.lower()
+                )
+            ),
+            reverse=True,
         )
 
     def call_chain(self, symbol_id: str, direction: str = "both",
@@ -497,6 +515,8 @@ class GraphAnalyzer:
                             "signature": symbol.signature,
                             "pagerank": symbol.pagerank,
                             "summary_score": round(self._summary_symbol_score(symbol), 2),
+                            "incoming_calls": self._edge_count(symbol.id, "incoming", {"call"}),
+                            "outgoing_calls": self._edge_count(symbol.id, "outgoing", {"call"}),
                         }
                         for symbol in ranked_symbols[:per_file]
                     ],
@@ -532,10 +552,31 @@ class EdgeBuilder:
     IMPORT_WEIGHT = 0.35
     CALL_WEIGHT = 0.50
 
+    # 符号可见性排序权重（用于选每个文件最具代表性的符号建边）
+    _VISIBILITY_RANK = {"exported": 3, "public": 2, "private": 1}
+    _KIND_RANK = {"class": 4, "function": 3, "method": 3, "anonymous_function": 2, "struct": 4, "interface": 4, "trait": 4, "enum": 4, "module": 3}
+
     def __init__(self, graph: RepoGraph, resolver: Any) -> None:
         self.graph = graph
         self.resolver = resolver
         self._edge_set: set[tuple[str, str, str]] = set()
+
+    def _top_symbol_ids(self, file: str, max_count: int = 3) -> list[str]:
+        """按语义重要性选文件中最具代表性的符号 ID。"""
+        ids = self.graph.file_symbols.get(file, [])
+        if len(ids) <= max_count:
+            return list(ids)
+        scored = []
+        for sid in ids:
+            sym = self.graph.symbols.get(sid)
+            if sym is None:
+                scored.append((0, sid))
+                continue
+            vis = self._VISIBILITY_RANK.get(sym.visibility, 0)
+            kind = self._KIND_RANK.get(sym.kind, 1)
+            scored.append((vis + kind, sid))
+        scored.sort(key=lambda x: -x[0])
+        return [sid for _, sid in scored[:max(max_count, int(len(ids) * 0.3))]]
 
     def build_edges(self) -> None:
         """构建 import 边和 call 边。"""
@@ -546,14 +587,14 @@ class EdgeBuilder:
 
         # import 边
         for file, imports in sorted(self.graph.file_imports.items()):
-            src_ids = self.graph.file_symbols.get(file, [])[:3]
+            src_ids = self._top_symbol_ids(file)
             for imp in imports:
                 target_files = self.resolver.resolve_import_targets(file, imp)
                 if not target_files:
                     continue
                 import_targets_by_file[file].update(target_files)
                 for target_file in target_files:
-                    tgt_ids = self.graph.file_symbols.get(target_file, [])[:3]
+                    tgt_ids = self._top_symbol_ids(target_file)
                     for s in src_ids:
                         for t in tgt_ids:
                             self._add_edge(s, t, self.IMPORT_WEIGHT, "import")

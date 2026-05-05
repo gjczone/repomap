@@ -33,6 +33,7 @@ class DiagnosticIssue:
     message: str
     symbol: str | None = None  # 关联的符号名称（通过符号图解析）
     symbol_confidence: str = "none"  # 符号关联置信度: "exact" | "line" | "none"
+    callers: list[str] = field(default_factory=list)  # 调用该符号的函数列表
     suggested_fix: str | None = None  # 建议的修复代码（如有）
 
 
@@ -850,6 +851,7 @@ class RepoMapChecker:
         with_lsp: bool = False,
         lsp_timeout: float = 8.0,
         lsp_max_files: int = 20,
+        graph: Any = None,
     ) -> dict[str, Any]:
         """
         运行诊断检查
@@ -860,6 +862,7 @@ class RepoMapChecker:
             symbols_map: 符号图，用于解析错误位置到符号
             since_commit: 检查自某 commit 以来的变更（如 "HEAD~1"）
             modified_files: 显式指定要检查的文件列表（与 since_commit 互斥）
+            graph: 可选的 RepoGraph，用于为诊断问题附加上下文调用者信息
 
         Returns:
             结构化的诊断报告
@@ -897,7 +900,7 @@ class RepoMapChecker:
 
         # 解析符号关联
         if resolve_symbols and symbols_map:
-            self._resolve_symbols(results, symbols_map)
+            self._resolve_symbols(results, symbols_map, graph=graph)
 
         # 构建报告
         report = self._build_report(results, detected_types, target_files)
@@ -958,13 +961,13 @@ class RepoMapChecker:
         return datetime.now(timezone.utc).isoformat()
 
     def _resolve_symbols(
-        self, results: list[DiagnosticResult], symbols_map: dict[str, Any]
+        self, results: list[DiagnosticResult], symbols_map: dict[str, Any],
+        graph: Any = None,
     ) -> None:
-        """将错误位置解析为符号名称，并计算置信度"""
+        """将错误位置解析为符号名称，并计算置信度；可选附加上下文调用者。"""
         # 构建文件 -> 符号列表 的映射，包含行号范围
-        file_symbols: dict[str, list[tuple[str, int, int, int]]] = {}
+        file_symbols: dict[str, list[tuple[str, int, int, str]]] = {}
         for symbol_id, symbol in symbols_map.items():
-            # 安全地获取符号属性，支持对象和字典两种类型
             def _get_attr(obj: Any, attr: str, default: Any = None) -> Any:
                 if hasattr(obj, attr):
                     return getattr(obj, attr, default)
@@ -990,26 +993,33 @@ class RepoMapChecker:
 
                 candidates = file_symbols.get(file_key, [])
                 best_match = None
+                best_match_id = None
                 best_confidence = "none"
 
-                for name, sym_line, sym_end_line, _ in candidates:
-                    # 精确匹配：错误行在符号范围内
+                for name, sym_line, sym_end_line, sym_id in candidates:
                     if sym_line <= issue.line <= max(sym_end_line, sym_line + 50):
-                        # 计算置信度
                         if issue.line == sym_line:
-                            confidence = "exact"  # 正好是符号定义行
+                            confidence = "exact"
                         else:
-                            confidence = "line"  # 在符号范围内
+                            confidence = "line"
 
                         if confidence == "exact" or best_confidence == "none":
                             best_match = name
+                            best_match_id = sym_id
                             best_confidence = confidence
                             if confidence == "exact":
-                                break  # 找到最佳匹配
+                                break
 
                 if best_match:
                     issue.symbol = best_match
                     issue.symbol_confidence = best_confidence
+                    # 附加上下文调用者信息
+                    if graph is not None and best_match_id:
+                        issue.callers = [
+                            graph.symbols[e.source].name
+                            for e in graph.incoming.get(best_match_id, [])
+                            if e.kind == "call" and e.source in graph.symbols
+                        ][:5]
 
     def _build_report(
         self,
@@ -1037,6 +1047,7 @@ class RepoMapChecker:
                     "message": issue.message,
                     "symbol": issue.symbol,
                     "symbol_confidence": issue.symbol_confidence,
+                    "callers": issue.callers,
                     "suggested_fix": issue.suggested_fix,
                 })
 
@@ -1068,6 +1079,7 @@ class RepoMapChecker:
                         "message": e.message,
                         "symbol": e.symbol,
                         "symbol_confidence": e.symbol_confidence,
+                        "callers": e.callers,
                         "suggested_fix": e.suggested_fix,
                     }
                     for e in r.errors[:20]

@@ -36,6 +36,33 @@ def get_session_cache_path(project_path: str) -> Path:
     return cache_dir / "session_scan.json"
 
 
+def get_incremental_cache_path(project_path: str) -> Path:
+    """获取增量扫描持久化缓存路径。"""
+    cache_dir = get_project_cache_dir(project_path)
+    return cache_dir / "incremental.json"
+
+
+@dataclass
+class FileCacheEntry:
+    """单文件增量缓存条目——对应一次全量扫描中一个文件的解析结果"""
+    mtime: float
+    symbols_json: list[dict] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    import_bindings_json: list[dict] = field(default_factory=list)
+    exports_json: list[dict] = field(default_factory=list)
+    calls_json: list[dict] = field(default_factory=list)
+    routes_json: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class IncrementalCache:
+    """持久化的增量扫描基线，用于后续增量扫描时识别变更文件并还原未变更文件"""
+    project_root_hash: str = ""
+    git_head: str = ""
+    files: dict[str, FileCacheEntry] = field(default_factory=dict)
+    scan_stats_json: dict = field(default_factory=dict)
+
+
 @dataclass
 class Symbol:
     """代码符号（函数 / 类 / 接口等）"""
@@ -187,6 +214,7 @@ def compare_graph_snapshots(
     current_edges: list[Edge],
     previous_symbols: list[dict[str, Any]],
     previous_edges: list[dict[str, Any]],
+    incoming_map: dict[str, list[Edge]] | None = None,
 ) -> dict[str, Any]:
     current_symbol_map = {symbol.id: symbol for symbol in current_symbols}
     previous_symbol_map = {row["id"]: row for row in previous_symbols}
@@ -201,20 +229,40 @@ def compare_graph_snapshots(
     for symbol_id in sorted(current_symbol_ids & previous_symbol_ids):
         current = current_symbol_map[symbol_id]
         previous = previous_symbol_map[symbol_id]
-        if (
+        sig_changed = current.signature != previous.get("signature", "")
+        loc_changed = (
             current.line != previous.get("line")
             or current.end_line != previous.get("end_line", current.end_line)
             or current.file != previous.get("file")
-            or current.signature != previous.get("signature", "")
-        ):
-            modified_symbols.append(
-                {
-                    "id": symbol_id,
-                    "name": current.name,
-                    "file": current.file,
-                    "line_change": f"{previous.get('line')} -> {current.line}",
-                }
-            )
+        )
+        if sig_changed or loc_changed:
+            entry = {
+                "id": symbol_id,
+                "name": current.name,
+                "file": current.file,
+                "visibility": current.visibility,
+                "kind": current.kind,
+                "line_change": f"{previous.get('line')} -> {current.line}",
+                "old_signature": previous.get("signature", ""),
+                "new_signature": current.signature,
+                "signature_changed": sig_changed,
+            }
+            # 附加调用者信息
+            if incoming_map:
+                callers = [e for e in incoming_map.get(symbol_id, []) if e.kind == "call"]
+                entry["affected_callers"] = [
+                    {"symbol_id": e.source, "kind": e.kind}
+                    for e in callers[:10]
+                ]
+                entry["affected_caller_count"] = len(callers)
+                # 风险评级：导出符号签名变更→HIGH，否则有调用者→MEDIUM
+                if sig_changed and entry.get("visibility") == "exported":
+                    entry["risk"] = "HIGH"
+                elif sig_changed and len(callers) >= 3:
+                    entry["risk"] = "MEDIUM"
+                else:
+                    entry["risk"] = "LOW"
+            modified_symbols.append(entry)
 
     current_edge_set = {
         edge_id

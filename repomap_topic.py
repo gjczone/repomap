@@ -12,7 +12,7 @@ import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from repomap_support import RepoGraph
@@ -459,7 +459,7 @@ def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:
     scores: dict[tuple[str, str], int] = defaultdict(int)
     try:
         result = subprocess.run(
-            ["git", "log", "--name-only", "--pretty=format:", "--", "."],
+            ["git", "log", "--name-only", "--pretty=format:", "--since=90.days.ago", "--", "."],
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -490,3 +490,85 @@ def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:
                 scores[(a, b)] += 1
 
     return dict(scores)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 测试盲区检测
+# ═══════════════════════════════════════════════════════════════════════════════
+
+LOW_SIGNAL_KINDS = {"element", "selector", "class_selector", "id_selector", "json_key"}
+
+
+def _signal_weight_for_symbol(sym: Any) -> float:
+    """独立版符号信号权重，不依赖 GraphAnalyzer 实例。"""
+    kind = getattr(sym, "kind", "") if hasattr(sym, "kind") else sym.get("kind", "")
+    name = getattr(sym, "name", "") if hasattr(sym, "name") else sym.get("name", "")
+    visibility = getattr(sym, "visibility", "") if hasattr(sym, "visibility") else sym.get("visibility", "")
+    if kind in LOW_SIGNAL_KINDS:
+        return 0.002
+    if name in {"__init__", "__main__"}:
+        return 0.35
+    if name.startswith("_") and visibility == "private":
+        return 0.85
+    return 1.0
+
+
+def find_untested_symbols(
+    graph: "RepoGraph",
+    min_incoming_calls: int = 2,
+    min_score: float = 5.0,
+    max_results: int = 30,
+) -> list[dict]:
+    """找出没有测试覆盖的符号，按风险分降序排列。
+
+    风险分 = incoming_calls × signal_weight × 5.0
+    只返回非测试文件中被调用过但无测试关联的符号。
+    """
+    # 收集所有测试文件中的符号 ID
+    test_symbol_ids: set[str] = set()
+    for f in graph.file_symbols:
+        if is_test_like_file(f):
+            test_symbol_ids.update(graph.file_symbols[f])
+
+    if not test_symbol_ids:
+        return []
+
+    # BFS 一层：被测试符号直接引用的非测试符号视为"已覆盖"
+    covered: set[str] = set()
+    for tsid in test_symbol_ids:
+        for edge in graph.outgoing.get(tsid, []):
+            if edge.target not in test_symbol_ids:
+                covered.add(edge.target)
+
+    untested = []
+    for sid, sym in graph.symbols.items():
+        if sid in test_symbol_ids or sid in covered:
+            continue
+        kind = getattr(sym, "kind", "")
+        if kind in LOW_SIGNAL_KINDS:
+            continue
+        incoming = sum(1 for e in graph.incoming.get(sid, []) if e.kind == "call")
+        if incoming < min_incoming_calls:
+            continue
+        sw = _signal_weight_for_symbol(sym)
+        score = incoming * sw * 5.0
+        if score < min_score:
+            continue
+        untested.append({
+            "symbol": getattr(sym, "name", str(sid)),
+            "kind": getattr(sym, "kind", ""),
+            "file": getattr(sym, "file", ""),
+            "line": getattr(sym, "line", 0),
+            "incoming_calls": incoming,
+            "risk_score": round(score, 1),
+        })
+
+    untested.sort(key=lambda x: -x["risk_score"])
+    return untested[:max_results]
+
+
+def fuzzy_symbol_suggest(query: str, graph: "RepoGraph", limit: int = 5) -> list[str]:
+    """用编辑距离找最接近的符号名，用于 query 无结果时的友好建议。"""
+    import difflib
+    all_names = sorted({s.name for s in graph.symbols.values() if len(s.name) >= 3})
+    return difflib.get_close_matches(query, all_names, n=limit, cutoff=0.5)

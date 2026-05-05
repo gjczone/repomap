@@ -32,9 +32,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from repomap_core import RepoMapEngine
 from repomap_support import (
     Edge,
+    FileCacheEntry,
+    IncrementalCache,
     Symbol,
     compare_graph_snapshots,
     get_cache_paths,
+    get_incremental_cache_path,
     serialize_edge,
     serialize_symbol,
 )
@@ -196,16 +199,127 @@ def load_cache(project_path: str) -> SymbolCache | None:
 def load_last_snapshot(project_path: str) -> SymbolCache | None:
     """加载上次快照（用于 diff）"""
     _, _, last_file = get_cache_paths(project_path)
-    
+
     if not last_file.exists():
         return None
-    
+
     try:
         with open(last_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return SymbolCache(**data)
     except Exception:
         return None
+
+
+def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
+    """保存增量扫描基线——存储每个文件的解析结果以支持后续增量扫描。
+
+    在全量扫描完成后调用，建立基线快照。
+    """
+    cache_path = get_incremental_cache_path(project_path)
+    cache_dir = cache_path.parent
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    git_head = ""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_path, capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            git_head = result.stdout.strip()
+    except Exception:
+        pass
+
+    files: dict[str, dict] = {}
+    for file_path in engine.graph.file_symbols:
+        full = engine.project_root / file_path
+        mtime = full.stat().st_mtime if full.exists() else 0.0
+        files[file_path] = {
+            "mtime": mtime,
+            "symbols_json": [serialize_symbol(engine.graph.symbols[sid]) for sid in engine.graph.file_symbols[file_path] if sid in engine.graph.symbols],
+            "imports": engine.graph.file_imports.get(file_path, []),
+            "import_bindings_json": [{"local_name": b.local_name, "imported_name": b.imported_name, "module": b.module, "line": b.line, "kind": b.kind} for b in engine.graph.file_import_bindings.get(file_path, [])],
+            "exports_json": [{"exported_name": b.exported_name, "source_name": b.source_name, "module": b.module, "line": b.line, "kind": b.kind} for b in engine.graph.file_exports.get(file_path, [])],
+            "calls_json": [{"name": c[0], "line": c[1], "kind": c[2]} if len(c) >= 3 else {"name": c[0], "line": c[1], "kind": "direct"} for c in engine.graph.file_calls.get(file_path, [])],
+            "routes_json": [{"method": r.method, "path": r.path, "handler": r.handler, "file": r.file, "line": r.line, "framework": r.framework} for r in engine.routes if r.file == file_path],
+        }
+
+    cache = IncrementalCache(
+        project_root_hash=str(hash(str(engine.project_root))),
+        git_head=git_head,
+        files={fp: FileCacheEntry(**data) for fp, data in files.items()},
+        scan_stats_json={
+            "processed_files": engine.scan_stats.processed_files,
+            "total_symbols": len(engine.graph.symbols),
+            "total_edges": sum(len(v) for v in engine.graph.outgoing.values()),
+        },
+    )
+
+    import tempfile
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', encoding='utf-8', dir=cache_dir,
+            prefix='.tmp_inc_', suffix='.json', delete=False,
+        ) as f:
+            temp_path = f.name
+            json.dump(_inc_cache_to_dict(cache), f, indent=2, ensure_ascii=False)
+        os.replace(temp_path, cache_path)
+    except Exception:
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.unlink(temp_path)
+        raise
+
+    return cache_path
+
+
+def load_incremental_cache(project_path: str) -> IncrementalCache | None:
+    """加载增量扫描基线。返回 None 表示基线不存在或已失效。"""
+    cache_path = get_incremental_cache_path(project_path)
+    if not cache_path.exists():
+        return None
+    try:
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        files = {}
+        for fp, entry_data in data.get("files", {}).items():
+            files[fp] = FileCacheEntry(
+                mtime=entry_data.get("mtime", 0.0),
+                symbols_json=entry_data.get("symbols_json", []),
+                imports=entry_data.get("imports", []),
+                import_bindings_json=entry_data.get("import_bindings_json", []),
+                exports_json=entry_data.get("exports_json", []),
+                calls_json=entry_data.get("calls_json", []),
+                routes_json=entry_data.get("routes_json", []),
+            )
+        return IncrementalCache(
+            project_root_hash=data.get("project_root_hash", ""),
+            git_head=data.get("git_head", ""),
+            files=files,
+            scan_stats_json=data.get("scan_stats_json", {}),
+        )
+    except (json.JSONDecodeError, KeyError):
+        return None
+
+
+def _inc_cache_to_dict(cache: IncrementalCache) -> dict:
+    return {
+        "project_root_hash": cache.project_root_hash,
+        "git_head": cache.git_head,
+        "files": {
+            fp: {
+                "mtime": entry.mtime,
+                "symbols_json": entry.symbols_json,
+                "imports": entry.imports,
+                "import_bindings_json": entry.import_bindings_json,
+                "exports_json": entry.exports_json,
+                "calls_json": entry.calls_json,
+                "routes_json": entry.routes_json,
+            }
+            for fp, entry in cache.files.items()
+        },
+        "scan_stats_json": cache.scan_stats_json,
+    }
 
 
 def _symbol_to_dict(s: Symbol) -> dict:

@@ -36,10 +36,8 @@ from repomap_resolver import ImportResolver
 from repomap_support import (
     RepoGraph,
     ScanStats,
-    compare_graph_snapshots,
-    edge_identity_from_edge,
-    get_cache_paths,
-    serialize_edge,
+    Symbol,
+    get_incremental_cache_path,
     serialize_symbol,
 )
 
@@ -188,16 +186,18 @@ class RepoMapEngine:
     # 扫描主流程
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def scan(self, max_files: int = 8000, max_scan_time: float = 300.0) -> None:
+    def scan(self, max_files: int = 8000, max_scan_time: float = 300.0,
+             incremental: bool = False) -> None:
         """三阶段扫描：提取符号 → 建依赖边 → PageRank。
-        
+
         Args:
             max_files: 最多扫描文件数
             max_scan_time: 扫描超时时间（秒），默认 300 秒（5 分钟）
+            incremental: 尝试增量扫描——只重新解析 git 变更文件
         """
         import time
         start_time = time.time()
-        
+
         self.scan_state = "invalid"
         if not self.ts.parsers:
             raise RuntimeError(
@@ -209,24 +209,45 @@ class RepoMapEngine:
         self._cache = {}
         self.scan_stats = ScanStats()
         self.routes = []
-        # _analyzer 延迟到 graph 构建完成后初始化
+        self._inc_cache_loaded = False
 
-        files = self._list_files(max_files)
-        logger.info(f"Found {len(files)} source files")
+        # 尝试加载增量缓存
+        inc_cache = None
+        if incremental:
+            inc_cache = self._load_incremental_cache_if_valid()
+        if inc_cache:
+            changed_files, deleted_files = self._git_changed_files()
+            all_candidate_files = self._list_files(max_files)
+            # 过滤：只保留仍在项目中的变更文件
+            changed_set = set(changed_files) & set(all_candidate_files)
+            unchanged_set = set(inc_cache.files.keys()) - changed_set - set(deleted_files)
+            # 只解析变更文件
+            files_to_scan = [f for f in all_candidate_files if f in changed_set]
+            logger.info(
+                f"Incremental scan: {len(files_to_scan)} changed, "
+                f"{len(unchanged_set)} unchanged, {len(deleted_files)} deleted"
+            )
+            # 还原未变更文件
+            for f in sorted(unchanged_set):
+                if f in all_candidate_files:
+                    self._restore_from_inc_cache(f, inc_cache.files[f])
+            self._inc_cache_loaded = True
+        else:
+            files_to_scan = self._list_files(max_files)
+            logger.info(f"Found {len(files_to_scan)} source files")
 
         try:
-            for f in files:
+            for f in files_to_scan:
                 # 超时熔断检查
                 elapsed = time.time() - start_time
                 if elapsed > max_scan_time:
                     self.scan_stats.timeout_triggered = True
                     logger.warning(f"扫描超时熔断：已运行 {elapsed:.1f}s，超过 {max_scan_time}s 限制")
                     break
-                
+
                 try:
                     self._process_file(f)
                 except Exception as e:
-                    # 记录失败的文件（最多记录 5 个）
                     if len(self.scan_stats.failed_files) < 5:
                         self.scan_stats.failed_files.append(f"{f}: {type(e).__name__}: {str(e)[:50]}")
                     logger.warning(f"Failed to process file {f}: {e}")
@@ -241,10 +262,17 @@ class RepoMapEngine:
         finally:
             self.scan_stats.scan_duration_ms = int((time.time() - start_time) * 1000)
 
+        # 全量扫描后保存增量基线
+        if not self._inc_cache_loaded and self.scan_state == "scanned":
+            try:
+                from repomap_toolkit import save_incremental_cache
+                save_incremental_cache(str(self.project_root), self)
+            except Exception as e:
+                logger.debug(f"Failed to save incremental cache: {e}")
+
         sym_count = len(self.graph.symbols)
         edge_count = sum(len(v) for v in self.graph.outgoing.values())
-        
-        # 构建扫描摘要日志
+
         summary_parts = [f"Scan complete — {sym_count} symbols, {edge_count} edges, {self.scan_stats.scan_duration_ms}ms"]
         if self.scan_stats.skipped_files:
             summary_parts.append(f", {self.scan_stats.skipped_files} skipped (unchanged)")
@@ -252,7 +280,7 @@ class RepoMapEngine:
             summary_parts.append(f", {len(self.scan_stats.failed_files)} failed files")
         if self.scan_stats.timeout_triggered:
             summary_parts.append(", timeout triggered")
-        
+
         if self.scan_stats.failed_files or self.scan_stats.timeout_triggered:
             logger.warning("".join(summary_parts))
         else:
@@ -260,6 +288,117 @@ class RepoMapEngine:
 
     def is_scanned(self) -> bool:
         return self.scan_state == "scanned"
+
+    # ── 增量扫描辅助 ─────────────────────────────────────────────────────────
+
+    def _load_incremental_cache_if_valid(self) -> Any | None:
+        """加载增量缓存并校验有效性（项目路径 + git HEAD 匹配）。"""
+        try:
+            from repomap_toolkit import load_incremental_cache
+            cache = load_incremental_cache(str(self.project_root))
+            if cache is None or not cache.files:
+                return None
+            # 校验 git HEAD 是否匹配
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=self.project_root, capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode != 0:
+                    return None
+                if cache.git_head and cache.git_head != result.stdout.strip():
+                    logger.debug("Incremental cache stale: git HEAD changed")
+                    return None
+            except Exception:
+                pass
+            return cache
+        except Exception:
+            return None
+
+    @staticmethod
+    def _git_changed_files() -> tuple[list[str], list[str]]:
+        """返回 (modified_files, deleted_files)，相对于项目根目录。"""
+        modified, deleted = [], []
+        try:
+            # unstaged + staged modifications
+            for status_cmd in (["git", "diff", "--name-only", "HEAD"],):
+                result = subprocess.run(
+                    status_cmd, capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.strip().split("\n"):
+                        if line:
+                            modified.append(line)
+            # deleted files
+            result = subprocess.run(
+                ["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        deleted.append(line)
+        except Exception:
+            pass
+        return sorted(set(modified)), sorted(set(deleted))
+
+    def _restore_from_inc_cache(self, file_path: str, entry: Any) -> None:
+        """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""
+        # 检查文件 mtime 是否一致
+        full = self.project_root / file_path
+        if full.exists():
+            actual_mtime = full.stat().st_mtime
+            if abs(actual_mtime - entry.mtime) > 0.001:
+                return  # mtime 不一致，不还原
+
+        # 还原符号
+        self.graph.file_symbols.setdefault(file_path, [])
+        for sym_dict in entry.symbols_json:
+            sym = Symbol(
+                id=sym_dict["id"], name=sym_dict["name"], kind=sym_dict["kind"],
+                file=sym_dict["file"], line=sym_dict["line"],
+                end_line=sym_dict.get("end_line", sym_dict["line"]),
+                col=sym_dict.get("col", 0),
+                visibility=sym_dict.get("visibility", "private"),
+                docstring=sym_dict.get("docstring", ""),
+                signature=sym_dict.get("signature", ""),
+                pagerank=sym_dict.get("pagerank", 0.0),
+            )
+            self.graph.symbols[sym.id] = sym
+            self.graph.file_symbols[file_path].append(sym.id)
+
+        # 还原 imports
+        self.graph.file_imports[file_path] = list(entry.imports)
+
+        # 还原 import bindings
+        from repomap_support import JSImportBinding
+        self.graph.file_import_bindings[file_path] = [
+            JSImportBinding(
+                local_name=b["local_name"], imported_name=b["imported_name"],
+                module=b["module"], line=b["line"], kind=b.get("kind", "named"),
+            )
+            for b in entry.import_bindings_json
+        ]
+
+        # 还原 exports
+        from repomap_support import JSExportBinding
+        self.graph.file_exports[file_path] = [
+            JSExportBinding(
+                exported_name=b["exported_name"], source_name=b.get("source_name"),
+                module=b.get("module"), line=b["line"], kind=b.get("kind", "local"),
+            )
+            for b in entry.exports_json
+        ]
+
+        # 还原 calls
+        self.graph.file_calls[file_path] = [
+            (c["name"], c["line"], c.get("kind", "direct"))
+            for c in entry.calls_json
+        ]
+
+        # 更新 mtime 缓存
+        self._cache[file_path] = entry.mtime
+        self.scan_stats.processed_files += 1
 
     # ── 文件处理 ───────────────────────────────────────────────────────────────
 

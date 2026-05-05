@@ -64,6 +64,75 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
     return hot_files
 
 
+def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
+    """生成一句话项目摘要：语言、框架、项目类型。"""
+    from repomap_parser import EXT_TO_LANG
+
+    # 统计语言分布
+    lang_counts: dict[str, int] = {}
+    for f in engine.graph.file_symbols:
+        ext = PurePosixPath(f).suffix.lower()
+        lang = EXT_TO_LANG.get(ext, "")
+        if lang:
+            lang_counts[lang] = lang_counts.get(lang, 0) + 1
+    if not lang_counts:
+        return ""
+    top_langs = sorted(lang_counts.items(), key=lambda x: -x[1])[:3]
+    lang_names = {
+        "python": "Python", "javascript": "JS", "typescript": "TS", "tsx": "TSX",
+        "go": "Go", "rust": "Rust", "c": "C", "cpp": "C++", "java": "Java",
+        "kotlin": "Kotlin", "swift": "Swift", "c_sharp": "C#", "php": "PHP",
+        "ruby": "Ruby", "html": "HTML", "css": "CSS", "json": "JSON",
+    }
+    lang_str = " + ".join(
+        f"{lang_names.get(l, l)} ({c}f)" for l, c in top_langs
+    )
+
+    # 检测框架
+    frameworks: list[str] = []
+    routes = engine.list_routes()
+    if routes:
+        fw_set = {r.framework for r in routes if hasattr(r, "framework")}
+        frameworks.extend(sorted(fw_set))
+    # 从文件列表推断框架
+    file_set = set(engine.graph.file_symbols.keys())
+    file_str = " ".join(file_set)
+    if any(f.endswith(".rs") for f in file_set):
+        if "axum" in file_str:
+            frameworks.append("axum")
+        if "tauri" in file_str or any("tauri" in f for f in file_set):
+            frameworks.append("tauri")
+        if "actix" in file_str:
+            frameworks.append("actix-web")
+    if any(f.endswith((".tsx", ".jsx")) for f in file_set):
+        if "next.config" in file_str:
+            frameworks.append("next.js")
+        elif "vite.config" in file_str:
+            frameworks.append("vite")
+        else:
+            frameworks.append("react")
+
+    # 项目类型
+    ptype = "应用"
+    entries = engine.entry_points()
+    if entries:
+        entry_str = " ".join(entries).lower()
+        if "main.rs" in entry_str or "main.go" in entry_str or "main.c" in entry_str:
+            ptype = "二进制/CLI 应用"
+        elif "lib.rs" in entry_str and "main.rs" not in entry_str:
+            ptype = "库"
+        elif any("server" in e for e in entries) or routes:
+            ptype = "Web 服务"
+    if "tui" in file_str or any("tui" in f.lower() for f in file_set):
+        ptype = "TUI 应用" if ptype == "二进制/CLI 应用" else ptype
+
+    parts = [f"**项目类型**: {ptype}"]
+    parts.append(f"**语言**: {lang_str}")
+    if frameworks:
+        parts.append(f"**框架**: {', '.join(frameworks)}")
+    return " | ".join(parts)
+
+
 def _auto_granularity(engine: "RepoMapEngine") -> str:
     """根据项目规模自动选择报告粒度。
 
@@ -249,6 +318,11 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
     if engine.scan_stats.truncated_files:
         lines.append(f"> `max_files` 截断了 {engine.scan_stats.truncated_files} 个候选文件\n")
 
+    # 一句话项目摘要
+    summary = _project_summary(engine, granularity)
+    if summary:
+        lines.append(f"> {summary}\n")
+
     # 热度计算：如果启用，标记近 30 天频繁修改的文件
     hot_files: set[str] = set()
     if with_heat:
@@ -357,9 +431,28 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
                 pagerank = symbol_row["pagerank"] * 1000
                 visibility = VISIBILITY_MARK.get(symbol_row["visibility"], "[private]")
                 signature = f"  \n  *`{symbol_row['signature']}`*" if symbol_row["signature"] else ""
+                # 生成重要性说明
+                importance_parts = []
+                incoming = symbol_row.get("incoming_calls", 0)
+                outgoing = symbol_row.get("outgoing_calls", 0)
+                if incoming > 0:
+                    importance_parts.append(f"← {incoming} callers")
+                if outgoing > 0:
+                    importance_parts.append(f"→ {outgoing} callees")
+                if not importance_parts:
+                    if symbol_row["kind"] == "class":
+                        importance_parts.append("type definition")
+                    elif symbol_row["visibility"] == "exported":
+                        importance_parts.append("exported")
+                    elif incoming == 0 and outgoing == 0:
+                        if symbol_row.get("summary_score", 0) > 10:
+                            importance_parts.append("high-importance leaf")
+                        else:
+                            importance_parts.append("leaf/entry")
+                importance_hint = f"  ({', '.join(importance_parts)})" if importance_parts else ""
                 lines.append(
                     f"- {visibility} **{symbol_row['name']}** `({symbol_row['kind']})`"
-                    f" L{symbol_row['line']} Score={symbol_row['summary_score']:.2f} PR={pagerank:.1f}{signature}"
+                    f" L{symbol_row['line']} Score={symbol_row['summary_score']:.2f} PR={pagerank:.1f}{importance_hint}{signature}"
                 )
             lines.append("")
 
@@ -368,6 +461,18 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         co_change_lines = _render_co_change_section(engine)
         if co_change_lines:
             lines.extend(co_change_lines)
+
+    # Quick Actions
+    lines.append("## Quick Actions\n")
+    top_file = suggestions[0]["file"] if suggestions else ""
+    top_symbol = suggestions[0]["top_symbols"][0] if suggestions and suggestions[0].get("top_symbols") else ""
+    lines.append(f"- 查看入口文件详情: `repomap file-detail --project . --file-path {top_file or 'repomap_core.py'}`")
+    if top_symbol:
+        lines.append(f"- 查看核心符号调用链: `repomap call-chain --project . --symbol {top_symbol}`")
+    lines.append("- 搜索特定主题: `repomap query --project . --query <keyword>`")
+    lines.append("- 检查诊断: `repomap check --project .`")
+    lines.append("- 完整验证: `repomap verify --project .`")
+    lines.append("")
 
     return _truncate_output("\n".join(lines), max_chars)
 
@@ -654,6 +759,21 @@ def render_impact_report(
         if lsp_hint and lsp_hint.get("available"):
             lines.append("- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters.")
         lines.append("")
+        # 编辑 checklist
+        checklist: list[str] = []
+        checklist.append("□ 阅读目标文件及 Read Next 中的高优先级文件")
+        if key_symbols:
+            checklist.append("□ 检查 Key Symbols 的调用链（repomap call-chain）确认影响范围")
+        if affected_files:
+            checklist.append("□ 逐个检查 Likely Affected Files 是否需要同步修改")
+        if tests:
+            checklist.append("□ 修改完成后运行 Suggested Tests 中的测试")
+        checklist.append("□ 编辑完成后运行 repomap verify 做最终证据检查")
+        if checklist:
+            lines.append("### Edit Checklist\n")
+            for item in checklist:
+                lines.append(item)
+            lines.append("")
 
     if key_symbols:
         lines.append("## Key Symbols\n")
@@ -699,6 +819,16 @@ def render_impact_report(
         for note in risk_notes:
             lines.append(f"- {note}")
         lines.append("")
+
+    # Related Commands
+    lines.append("## Related Commands\n")
+    if target_files:
+        lines.append(f"- 查看目标文件详情: `repomap file-detail --project . --file-path {target_files[0]}`")
+    if affected_files:
+        top_affected = affected_files[0][0]
+        lines.append(f"- 检查首要受影响文件: `repomap file-detail --project . --file-path {top_affected}`")
+    lines.append("- 验证变更: `repomap verify --project .`")
+    lines.append("")
 
     return _truncate_output("\n".join(lines), max_chars)
 
@@ -781,6 +911,45 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         ]):
             lines.append(f"- `{command}`")
         lines.append("")
+    else:
+        lines.append("## Suggested Tests\n")
+        lines.append("- 未匹配到与变更文件相关的测试文件。")
+        changed_files = result.get("changedFiles", [])
+        if changed_files:
+            # 给出通用测试命令建议
+            test_hints: list[str] = []
+            for f in changed_files[:3]:
+                if f.endswith(".py"):
+                    test_hints.append("python -m pytest")
+                    break
+                elif f.endswith((".ts", ".tsx", ".js", ".jsx")):
+                    test_hints.append("npx vitest run")
+                    break
+                elif f.endswith(".go"):
+                    test_hints.append("go test ./...")
+                    break
+                elif f.endswith(".rs"):
+                    test_hints.append("cargo test")
+                    break
+            if test_hints:
+                lines.append(f"- 建议手动运行: `{test_hints[0]}`")
+            else:
+                lines.append("- 建议手动运行项目测试套件。")
+        lines.append("")
+
+    untested = result.get("untestedSymbols", [])
+    if untested:
+        lines.append("## Test Coverage Gaps\n")
+        lines.append("> 以下符号缺少测试覆盖，修改时需格外谨慎。\n")
+        lines.append("| Symbol | Kind | File | Callers | Risk |")
+        lines.append("|--------|------|------|:------:|:----:|")
+        for item in untested[:15]:
+            risk_label = "HIGH" if item["risk_score"] >= 10 else "MEDIUM" if item["risk_score"] >= 5 else "LOW"
+            lines.append(
+                f"| `{item['symbol']}` | {item['kind']} | `{item['file']}:{item['line']}` "
+                f"| {item['incoming_calls']} | {risk_label} |"
+            )
+        lines.append("")
 
     check = result.get("check", {})
     lines.append("## Check Result\n")
@@ -808,6 +977,23 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     lines.append("")
 
     graph_diff = result.get("graphDiff", {})
+    breaking_changes = graph_diff.get("breakingChanges", [])
+    if breaking_changes:
+        lines.append("## Breaking Changes\n")
+        for bc in breaking_changes[:10]:
+            risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}
+            lines.append(
+                f"- {risk_icon.get(bc.get('risk', 'LOW'), '⚪')} "
+                f"**{bc['name']}** `({bc.get('kind', '')})` in `{bc['file']}` "
+                f"[{bc.get('risk', 'LOW')}]"
+            )
+            if bc.get("new_signature") and bc.get("old_signature") != bc.get("new_signature"):
+                lines.append(f"  - 旧: `{bc.get('old_signature', '')}`")
+                lines.append(f"  - 新: `{bc.get('new_signature', '')}`")
+            if bc.get("affected_caller_count", 0) > 0:
+                lines.append(f"  - {bc['affected_caller_count']} 个调用者受影响")
+        lines.append("")
+
     lines.append("## Graph Diff\n")
     lines.append(f"- Status: **{str(graph_diff.get('status', 'skipped')).upper()}**")
     if graph_diff.get("reason"):

@@ -42,6 +42,7 @@ from repomap_topic import (
     classify_file_role,
     compute_keyword_weights,
     find_related_tests,
+    find_untested_symbols,
     is_test_like_file,
     split_identifier,
     topic_score,
@@ -50,6 +51,12 @@ from repomap_topic import (
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
 CLI_NAME = "repomap"
+
+# 统一 exit code 语义
+EXIT_SUCCESS = 0       # 成功，有有效输出
+EXIT_ERROR = 1         # 命令执行失败
+EXIT_INVALID_ARGS = 2  # 参数错误
+EXIT_NO_RESULTS = 3    # 无结果（query 无匹配、routes 为空）
 PYINSTALLER_BINDINGS = [
     "tree_sitter",
     "tree_sitter_python",
@@ -63,7 +70,7 @@ PYINSTALLER_BINDINGS = [
     "repomap_lsp",
 ]
 
-_SCAN_CACHE: dict[tuple[str, int, int, str], tuple[str, RepoMapEngine]] = {}
+_SCAN_CACHE: dict[tuple[str, int, int, str, bool], tuple[str, RepoMapEngine]] = {}
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
 SESSION_CACHE_VERSION = 5
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
@@ -151,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     impact_parser.add_argument("--json", action="store_true")
     impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
     impact_parser.add_argument("--with-symbols", action="store_true", help="Include edit-planning key symbols, read-next order, and LSP availability hint.")
+    impact_parser.add_argument("--depth", type=int, default=1, help="Transitive impact depth (default 1=direct, 2=one hop out).")
 
     verify_parser = subparsers.add_parser("verify", help="Aggregate post-edit evidence before final handoff.")
     verify_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
@@ -159,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--max-issues", type=int, default=50, help="Maximum issues per tool.")
     verify_parser.add_argument("--no-symbols", action="store_true", help="Skip scan-based symbol resolution for diagnostics.")
     verify_parser.add_argument("--with-lsp", action="store_true", help="Include focused LSP diagnostics for changed files.")
+    verify_parser.add_argument("--no-incremental", action="store_true", help="Force full scan instead of incremental.")
     verify_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     verify_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum changed files to open through LSP.")
     verify_parser.add_argument("--with-diff", action="store_true", help="Include graph diff when a cache baseline exists.")
@@ -315,6 +324,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_impact(
             args.project, 8000, args.files,
             getattr(args, "max_files", 20), args.json, getattr(args, "with_symbols", False),
+            depth=getattr(args, "depth", 1),
+            incremental=not getattr(args, "no_incremental", False),
         )
     if command == "verify":
         return run_verify(
@@ -328,6 +339,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             lsp_max_files=args.lsp_max_files,
             with_diff=args.with_diff,
             quick=args.quick,
+            incremental=not getattr(args, "no_incremental", False),
         )
     if command == "file-detail":
         return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars)
@@ -473,13 +485,14 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
     return digest.hexdigest()
 
 
-def _scan_engine(project: str | None, max_files: int) -> RepoMapEngine:
+def _scan_engine(project: str | None, max_files: int, incremental: bool = False) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (
         resolved_project,
         max_files,
         _read_max_file_bytes(),
         os.getenv("REPOMAP_SCAN_LARGE_FILES", "0"),
+        incremental,
     )
     fingerprint = _scan_fingerprint(resolved_project, max_files)
     cached = _SCAN_CACHE.get(cache_key)
@@ -493,7 +506,7 @@ def _scan_engine(project: str | None, max_files: int) -> RepoMapEngine:
         return session_engine
 
     engine = RepoMapEngine(resolved_project)
-    engine.scan(max_files=max_files)
+    engine.scan(max_files=max_files, incremental=incremental)
     _save_session_engine(resolved_project, fingerprint, engine)
     _SCAN_CACHE[cache_key] = (fingerprint, engine)
     return engine
@@ -1249,9 +1262,11 @@ def run_impact(
     max_affected_files: int,
     as_json: bool,
     with_symbols: bool = False,
+    depth: int = 1,
+    incremental: bool = False,
 ) -> int:
     try:
-        engine = _scan_engine(project, max_files)
+        engine = _scan_engine(project, max_files, incremental=incremental)
 
         target_files = _normalize_project_relative_paths(engine.project_root, target_files)
 
@@ -1283,6 +1298,39 @@ def run_impact(
                             "medium",
                         )
 
+        # 传递影响展开：用 BFS 从已影响文件的符号出发，找更深层的文件
+        if depth > 1 and affected_files:
+            processed_files = set(target_files) | set(affected_files)
+            frontier: set[str] = set(affected_files)
+            for current_depth in range(1, depth):
+                next_frontier: set[str] = set()
+                for affected_file in frontier:
+                    for sid in engine.graph.file_symbols.get(affected_file, []):
+                        # 谁调用了这个受影响文件的符号？
+                        for edge in engine.graph.incoming.get(sid, []):
+                            src_sym = engine.graph.symbols.get(edge.source)
+                            if src_sym and src_sym.file not in processed_files:
+                                next_frontier.add(src_sym.file)
+                                if src_sym.file not in affected_files:
+                                    affected_files[src_sym.file] = (
+                                        f"传递影响 depth={current_depth + 1}: 调用了 {affected_file} 中的 {src_sym.name}",
+                                        "low",
+                                    )
+                        # 这个受影响文件的符号调用了谁？
+                        for edge in engine.graph.outgoing.get(sid, []):
+                            tgt_sym = engine.graph.symbols.get(edge.target)
+                            if tgt_sym and tgt_sym.file not in processed_files:
+                                next_frontier.add(tgt_sym.file)
+                                if tgt_sym.file not in affected_files:
+                                    affected_files[tgt_sym.file] = (
+                                        f"传递影响 depth={current_depth + 1}: 被 {affected_file} 中的 {_sym_name(engine, sid)} 调用",
+                                        "low",
+                                    )
+                processed_files |= next_frontier
+                frontier = next_frontier
+                if not frontier:
+                    break
+
         # 找相关测试
         analysis = engine.file_analysis()
         tests = find_related_tests(target_files, engine.graph, analysis, engine.project_root)
@@ -1291,7 +1339,16 @@ def run_impact(
         risk_level, risk_notes = _assess_risk(target_files, set(affected_files), engine)
 
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
-        affected_list.sort(key=lambda x: (x[2], x[0]))
+        # 按影响严重程度排序：受影响文件中符号的外部调用者越多越靠前
+        affected_list.sort(key=lambda x: (
+            {"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
+            -_affected_severity(x[0], engine),
+            x[0],
+        ), reverse=True)
+        affected_list = sorted(affected_list, key=lambda x: (
+            -{"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
+            -_affected_severity(x[0], engine),
+        ))
         affected_list = affected_list[:max_affected_files]
         key_symbols = _impact_key_symbols(engine, target_files) if with_symbols else []
         read_next = _impact_read_next(target_files, affected_list, tests)
@@ -1299,6 +1356,7 @@ def run_impact(
 
         if as_json:
             payload = {
+                "schema_version": "1.0",
                 "command": "impact",
                 "project": str(engine.project_root),
                 "scanStats": _scan_stats_payload(engine),
@@ -1338,6 +1396,18 @@ def run_impact(
     except Exception as exc:
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
         return 1
+
+
+def _affected_severity(file_path: str, engine: RepoMapEngine) -> int:
+    """计算受影响文件的严重程度：文件中符号被外部调用的总次数。"""
+    total = 0
+    for sid in engine.graph.file_symbols.get(file_path, []):
+        for edge in engine.graph.incoming.get(sid, []):
+            if edge.kind == "call":
+                src_sym = engine.graph.symbols.get(edge.source)
+                if src_sym and src_sym.file != file_path:
+                    total += 1
+    return total
 
 
 def _assess_risk(
@@ -1556,15 +1626,35 @@ def _verify_lsp_payload(
         return {"enabled": True, "status": "failed", "runs": [], "summary": {}, "reason": str(exc)}
 
 
-def _verify_graph_diff_payload(project_root: str, enabled: bool) -> dict[str, Any]:
+def _verify_graph_diff_payload(project_root: str, enabled: bool, incoming_map: dict | None = None) -> dict[str, Any]:
     if not enabled:
-        return {"enabled": False, "status": "skipped", "summary": {}}
+        return {"enabled": False, "status": "skipped", "summary": {}, "breakingChanges": []}
     result = diff_project(project_root)
     if "error" in result:
-        return {"enabled": True, "status": "skipped", "summary": {}, "reason": result["error"]}
+        return {"enabled": True, "status": "skipped", "summary": {}, "breakingChanges": [], "reason": result["error"]}
+    # 如果提供了 incoming_map，二次调用带调用者分析的 compare
+    if incoming_map is not None:
+        from repomap_toolkit import load_cache
+        from repomap_support import compare_graph_snapshots
+        cache = load_cache(project_root)
+        if cache:
+            current_symbols, current_edges = scan_project(project_root, max_files=5000)
+            enriched = compare_graph_snapshots(
+                current_symbols=current_symbols, current_edges=current_edges,
+                previous_symbols=cache.symbols, previous_edges=cache.edges,
+                incoming_map=incoming_map,
+            )
+            breaking = [
+                ms for ms in enriched.get("modified_symbols", [])
+                if ms.get("risk") in ("HIGH", "MEDIUM") and ms.get("signature_changed")
+            ]
+            result["breakingChanges"] = breaking[:20]
+    if "breakingChanges" not in result:
+        result["breakingChanges"] = []
     summary = result.get("summary", {})
     changed = any(summary.get(key, 0) for key in ("added", "removed", "modified", "edges_added", "edges_removed"))
-    return {"enabled": True, "status": "changed" if changed else "unchanged", "summary": summary}
+    result["status"] = "changed" if changed else "unchanged"
+    return result
 
 
 def _overall_verify_status(
@@ -1597,6 +1687,7 @@ def run_verify(
     lsp_max_files: int,
     with_diff: bool,
     quick: bool = False,
+    incremental: bool = False,
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -1605,7 +1696,7 @@ def run_verify(
             print(f"[{CLI_NAME}] verify failed: {error}", file=sys.stderr)
             return 1
 
-        engine = _scan_engine(project_root, 8000)
+        engine = _scan_engine(project_root, 8000, incremental=incremental)
         evidence = _diff_risk_evidence(engine, changed_files)
 
         if quick:
@@ -1624,7 +1715,10 @@ def run_verify(
             )
             lsp_payload = _verify_lsp_payload(project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files)
 
-        graph_diff_payload = _verify_graph_diff_payload(project_root, with_diff)
+        graph_diff_payload = _verify_graph_diff_payload(
+            project_root, with_diff,
+            incoming_map=engine.graph.incoming if with_diff else None,
+        )
         status = _overall_verify_status(
             changed_files,
             evidence["riskLevel"],
@@ -1633,7 +1727,10 @@ def run_verify(
             lsp_payload,
             graph_diff_payload,
         )
+        untested = find_untested_symbols(engine.graph) if not quick else []
+
         payload = {
+            "schema_version": "1.0",
             "command": "verify",
             "project": str(engine.project_root),
             "scanStats": _scan_stats_payload(engine),
@@ -1654,6 +1751,7 @@ def run_verify(
                      "confidence": test.confidence, "reason": test.reason}
                     for test in evidence["tests"]
                 ],
+                "untestedSymbols": untested,
                 "check": {
                     "status": check_payload.get("status", "unknown"),
                     "summary": check_payload.get("summary", {}),
@@ -2034,20 +2132,34 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
             lines.append(f"置信度阈值: {min_confidence}（已过滤低置信项）")
         lines.append("")
 
+        def _module_for_file(file_path: str) -> str:
+            parts = [p for p in PurePosixPath(file_path).parts if p not in ("", ".")]
+            if not parts:
+                return "(root)"
+            if len(parts) == 1:
+                return "(root)"
+            if parts[0] in {"src", "app", "apps", "packages", "services", "modules", "libs", "lib", "crates"}:
+                return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
+            return parts[0]
+
         def _render_tier(title: str, emoji: str, items: list[dict], max_items: int):
             if not items:
                 return []
             tier_lines = [f"### {emoji} {title} — {len(items)} 个"]
-            if not items:
-                return tier_lines
+            # 按模块分组
+            by_module: dict[str, list[dict]] = {}
+            for item in items:
+                mod = _module_for_file(item["symbol"].file)
+                by_module.setdefault(mod, []).append(item)
             tier_lines.append("")
-            tier_lines.append("| 符号 | 类型 | 文件:行 | 置信度 | 理由 |")
-            tier_lines.append("| --- | --- | --- | --- | --- |")
-            for item in items[:max_items]:
-                sym = item["symbol"]
-                tier_lines.append(f"| `{sym.name}` | {sym.kind} | `{sym.file}:{sym.line}` | {item['confidence']} | {item['note']} |")
-            if len(items) > max_items:
-                tier_lines.append(f"| … | | 还有 {len(items) - max_items} 个 | | |")
+            for mod in sorted(by_module, key=lambda m: -len(by_module[m])):
+                mod_items = by_module[mod][:max(3, max_items // max(len(by_module), 1))]
+                tier_lines.append(f"**`{mod}/`** ({len(by_module[mod])} 个)")
+                for item in mod_items:
+                    sym = item["symbol"]
+                    tier_lines.append(f"- `{sym.name}` ({sym.kind}) `{sym.file}:{sym.line}` — {item['confidence']}% | {item['note']}")
+                if len(by_module[mod]) > len(mod_items):
+                    tier_lines.append(f"  …还有 {len(by_module[mod]) - len(mod_items)} 个")
             tier_lines.append("")
             return tier_lines
 

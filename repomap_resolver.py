@@ -188,6 +188,7 @@ class ImportResolver:
         self.bundler_aliases = BundlerAliasConfig(project_root)
         self.package_exports: dict[str, PackageJsonExports] = {}  # package name -> exports
         self.package_export_roots: dict[str, PurePosixPath] = {}  # package name -> project-relative package root
+        self._package_imports: dict[str, str] = {}  # #pattern -> resolved target
 
         # 构建文件索引: stem -> [files]
         self._file_map: dict[str, list[str]] = defaultdict(list)
@@ -196,8 +197,12 @@ class ImportResolver:
         # sym_id -> file
         self._sym_file: dict[str, str] = {}
 
+        # 导入解析缓存：(source_file, imp) -> target_files，避免同一模块被反复解析
+        self._resolve_cache: dict[tuple[str, str], list[str]] = {}
+
         self._load_import_configs()
         self._load_package_json_exports()
+        self._detect_vite_alias()
 
     def _load_import_configs(self) -> None:
         """加载所有 tsconfig.json / jsconfig.json 配置。"""
@@ -254,6 +259,9 @@ class ImportResolver:
                     package_name = data.get("name")
                     if isinstance(package_name, str) and package_name:
                         self._register_package_exports(package_name, data["exports"], PurePosixPath("."))
+                # 解析 imports 字段（Node.js # 私有导入）
+                if isinstance(data, dict) and "imports" in data:
+                    self._parse_package_imports(data["imports"])
             except Exception as e:
                 logger.debug(f"Failed to parse package.json: {e}")
 
@@ -281,6 +289,30 @@ class ImportResolver:
             except Exception as e:
                 logger.debug(f"Failed to parse {sub_package_path}: {e}")
 
+    def _detect_vite_alias(self) -> None:
+        """检测 Vite 默认 alias: ~/ → src/。"""
+        for cfg_name in ("vite.config.ts", "vite.config.js", "vite.config.mjs"):
+            if (self.project_root / cfg_name).exists():
+                if "~" not in self.bundler_aliases.aliases:
+                    self.bundler_aliases.aliases["~"] = "src"
+                break
+
+    def _parse_package_imports(self, imports: Any) -> None:
+        """解析 package.json imports 字段（# 私有导入映射）。"""
+        if not isinstance(imports, dict):
+            return
+        for pattern, target in imports.items():
+            resolved = None
+            if isinstance(target, str):
+                resolved = target
+            elif isinstance(target, dict):
+                for key in ("import", "default", "require", "node", "browser"):
+                    if key in target and isinstance(target[key], str):
+                        resolved = target[key]
+                        break
+            if resolved and isinstance(pattern, str):
+                self._package_imports[pattern] = resolved
+
     def _register_package_exports(self, package_name: str, exports: Any, package_root: PurePosixPath) -> None:
         self.package_exports[package_name] = PackageJsonExports(exports)
         self.package_export_roots[package_name] = package_root
@@ -307,53 +339,90 @@ class ImportResolver:
 
     def resolve_import_targets(self, source_file: str, imp: str) -> list[str]:
         """解析 import 路径到目标文件列表。"""
+        # 非相对路径走缓存，避免同一模块被不同文件重复解析
+        cache_key = (source_file, imp)
+        if cached := self._resolve_cache.get(cache_key):
+            return cached
+
+        result: list[str]
+        # 处理 Node.js # 私有导入
+        if imp.startswith("#") and self._package_imports:
+            target = self._package_imports.get(imp)
+            if target:
+                result = self._resolve_package_export_target(".", target)
+                if result:
+                    self._resolve_cache[cache_key] = result
+                    return result
+
         if imp.startswith("."):
-            return self._resolve_relative(source_file, imp)
+            result = self._resolve_relative(source_file, imp)
+        else:
+            # 尝试 Java 点号导入 (com.example.Foo → com/example/Foo.java)
+            source_ext = Path(source_file).suffix.lower()
+            if source_ext == ".java" and "." in imp and not imp.startswith("."):
+                java_modules = [part for part in imp.split(".") if part]
+                if java_modules:
+                    java_path = PurePosixPath(*java_modules)
+                    java_matches = self._candidate_files_for_base_path(java_path)
+                    if java_matches:
+                        self._resolve_cache[cache_key] = java_matches
+                        return java_matches
 
-        # 尝试 bundler alias 解析
-        bundler_match = self.bundler_aliases.resolve(imp)
-        if bundler_match:
-            return self._resolve_relative(source_file, bundler_match)
+            # 尝试 bundler alias 解析
+            bundler_match = self.bundler_aliases.resolve(imp)
+            if bundler_match:
+                result = self._resolve_relative(source_file, bundler_match)
+            else:
+                # 尝试 tsconfig/jsconfig alias/baseUrl 解析
+                alias_matches = self._resolve_alias_or_baseurl_targets(source_file, imp)
+                if alias_matches:
+                    result = alias_matches
+                else:
+                    # 尝试 package.json exports 解析（用于自引用或子包）
+                    pkg_result = None
+                    for package_name, exports in self.package_exports.items():
+                        export_subpath = self._package_export_subpath(package_name, imp)
+                        if export_subpath is None:
+                            continue
+                        resolved = exports.resolve(export_subpath)
+                        if resolved:
+                            pkg_result = self._resolve_package_export_target(package_name, resolved)
+                            break
+                    if pkg_result is not None:
+                        result = pkg_result
+                    else:
+                        python_matches = self._resolve_python_dotted_import(source_file, imp)
+                        if python_matches:
+                            result = python_matches
+                        else:
+                            # 最后尝试模块名匹配（优先同语言）
+                            module_key = Path(imp).stem or imp.split(".")[-1]
+                            matches = list(self._file_map.get(module_key, []))
+                            if not matches:
+                                result = []
+                            else:
+                                # 优先匹配同扩展名的文件（语言隔离）
+                                source_ext = Path(source_file).suffix.lower()
+                                same_lang_matches = [f for f in matches if f.lower().endswith(source_ext)]
+                                if same_lang_matches:
+                                    result = same_lang_matches
+                                else:
+                                    # 次优：匹配相同语言组的文件
+                                    source_lang = EXT_TO_LANG.get(source_ext)
+                                    if source_lang:
+                                        same_group_matches = [f for f in matches if EXT_TO_LANG.get(Path(f).suffix.lower()) == source_lang]
+                                        if same_group_matches:
+                                            result = same_group_matches
+                                        else:
+                                            # 兜底：返回所有匹配（但限制数量避免爆炸）
+                                            result = matches[:3]
+                                    else:
+                                        result = matches[:3]
 
-        # 尝试 tsconfig/jsconfig alias/baseUrl 解析
-        alias_matches = self._resolve_alias_or_baseurl_targets(source_file, imp)
-        if alias_matches:
-            return alias_matches
-
-        # 尝试 package.json exports 解析（用于自引用或子包）
-        for package_name, exports in self.package_exports.items():
-            export_subpath = self._package_export_subpath(package_name, imp)
-            if export_subpath is None:
-                continue
-            resolved = exports.resolve(export_subpath)
-            if resolved:
-                return self._resolve_package_export_target(package_name, resolved)
-
-        python_matches = self._resolve_python_dotted_import(source_file, imp)
-        if python_matches:
-            return python_matches
-
-        # 最后尝试模块名匹配（优先同语言）
-        module_key = Path(imp).stem or imp.split(".")[-1]
-        matches = list(self._file_map.get(module_key, []))
-        if not matches:
-            return []
-        
-        # 优先匹配同扩展名的文件（语言隔离）
-        source_ext = Path(source_file).suffix.lower()
-        same_lang_matches = [f for f in matches if f.lower().endswith(source_ext)]
-        if same_lang_matches:
-            return same_lang_matches
-        
-        # 次优：匹配相同语言组的文件
-        source_lang = EXT_TO_LANG.get(source_ext)
-        if source_lang:
-            same_group_matches = [f for f in matches if EXT_TO_LANG.get(Path(f).suffix.lower()) == source_lang]
-            if same_group_matches:
-                return same_group_matches
-        
-        # 兜底：返回所有匹配（但限制数量避免爆炸）
-        return matches[:3]
+        # 缓存非相对路径的解析结果（相对路径取决于源文件位置，不宜缓存）
+        if not imp.startswith("."):
+            self._resolve_cache[cache_key] = result
+        return result
 
     def _package_export_subpath(self, package_name: str, imp: str) -> str | None:
         if package_name == ".":
@@ -398,6 +467,14 @@ class ImportResolver:
         init_file = str(resolved / "__init__.py")
         if init_file in self.graph.file_symbols:
             matches.append(init_file)
+        # Python namespace package: 无 __init__.py 时也尝试匹配目录下 .py 文件
+        elif resolved_str not in self.graph.file_symbols:
+            ns_prefix = resolved_str + "/"
+            ns_matches = [
+                f for f in self.graph.file_symbols
+                if f.startswith(ns_prefix) and f.endswith(".py")
+            ]
+            matches.extend(ns_matches[:5])
         return sorted(set(matches))
 
     def _resolve_python_dotted_import(self, source_file: str, imp: str) -> list[str]:
@@ -663,6 +740,14 @@ class ImportResolver:
             return self._pick_best_target(imported, file, call_line)
 
         if call_kind == "member":
+            # 成员调用 (obj.method())：仅在同文件匹配 method 类型的符号，避免误绑到全局函数
+            same_file_methods = [
+                sid for sid in candidates
+                if self._sym_file[sid] == file
+                and self.graph.symbols[sid].kind == "method"
+            ]
+            if same_file_methods:
+                return self._pick_best_target(same_file_methods, file, call_line)
             return None
 
         if any(binding.local_name == call_name for binding in self.graph.file_import_bindings.get(file, [])):

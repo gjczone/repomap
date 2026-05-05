@@ -202,6 +202,159 @@ QUERIES: dict[str, dict[str, str]] = {
             (#match? @http_method "^(get|post|put|delete|patch|head|options)$")
         """,
     },
+    "c": {
+        "function": """
+            (function_definition
+              declarator: (function_declarator
+                declarator: (identifier) @name)) @definition.function
+        """,
+        "class": """
+            (struct_specifier name: (type_identifier) @name) @definition.struct
+            (union_specifier name: (type_identifier) @name) @definition.union
+            (enum_specifier name: (type_identifier) @name) @definition.enum
+        """,
+        "import": """
+            (preproc_include path: (_) @path)
+        """,
+        "call": """
+            (call_expression function: (identifier) @name) @reference.call
+        """,
+    },
+    "java": {
+        "function": """
+            (method_declaration name: (identifier) @name) @definition.method
+            (constructor_declaration name: (identifier) @name) @definition.method
+        """,
+        "class": """
+            (class_declaration name: (identifier) @name) @definition.class
+            (interface_declaration name: (identifier) @name) @definition.interface
+            (enum_declaration name: (identifier) @name) @definition.enum
+        """,
+        "import": """
+            (import_declaration (scoped_identifier) @name)
+            (import_declaration (identifier) @name)
+        """,
+        "call": """
+            (method_invocation name: (identifier) @name) @reference.call
+        """,
+        "http_route": """
+            ;; Spring Boot: @GetMapping("/path") / @PostMapping("/path")
+            (annotation
+              name: (identifier) @method
+              arguments: (annotation_argument_list
+                (element_value_pair
+                  value: (string_literal) @path)))
+            (#match? @method "^(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)$")
+        """,
+    },
+    "kotlin": {
+        "function": """
+            (function_declaration name: (simple_identifier) @name) @definition.function
+        """,
+        "class": """
+            (class_declaration name: (type_identifier) @name) @definition.class
+            (object_declaration name: (type_identifier) @name) @definition.object
+            (interface_declaration name: (type_identifier) @name) @definition.interface
+        """,
+        "import": """
+            (import_header (identifier) @name)
+        """,
+        "call": """
+            (call_expression (simple_identifier) @name) @reference.call
+            (call_expression (navigation_expression (simple_identifier) @name)) @reference.call
+        """,
+    },
+    "swift": {
+        "function": """
+            (function_declaration name: (simple_identifier) @name) @definition.function
+        """,
+        "class": """
+            (class_declaration name: (type_identifier) @name) @definition.class
+            (struct_declaration name: (type_identifier) @name) @definition.struct
+            (enum_declaration name: (type_identifier) @name) @definition.enum
+            (protocol_declaration name: (type_identifier) @name) @definition.protocol
+        """,
+        "import": """
+            (import_declaration (identifier) @name)
+        """,
+        "call": """
+            (call_expression (simple_identifier) @name) @reference.call
+            (call_expression (navigation_expression (simple_identifier) @name)) @reference.call
+        """,
+    },
+    "cpp": {
+        "function": """
+            (function_definition
+              declarator: (function_declarator
+                declarator: [(identifier) (qualified_identifier)] @name)) @definition.function
+        """,
+        "class": """
+            (class_specifier name: (type_identifier) @name) @definition.class
+            (struct_specifier name: (type_identifier) @name) @definition.struct
+            (enum_specifier name: (type_identifier) @name) @definition.enum
+        """,
+        "import": """
+            (preproc_include path: (_) @path)
+        """,
+        "call": """
+            (call_expression function: [(identifier) (qualified_identifier)] @name) @reference.call
+        """,
+    },
+    "c_sharp": {
+        "function": """
+            (method_declaration name: (identifier) @name) @definition.method
+            (local_function_statement name: (identifier) @name) @definition.function
+        """,
+        "class": """
+            (class_declaration name: (identifier) @name) @definition.class
+            (interface_declaration name: (identifier) @name) @definition.interface
+            (struct_declaration name: (identifier) @name) @definition.struct
+            (enum_declaration name: (identifier) @name) @definition.enum
+        """,
+        "import": """
+            (using_directive name: [(identifier) (qualified_name)] @name)
+        """,
+        "call": """
+            (invocation_expression function: (identifier) @name) @reference.call
+            (invocation_expression function: (member_access_expression name: (identifier) @name)) @reference.call
+        """,
+    },
+    "php": {
+        "function": """
+            (function_definition name: (name) @name) @definition.function
+            (method_declaration name: (name) @name) @definition.method
+        """,
+        "class": """
+            (class_declaration name: (name) @name) @definition.class
+            (interface_declaration name: (name) @name) @definition.interface
+            (trait_declaration name: (name) @name) @definition.trait
+            (enum_declaration name: (name) @name) @definition.enum
+        """,
+        "import": """
+            (namespace_use_declaration (qualified_name) @name)
+        """,
+        "call": """
+            (function_call_expression function: (name) @name) @reference.call
+            (member_call_expression name: (name) @name) @reference.call
+        """,
+    },
+    "ruby": {
+        "function": """
+            (method name: (identifier) @name) @definition.method
+            (singleton_method name: (identifier) @name) @definition.method
+        """,
+        "class": """
+            (class name: (constant) @name) @definition.class
+            (module name: (constant) @name) @definition.module
+        """,
+        "import": """
+            (call method: (identifier) @_method arguments: (argument_list (string) @path))
+            (#match? @_method "^(require|require_relative|load)$")
+        """,
+        "call": """
+            (call method: (identifier) @name) @reference.call
+        """,
+    },
     "html": {},
     "css": {},
     "json": {},
@@ -225,6 +378,21 @@ EXT_TO_LANG: dict[str, str] = {
     ".htm": "html",
     ".css": "css",
     ".json": "json",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".cs": "c_sharp",
+    ".php": "php",
+    ".phtml": "php",
+    ".rb": "ruby",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -269,6 +437,78 @@ class TreeSitterAdapter:
                 logger.debug(f"Parser loaded: {lang}")
             except Exception as e:
                 logger.debug(f"Parser unavailable [{lang}]: {e}")
+
+        # C
+        try:
+            from tree_sitter_c import language as lang_c
+            from tree_sitter import Language, Parser
+            self.parsers["c"] = Parser(Language(lang_c()))
+            logger.debug("Parser loaded: c")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [c]: {e}")
+
+        # Java
+        try:
+            from tree_sitter_java import language as lang_java
+            from tree_sitter import Language, Parser
+            self.parsers["java"] = Parser(Language(lang_java()))
+            logger.debug("Parser loaded: java")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [java]: {e}")
+
+        # Kotlin — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_kotlin import language as lang_kotlin
+            from tree_sitter import Language, Parser
+            self.parsers["kotlin"] = Parser(Language(lang_kotlin()))
+            logger.debug("Parser loaded: kotlin")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [kotlin]: {e}")
+
+        # Swift — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_swift import language as lang_swift
+            from tree_sitter import Language, Parser
+            self.parsers["swift"] = Parser(Language(lang_swift()))
+            logger.debug("Parser loaded: swift")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [swift]: {e}")
+
+        # C++ — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_cpp import language as lang_cpp
+            from tree_sitter import Language, Parser
+            self.parsers["cpp"] = Parser(Language(lang_cpp()))
+            logger.debug("Parser loaded: cpp")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [cpp]: {e}")
+
+        # C# — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_c_sharp import language as lang_csharp
+            from tree_sitter import Language, Parser
+            self.parsers["c_sharp"] = Parser(Language(lang_csharp()))
+            logger.debug("Parser loaded: c_sharp")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [c_sharp]: {e}")
+
+        # PHP — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_php import language as lang_php
+            from tree_sitter import Language, Parser
+            self.parsers["php"] = Parser(Language(lang_php()))
+            logger.debug("Parser loaded: php")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [php]: {e}")
+
+        # Ruby — 可选依赖，未安装时静默跳过
+        try:
+            from tree_sitter_ruby import language as lang_ruby
+            from tree_sitter import Language, Parser
+            self.parsers["ruby"] = Parser(Language(lang_ruby()))
+            logger.debug("Parser loaded: ruby")
+        except Exception as e:
+            logger.debug(f"Parser unavailable [ruby]: {e}")
 
         # TypeScript / TSX：优先专用绑定，TypeScript 回退到 JavaScript parser，TSX 不回退以避免误解析 JSX。
         try:
@@ -455,7 +695,12 @@ class TreeSitterAdapter:
             if not self._is_exported_anonymous_expression(node):
                 continue
             explicit_name = self._declaration_primary_name(node)
-            name = explicit_name or self._anonymous_symbol_name(node)
+            if explicit_name:
+                name = explicit_name
+            elif self._is_export_default(node):
+                name = self._export_default_name(node)
+            else:
+                name = self._anonymous_symbol_name(node)
             line = node.start_point[0] + 1
             symbol_id = f"{file}::{name}::{line}"
             symbols_by_id[symbol_id] = Symbol(
@@ -470,6 +715,16 @@ class TreeSitterAdapter:
                 signature=self._signature(node, lang),
             )
         return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+
+    def _is_export_default(self, node: Any) -> bool:
+        current = getattr(node, "parent", None)
+        depth = 0
+        while current is not None and depth < 4:
+            if current.type == "export_statement":
+                return self._first_child_of_type(current, "default") is not None
+            current = getattr(current, "parent", None)
+            depth += 1
+        return False
 
     def _extract_object_literal_method_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
         if lang not in ("javascript", "typescript", "tsx"):
@@ -509,10 +764,6 @@ class TreeSitterAdapter:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
 
-        query = self._queries.get(lang, {}).get("anonymous_function")
-        if not query:
-            return []
-
         anonymous_symbols: dict[str, Symbol] = {}
         for node in self._walk_tree(tree.root_node):
             if node.type not in {"arrow_function", "function_expression"}:
@@ -526,7 +777,10 @@ class TreeSitterAdapter:
             if explicit_name is not None and not self._is_exported_anonymous_expression(node):
                 continue
             line = node.start_point[0] + 1
-            name = explicit_name or self._anonymous_symbol_name(node)
+
+            # 尝试从上下文推断更有意义的名字
+            name = explicit_name or self._contextual_anonymous_name(node)
+
             symbol_id = f"{file}::{name}::{line}"
             anonymous_symbols[symbol_id] = Symbol(
                 id=symbol_id,
@@ -541,6 +795,48 @@ class TreeSitterAdapter:
             )
 
         return list(anonymous_symbols.values())
+
+    def _contextual_anonymous_name(self, node: Any) -> str:
+        """从父节点上下文推断匿名函数名（JSX handler / Hook callback 等）。"""
+        parent = getattr(node, "parent", None)
+        if parent is None:
+            return self._anonymous_symbol_name(node)
+
+        # JSX 属性: onClick={() => ...} → onClick_handler@L24
+        if parent.type == "jsx_expression":
+            grandparent = getattr(parent, "parent", None)
+            if grandparent is not None and grandparent.type == "jsx_attribute":
+                prop_name = ""
+                for child in grandparent.children:
+                    if child.type == "property_identifier":
+                        prop_name = self._text(child)
+                        break
+                if prop_name:
+                    return f"<{prop_name}_handler@{node.start_point[0] + 1}>"
+
+        # 调用参数: useEffect(() => ...) → useEffect_callback@L24
+        if parent.type == "arguments":
+            grandparent = getattr(parent, "parent", None)
+            if grandparent is not None and grandparent.type == "call_expression":
+                func_node = grandparent.child_by_field_name("function")
+                if func_node is not None:
+                    func_name = self._text(func_node)
+                    if func_name and len(func_name) <= 40:
+                        return f"<{func_name}_callback@{node.start_point[0] + 1}>"
+
+        # 数组方法回调: arr.map(() => ...) → map_callback@L24
+        if parent.type == "arguments":
+            grandparent = getattr(parent, "parent", None)
+            if grandparent is not None and grandparent.type == "call_expression":
+                func_node = grandparent.child_by_field_name("function")
+                if func_node is not None and func_node.type == "member_expression":
+                    prop_node = func_node.child_by_field_name("property")
+                    if prop_node is not None:
+                        method_name = self._text(prop_node)
+                        if method_name in {"map", "filter", "reduce", "forEach", "find", "some", "every", "sort", "flatMap"}:
+                            return f"<{method_name}_callback@{node.start_point[0] + 1}>"
+
+        return self._anonymous_symbol_name(node)
 
     def _is_exported_anonymous_expression(self, node: Any) -> bool:
         current = getattr(node, "parent", None)
@@ -1042,6 +1338,13 @@ class TreeSitterAdapter:
     @staticmethod
     def _anonymous_symbol_name(node: Any) -> str:
         return f"<anonymous@{node.start_point[0] + 1}>"
+
+    @staticmethod
+    def _export_default_name(node: Any) -> str:
+        """为 export default 无名字的函数/类生成可读名。"""
+        line = node.start_point[0] + 1
+        kind = node.type.replace("_expression", "").replace("_declaration", "")
+        return f"<default_export_{kind}@{line}>"
 
     def _string_literal_value(self, node: Any) -> str:
         return self._text(node).strip("\"'`")
