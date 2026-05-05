@@ -1089,6 +1089,7 @@ class RepoMapChecker:
         tool_failures = [r for r in results if not r.skipped and r.exit_code != 0]
         tools_run = len([r for r in results if not r.skipped])
         tools_skipped = len([r for r in results if r.skipped])
+        message = ""
         if total_errors > 0 or tool_failures:
             status = "failed"
         elif total_warnings > 0:
@@ -1098,7 +1099,6 @@ class RepoMapChecker:
             message = "检测到项目类型，但没有实际运行任何诊断工具"
         else:
             status = "passed"
-            message = ""
 
         return {
             "timestamp": self._get_timestamp(),
