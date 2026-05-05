@@ -290,14 +290,14 @@ repomap refs --project /path/to/project --symbol helper --with-lsp
 ### Python Command
 
 ```bash
-cd /home/guojiancheng/.A1/ai/cli-created/cli/repomap
+cd /home/guojiancheng/.A1/repomap
 uv run python -m repomap_cli --help
 ```
 
 ### Script Entry Point
 
 ```bash
-cd /home/guojiancheng/.A1/ai/cli-created/cli/repomap
+cd /home/guojiancheng/.A1/repomap
 uv run repomap --help
 ```
 
@@ -306,7 +306,7 @@ uv run repomap --help
 `/home/guojiancheng/.local/bin` is already on this machine's `PATH`, so the recommended setup is:
 
 ```bash
-ln -sf /home/guojiancheng/.A1/ai/cli-created/cli/repomap/dist/repomap /home/guojiancheng/.local/bin/repomap
+ln -sf /home/guojiancheng/.A1/repomap/dist/repomap /home/guojiancheng/.local/bin/repomap
 repomap --help
 ```
 
@@ -314,14 +314,14 @@ If you rebuild the binary later, the symlink still points at the newest file in 
 
 For a future AI assistant, use:
 
-- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/for-ai-smoke-check.md)
-- [Repomap Acceptance Checklist](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/acceptance-checklist.md)
+- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/repomap/docs/for-ai-smoke-check.md)
+- [Repomap Acceptance Checklist](/home/guojiancheng/.A1/repomap/docs/acceptance-checklist.md)
 
 ## Binary Location
 
 Current Linux binary:
 
-`/home/guojiancheng/.A1/ai/cli-created/cli/repomap/dist/repomap`
+`/home/guojiancheng/.A1/repomap/dist/repomap`
 
 Current PATH entry:
 
@@ -636,19 +636,19 @@ Recommended.
 
 Copy:
 
-- `/home/guojiancheng/.A1/ai/cli-created/cli/repomap`
+- `/home/guojiancheng/.A1/repomap`
 - `/home/guojiancheng/.agents/skills/repomap`
 
 Then on the new machine:
 
 ```bash
-cd /path/to/cli-created/cli/repomap
+cd /path/to/repomap
 
 uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
   python -m repomap_cli build-binary --output dist
 
 mkdir -p ~/.local/bin
-ln -sf /path/to/cli-created/cli/repomap/dist/repomap ~/.local/bin/repomap
+ln -sf /path/to/repomap/dist/repomap ~/.local/bin/repomap
 repomap doctor
 ```
 
@@ -728,7 +728,7 @@ repomap verify --project /some/repo
 
 There is also an AI-ready smoke-check guide here:
 
-- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/ai/cli-created/cli/repomap/docs/for-ai-smoke-check.md)
+- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/repomap/docs/for-ai-smoke-check.md)
 
 Short version:
 
@@ -861,23 +861,21 @@ uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,
 ## Project Structure
 
 ```text
-cli-created/
-└── cli/
-    └── repomap/
-        ├── repomap_cli/            # standalone CLI entrypoint
-        ├── repomap_core.py         # scan pipeline
-        ├── repomap_parser.py       # AST parsing, import/export bindings
-        ├── repomap_resolver.py     # import resolution
-        ├── repomap_ranking.py      # graph analysis
-        ├── repomap_topic.py        # topic scoring, test matching, file roles
-        ├── repomap_check.py        # diagnostics
-        ├── repomap_toolkit.py      # cache/diff/git helper logic
-        ├── repomap_ai.py           # markdown report rendering
-        ├── repomap_support.py      # core data structures
-        ├── tests/                  # unit and binary E2E tests
-        ├── docs/deliverables/      # delivery reports
-        ├── dist/repomap            # Linux binary
-        └── .github/workflows/      # CI matrix build flow
+repomap/
+├── repomap_cli/            # standalone CLI entrypoint
+├── repomap_core.py         # scan pipeline
+├── repomap_parser.py       # AST parsing, import/export bindings
+├── repomap_resolver.py     # import resolution
+├── repomap_ranking.py      # graph analysis
+├── repomap_topic.py        # topic scoring, test matching, file roles
+├── repomap_check.py        # diagnostics
+├── repomap_toolkit.py      # cache/diff/git helper logic
+├── repomap_ai.py           # markdown report rendering
+├── repomap_support.py      # core data structures
+├── tests/                  # unit and binary E2E tests
+├── docs/deliverables/      # delivery reports
+├── dist/repomap            # Linux binary
+└── .github/workflows/      # CI matrix build flow
 ```
 
 ## Known Limits
