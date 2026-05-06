@@ -3,7 +3,7 @@ import sys
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from repomap_cli.cli import main
+    from repomap.cli.cli import main
 else:
     from .cli import main
 

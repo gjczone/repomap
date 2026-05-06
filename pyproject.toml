@@ -30,7 +30,7 @@ build = [
 ]
 
 [project.scripts]
-repomap = "repomap_cli:main"
+repomap = "repomap.cli:main"
 
 [build-system]
 requires = ["hatchling"]

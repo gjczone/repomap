@@ -14,7 +14,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from repomap_support import JSImportBinding, JSExportBinding, Symbol
+from repomap.support import JSImportBinding, JSExportBinding, Symbol
 
 logger = logging.getLogger("repomap")
 
@@ -1399,7 +1399,7 @@ class TreeSitterAdapter:
         route inventory 只输出严格匹配的生产路由定义，避免把测试 DSL、日志、
         Array/Option 等普通调用误判为 HTTP route。
         """
-        from repomap_support import HttpRoute
+        from repomap.support import HttpRoute
 
         if self._should_skip_route_file(file):
             return []
@@ -1420,7 +1420,7 @@ class TreeSitterAdapter:
         )
 
     def _http_route_from_captures(self, captures: dict[str, list[Any]], lang: str, file: str) -> Any | None:
-        from repomap_support import HttpRoute
+        from repomap.support import HttpRoute
 
         path_node = self._first_capture(captures, "path")
         handler_node = self._first_capture(captures, "handler")

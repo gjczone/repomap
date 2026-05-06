@@ -4,9 +4,9 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from repomap_core import RepoMapEngine
+    from repomap.core import RepoMapEngine
 
-from repomap_topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
+from repomap.topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
 
 
 RISK_MARK = {"high": "[high]", "medium": "[medium]", "low": "[low]"}
@@ -66,7 +66,7 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
 
 def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
     """生成一句话项目摘要：语言、框架、项目类型。"""
-    from repomap_parser import EXT_TO_LANG
+    from repomap.parser import EXT_TO_LANG
 
     # 统计语言分布
     lang_counts: dict[str, int] = {}

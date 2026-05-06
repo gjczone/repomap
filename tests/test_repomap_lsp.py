@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from repomap_lsp import (
+from repomap.lsp import (
     _json_rpc_frame,
     _read_lsp_message,
     _npm_prefix_bin,
@@ -217,7 +217,7 @@ while True:
             self.assertEqual(result[0].diagnostics[0].file, "src/app.ts")
             self.assertEqual(result[0].diagnostics[0].message, "fake diagnostic")
     def test_fake_lsp_server_returns_definition_and_references(self) -> None:
-        from repomap_lsp import collect_lsp_symbol_evidence
+        from repomap.lsp import collect_lsp_symbol_evidence
 
         with tempfile.TemporaryDirectory() as project_root:
             server = write_file(

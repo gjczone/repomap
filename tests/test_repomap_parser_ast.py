@@ -1,6 +1,6 @@
 import unittest
 
-from repomap_parser import TreeSitterAdapter
+from repomap.parser import TreeSitterAdapter
 
 
 class RepoMapParserAstTests(unittest.TestCase):

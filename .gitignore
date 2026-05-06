@@ -2,3 +2,9 @@ __pycache__/
 *.py[cod]
 .venv/
 dist/.pyinstaller/
+.pytest_cache/
+
+# Local-only project docs (not for public repo)
+AGENTS.md
+CLAUDE.md
+docs/

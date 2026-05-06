@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
-from repomap_ai import (
+from repomap.ai import (
     _build_query_reading_order,
     _get_hot_files,
     _rank_symbols_for_file,
@@ -21,10 +21,10 @@ from repomap_ai import (
     render_routes_report,
     render_verify_report,
 )
-from repomap_check import RepoMapChecker
-from repomap_core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
-from repomap_parser import EXT_TO_LANG
-from repomap_support import (
+from repomap.check import RepoMapChecker
+from repomap.core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
+from repomap.parser import EXT_TO_LANG
+from repomap import (
     Edge,
     HttpRoute,
     RepoGraph,
@@ -35,8 +35,8 @@ from repomap_support import (
     serialize_edge,
     serialize_symbol,
 )
-from repomap_toolkit import diff_project, save_cache, scan_project
-from repomap_topic import (
+from repomap.toolkit import diff_project, save_cache, scan_project
+from repomap.topic import (
     FileMatch,
     TestMatch,
     classify_file_role,
@@ -867,7 +867,7 @@ def run_call_chain(
 
 
 def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout: float) -> dict[str, Any]:
-    from repomap_lsp import collect_lsp_symbol_evidence, run_result_to_dict
+    from repomap.lsp import collect_lsp_symbol_evidence, run_result_to_dict
 
     run = collect_lsp_symbol_evidence(
         engine.project_root,
@@ -1230,7 +1230,7 @@ def _impact_read_next(
 
 def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[str, Any]:
     try:
-        from repomap_lsp import detect_lsp_server, detection_to_dict, language_for_file
+        from repomap.lsp import detect_lsp_server, detection_to_dict, language_for_file
     except Exception as exc:
         return {"available": False, "servers": [], "suggestedCommands": [], "reason": str(exc)}
 
@@ -1600,7 +1600,7 @@ def _verify_lsp_payload(
     if not changed_files:
         return {"enabled": True, "status": "skipped", "runs": [], "summary": {}, "reason": "no changed files"}
     try:
-        from repomap_lsp import collect_lsp_diagnostics, run_result_to_dict
+        from repomap.lsp import collect_lsp_diagnostics, run_result_to_dict
 
         runs = collect_lsp_diagnostics(project_root, changed_files, timeout=timeout, max_files=max_files)
         run_dicts = [run_result_to_dict(run) for run in runs]
@@ -1634,8 +1634,8 @@ def _verify_graph_diff_payload(project_root: str, enabled: bool, incoming_map: d
         return {"enabled": True, "status": "skipped", "summary": {}, "breakingChanges": [], "reason": result["error"]}
     # 如果提供了 incoming_map，二次调用带调用者分析的 compare
     if incoming_map is not None:
-        from repomap_toolkit import load_cache
-        from repomap_support import compare_graph_snapshots
+        from repomap.toolkit import load_cache
+        from repomap import compare_graph_snapshots
         cache = load_cache(project_root)
         if cache:
             current_symbols, current_edges = scan_project(project_root, max_files=5000)
@@ -2144,7 +2144,7 @@ def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
 def run_lsp_doctor(project: str, as_json: bool = False) -> int:
     try:
         project_root = _resolve_project(project)
-        from repomap_lsp import detect_lsp_servers, detection_to_dict
+        from repomap.lsp import detect_lsp_servers, detection_to_dict
 
         detections = detect_lsp_servers(project_root)
         payload = {
@@ -2193,7 +2193,7 @@ def run_diagnostics(
         if source != "lsp":
             print(f"[{CLI_NAME}] unsupported diagnostics source: {source}", file=sys.stderr)
             return 2
-        from repomap_lsp import collect_lsp_diagnostics, run_result_to_dict
+        from repomap.lsp import collect_lsp_diagnostics, run_result_to_dict
 
         runs = collect_lsp_diagnostics(project_root, normalized_files, timeout=lsp_timeout, max_files=lsp_max_files)
         payload = {
@@ -2374,7 +2374,7 @@ def _module_origin(module_name: str) -> str:
 
 
 def run_doctor() -> int:
-    from repomap_parser import TreeSitterAdapter
+    from repomap.parser import TreeSitterAdapter
 
     adapter = TreeSitterAdapter()
     parsers = sorted(adapter.parsers)

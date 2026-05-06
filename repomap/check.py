@@ -921,7 +921,7 @@ class RepoMapChecker:
                 skipped=True,
                 skip_reason="no explicit files; pass --modified-file or use diagnostics --files",
             )]
-        from repomap_lsp import collect_lsp_diagnostics
+        from repomap.lsp import collect_lsp_diagnostics
 
         diagnostic_results: list[DiagnosticResult] = []
         for run in collect_lsp_diagnostics(self.project_root, target_files, timeout=lsp_timeout, max_files=lsp_max_files):

@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from repomap_support import RepoGraph
+    from repomap.support import RepoGraph
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

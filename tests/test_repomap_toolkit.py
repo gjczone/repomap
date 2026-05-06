@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from repomap_toolkit import analyze_refs, diff_project, find_orphans, save_cache, scan_project
+from repomap.toolkit import analyze_refs, diff_project, find_orphans, save_cache, scan_project
 
 
 def write_file(root: str, relative_path: str, content: str) -> None:
@@ -71,8 +71,8 @@ class RepoMapToolkitTests(unittest.TestCase):
             self.assertIn("get_unused", orphan_names)
 
     def test_related_tests_are_deduplicated_with_best_confidence(self) -> None:
-        from repomap_core import RepoMapEngine
-        from repomap_topic import find_related_tests
+        from repomap.core import RepoMapEngine
+        from repomap.topic import find_related_tests
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "src/foo.ts", "export function foo(): number {\n  return 1;\n}\n")
@@ -96,8 +96,8 @@ class RepoMapToolkitTests(unittest.TestCase):
             self.assertEqual(matches[0].confidence, "high")
 
     def test_related_tests_include_same_directory_when_no_stronger_match_exists(self) -> None:
-        from repomap_core import RepoMapEngine
-        from repomap_topic import find_related_tests
+        from repomap.core import RepoMapEngine
+        from repomap.topic import find_related_tests
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "src/bar.ts", "export function bar(): number {\n  return 1;\n}\n")
