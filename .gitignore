@@ -4,7 +4,5 @@ __pycache__/
 dist/.pyinstaller/
 .pytest_cache/
 
-# Local-only project docs (not for public repo)
-AGENTS.md
-CLAUDE.md
+# Local-only docs
 docs/
