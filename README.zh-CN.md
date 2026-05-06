@@ -33,7 +33,12 @@
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
-3. 验证：
+3. 设置语言支持（agent 会自动处理）：
+   安装后告诉 agent："我主要用哪些编程语言"。
+   agent 会根据你的回答安装对应的 tree-sitter 解析器，并检查本机是否有可用的 LSP 服务器。
+   不需要理解这些是什么——agent 会自动处理。
+
+4. 验证：
    repomap doctor
 
 如果 ~/.local/bin 不在 PATH 里：
@@ -66,13 +71,13 @@ repomap doctor
 
 需要：Python 3.10+, [uv](https://docs.astral.sh/uv/) 包管理器。
 
-> 安装完成后，skill 自动生效——agent 在处理代码时会自行调用 `repomap` 命令。
+> 安装完成后，agent 在编码任务中会自动使用 repomap —— 需要时自行调用 `overview`、`impact`、`verify` 等命令。
 
 ---
 
 ## 典型用法
 
-> 以下命令均由 **AI agent 通过 skill 自动调用**，不需要人手动输入。安装后 agent 会读取 `SKILL.md`，根据当前任务自行决定调用哪个命令。
+> 这些命令不需要你手动输入。AI agent 在工作过程中通过 repomap skill 来调用——它根据你的任务自己决定什么时候用 `overview`、`impact`、`verify` 等。
 
 ### 改代码前：了解 → 评估 → 计划
 
@@ -127,11 +132,13 @@ repomap verify --project /path/to/project
 
 ## 支持语言
 
-| 级别 | 语言 | 说明 |
-|------|------|------|
-| **内置** | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON | 始终可用 |
-| **可选** | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby | 需安装额外 tree-sitter 绑定：`uv sync --all-extras` |
-| **LSP（opt-in）** | TypeScript, Python, Rust, Go | 需要本机已安装对应语言服务器 |
+> **你不需要做任何事。** AI agent 会在安装时自动处理语言设置——只需告诉它你用哪些语言。
+
+8 种语言开箱即用：Python、JavaScript、TypeScript（TSX）、Go、Rust、HTML、CSS、JSON。
+
+另外 7 种（Java、Kotlin、Swift、C/C++、C#、PHP、Ruby）需要多跑一条命令，agent 会帮你执行：`uv sync --all-extras`。
+
+如果需要更深入的分析（LSP），agent 可以使用你本机已有的语言服务器——支持 TypeScript、Python、Rust、Go。没有也不影响 `overview`、`query` 等核心功能。
 
 ---
 
@@ -139,7 +146,7 @@ repomap verify --project /path/to/project
 
 `repomap` 的名字和核心理念来自 **[aider](https://github.com/Aider-AI/aider)**。aider 作者 Paul Gauthier 首创了 "repo mapping" ——用 tree-sitter + PageRank 在 CLI 里给 AI agent 提供代码库感知能力。他证明了一个反直觉的洞察：一张紧凑的结构化地图，对 AI 的价值往往超过大量原始代码。我们保留了 "repo map" 这个名称，以表达对起源的敬意。
 
-`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。由 [@gjczone](https://github.com/gjczone)（非程序员）使用 DeepSeek-V4-Pro（约 90% 开发量）开发，GLM-5.1 和 MIMO-V2.5-Pro 辅助交叉验证与审核。
+`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。由 [@gjczone](https://github.com/gjczone)（非程序员）使用 DeepSeek-V4-Pro 开发，GLM-5.1 和 MIMO-V2.5-Pro 辅助交叉验证与审核。
 
 ---
 

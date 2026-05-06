@@ -35,7 +35,13 @@ Install repomap for me:
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
-3. Verify:
+3. Set up languages (let the agent handle this):
+   After install, ask: "What programming languages do you mainly use?"
+   Based on your answer, the agent will install the right tree-sitter parsers
+   and check if LSP servers are available. You don't need to understand what
+   those are — the agent handles it.
+
+4. Verify:
    repomap doctor
 
 If ~/.local/bin is not on PATH:
@@ -68,13 +74,13 @@ repomap doctor
 
 Requirements: Python 3.10+, [uv](https://docs.astral.sh/uv/) package manager.
 
-> After installation, the skill auto-discovers — the agent calls `repomap` commands on its own when working with code.
+> After installation, the agent automatically uses repomap during coding tasks — it calls commands like `overview`, `impact`, and `verify` on its own when needed.
 
 ---
 
 ## Typical Usage
 
-> The commands below are called **by the AI agent via skill**, not by the human. After installation, the agent reads `SKILL.md` and decides when to invoke each command based on the task at hand.
+> You don't type these commands yourself. The AI agent uses the repomap skill during its work — it decides when to call `overview`, `impact`, `verify`, etc. based on what you ask it to do.
 
 ### Before editing
 
@@ -129,11 +135,13 @@ repomap verify --project /path/to/project
 
 ## Supported Languages
 
-| Tier | Languages | Notes |
-|------|-----------|-------|
-| **Built-in** | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON | Always available |
-| **Optional** | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby | Install extra tree-sitter bindings: `uv sync --all-extras` |
-| **LSP (opt-in)** | TypeScript, Python, Rust, Go | Needs language server already installed on your machine |
+> **You don't need to do anything.** The AI agent handles language setup automatically during install — just tell it which languages you use.
+
+8 languages work out of the box: Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON.
+
+7 more (Java, Kotlin, Swift, C/C++, C#, PHP, Ruby) need one extra command that the agent runs for you: `uv sync --all-extras`.
+
+For deeper analysis (LSP), the agent can use language servers already on your machine — TypeScript, Python, Rust, and Go are supported. If you don't have them, `overview` and `query` still work fine without LSP.
 
 ---
 
@@ -141,7 +149,7 @@ repomap verify --project /path/to/project
 
 `repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — using tree-sitter + PageRank to give CLI AI agents codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding. We keep the "repo map" name to honor that origin.
 
-`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone), a non-programmer, using DeepSeek-V4-Pro (~90% of development), with GLM-5.1 and MIMO-V2.5-Pro for cross-validation and review.
+`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone), a non-programmer, using DeepSeek-V4-Pro, with GLM-5.1 and MIMO-V2.5-Pro for cross-validation and review.
 
 ---
 
