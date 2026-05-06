@@ -33,10 +33,19 @@
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
-3. 设置语言支持（agent 会自动处理）：
-   安装后告诉 agent："我主要用哪些编程语言"。
-   agent 会根据你的回答安装对应的 tree-sitter 解析器，并检查本机是否有可用的 LSP 服务器。
-   不需要理解这些是什么——agent 会自动处理。
+3. 设置语言支持（agent 自动处理）：
+   告诉 agent："检查我用的语言，帮我把 repomap 的语言支持配好"。
+   agent 会安装对应语言的 tree-sitter 解析器，然后运行 `repomap lsp doctor` 检查 LSP 是否可用。
+   如果有缺失，agent 会提示安装命令：
+
+   | 语言 | LSP 安装命令 |
+   |------|-------------|
+   | TypeScript | `npm install -g typescript-language-server` |
+   | Python | `npm install -g pyright` |
+   | Rust | `rustup component add rust-analyzer` |
+   | Go | `go install golang.org/x/tools/gopls@latest` |
+
+   不需要理解这些是什么——agent 全权处理。
 
 4. 验证：
    repomap doctor
@@ -138,7 +147,16 @@ repomap verify --project /path/to/project
 
 另外 7 种（Java、Kotlin、Swift、C/C++、C#、PHP、Ruby）需要多跑一条命令，agent 会帮你执行：`uv sync --all-extras`。
 
-如果需要更深入的分析（LSP），agent 可以使用你本机已有的语言服务器——支持 TypeScript、Python、Rust、Go。没有也不影响 `overview`、`query` 等核心功能。
+如果需要更深入的分析，agent 可以使用本机已有的语言服务器。如果没有，安装命令如下：
+
+| 语言 | 安装命令 |
+|------|---------|
+| TypeScript | `npm install -g typescript-language-server` |
+| Python | `npm install -g pyright` |
+| Rust | `rustup component add rust-analyzer` |
+| Go | `go install golang.org/x/tools/gopls@latest` |
+
+没有 LSP 不影响 `overview` / `query` / `impact` 等核心功能——LSP 只是给符号级查询增加额外精度。
 
 ---
 

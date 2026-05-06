@@ -35,11 +35,20 @@ Install repomap for me:
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
-3. Set up languages (let the agent handle this):
-   After install, ask: "What programming languages do you mainly use?"
-   Based on your answer, the agent will install the right tree-sitter parsers
-   and check if LSP servers are available. You don't need to understand what
-   those are — the agent handles it.
+3. Set up language support (agent handles this):
+   Tell your agent: "Check what languages I use and set up repomap accordingly."
+   The agent will install tree-sitter parsers for your languages, then run
+   `repomap lsp doctor` to check if LSP servers are available.
+   If any are missing, it will suggest install commands:
+
+   | Language | LSP install |
+   |----------|------------|
+   | TypeScript | `npm install -g typescript-language-server` |
+   | Python | `npm install -g pyright` |
+   | Rust | `rustup component add rust-analyzer` |
+   | Go | `go install golang.org/x/tools/gopls@latest` |
+
+   You don't need to understand what these are. The agent handles everything.
 
 4. Verify:
    repomap doctor
@@ -141,7 +150,16 @@ repomap verify --project /path/to/project
 
 7 more (Java, Kotlin, Swift, C/C++, C#, PHP, Ruby) need one extra command that the agent runs for you: `uv sync --all-extras`.
 
-For deeper analysis (LSP), the agent can use language servers already on your machine — TypeScript, Python, Rust, and Go are supported. If you don't have them, `overview` and `query` still work fine without LSP.
+For deeper analysis, the agent can use language servers already on your machine. If missing, install:
+
+| Language | Install command |
+|----------|----------------|
+| TypeScript | `npm install -g typescript-language-server` |
+| Python | `npm install -g pyright` |
+| Rust | `rustup component add rust-analyzer` |
+| Go | `go install golang.org/x/tools/gopls@latest` |
+
+Without them, `overview` / `query` / `impact` still work — LSP only adds extra precision for symbol-level lookups.
 
 ---
 
