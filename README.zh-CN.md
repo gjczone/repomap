@@ -30,7 +30,7 @@
 
 2. 下载二进制文件：
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
    chmod +x ~/.local/bin/repomap
 
 3. 设置语言支持（agent 自动处理）：

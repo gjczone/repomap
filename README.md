@@ -32,7 +32,7 @@ Install repomap for me:
 
 2. Download binary:
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
    chmod +x ~/.local/bin/repomap
 
 3. Set up language support (agent handles this):
