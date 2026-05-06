@@ -849,7 +849,7 @@ class RepoMapEngineTests(unittest.TestCase):
             engine.scan()
             reading_order = engine.suggested_reading_order(3)
 
-            self.assertEqual(reading_order[0]["file"], "src/main.tsx")
+            self.assertEqual(reading_order[0]["file"].replace("\\", "/"), "src/main.tsx")
 
 
 if __name__ == "__main__":
