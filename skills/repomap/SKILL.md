@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: Use proactively whenever your AI-agent task touches a code repository and repository intelligence can improve the result: before reading files, searching code, planning edits, editing known files, tracing symbols, estimating impact, validating changes, reviewing risk, checking diagnostics, inspecting routes, or answering codebase questions. Treat this as the default CLI/TUI AI-agent project map for non-trivial code work; skip only for tiny exact-file edits or non-code tasks where symbol context, impact, tests, and diagnostics clearly do not matter.
+description: Use this skill for any non-trivial coding task in a repository. repomap is a CLI tool that scans the codebase with tree-sitter and returns structured context — project overview, topic search, file detail, call chains, impact analysis, and post-edit verification. Call it before reading files, before editing, and after editing. Skip only for tiny exact-line fixes or non-code tasks.
 ---
 
 # repomap

@@ -1,4 +1,4 @@
-# RepoMap — Skill + CLI，AI Agent 的仓库智能层
+# RepoMap — Skill + CLI，AI Agent 的代码库"索引"工具
 
 > **一个 skill + CLI 工具，让 Claude Code、Codex、OpenCode 等 AI agent 拥有"项目地图"——知道应该读哪个文件、改了会影响谁、改完该验证什么。**
 >
