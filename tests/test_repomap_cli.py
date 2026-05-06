@@ -347,10 +347,10 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exclude_code, 0)
             paths_payload = json.loads(paths_stdout.getvalue())
             exclude_payload = json.loads(exclude_stdout.getvalue())
-            self.assertTrue(any(Path(row["path"]) == Path("src/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(Path(row["path"]) == Path("src2/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertTrue(any(Path(row["path"]) == Path("src2/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(Path(row["path"]) == Path("src/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(row["path"].replace("\\", "/") == "src/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(row["path"].replace("\\", "/") == "src2/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(row["path"].replace("\\", "/") == "src2/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(row["path"].replace("\\", "/") == "src/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
 
     def test_check_rejects_unsafe_modified_file_paths(self) -> None:
         from src.cli import main
@@ -1063,8 +1063,8 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
-            self.assertTrue(any(Path(ep) == Path("src/main.tsx") for ep in payload["entry_points"]))
-            self.assertEqual(Path(payload["reading_order"][0]["file"]), Path("src/main.tsx"))
+            self.assertTrue(any(ep.replace("\\", "/") == "src/main.tsx" for ep in payload["entry_points"]))
+            self.assertEqual(payload["reading_order"][0]["file"].replace("\\", "/"), "src/main.tsx")
 
     def test_scan_cache_invalidates_after_source_change(self) -> None:
         import src.cli.cli as cli_mod

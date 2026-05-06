@@ -699,7 +699,7 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertIn("## 推荐阅读顺序", overview)
             self.assertIn("## 支撑文件（非符号图）", overview)
             self.assertIn("README.md", overview)
-            self.assertIn("scripts/validate.sh", overview)
+            self.assertIn("scripts/validate.sh", overview.replace("\\", "/"))
             self.assertNotIn(".env", overview)
             self.assertIn("## 模块摘要", overview)
             self.assertIn("## 关键实现符号", overview)
