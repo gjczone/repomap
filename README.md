@@ -24,9 +24,9 @@
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. 下载二进制文件：
+2. 下载二进制文件（Linux x86_64）：
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
 3. 验证：

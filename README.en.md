@@ -13,7 +13,7 @@ Install repomap for me:
 
 2. Download the prebuilt binary:
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
 3. Verify:
@@ -57,7 +57,7 @@ rm -rf /tmp/repomap-install
 
 # 2. Download binary
 mkdir -p ~/.local/bin
-curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
+curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
 chmod +x ~/.local/bin/repomap
 
 # 3. Verify
