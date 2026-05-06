@@ -139,7 +139,7 @@ repomap verify --project /path/to/project
 
 `repomap` 的名字和核心理念来自 **[aider](https://github.com/Aider-AI/aider)**。aider 作者 Paul Gauthier 首创了 "repo mapping" ——用 tree-sitter + PageRank 在 CLI 里给 AI agent 提供代码库感知能力。他证明了一个反直觉的洞察：一张紧凑的结构化地图，对 AI 的价值往往超过大量原始代码。我们保留了 "repo map" 这个名称，以表达对起源的敬意。
 
-`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。本项目由非专业开发者借助 AI 编程助手完成，以 MIT 协议独立开源。
+`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。由 [@gjczone](https://github.com/gjczone)（非程序员）使用 Claude Code + DeepSeek-V4-Pro 作为唯一的开发伙伴完成。一个不会写代码的人都能用 AI 做出这个，你也可以。
 
 ---
 

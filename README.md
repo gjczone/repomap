@@ -141,7 +141,7 @@ repomap verify --project /path/to/project
 
 `repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — using tree-sitter + PageRank to give CLI AI agents codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding. We keep the "repo map" name to honor that origin.
 
-`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built as an independent MIT-licensed project by a non-professional developer with the help of AI coding assistants.
+`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone) — not a programmer — using Claude Code + DeepSeek-V4-Pro as the engineering team. If this non-programmer can build it with AI, so can you.
 
 ---
 
