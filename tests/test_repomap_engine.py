@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from repomap.core import RepoMapEngine
+from src.core import RepoMapEngine
 
 
 def write_file(root: str, relative_path: str, content: str) -> None:
@@ -226,7 +226,7 @@ class RepoMapEngineTests(unittest.TestCase):
                 ),
             )
 
-            from repomap.toolkit import diff_project, save_cache, scan_project
+            from src.toolkit import diff_project, save_cache, scan_project
 
             symbols, edges = scan_project(project_root)
             save_cache(project_root, symbols, edges)

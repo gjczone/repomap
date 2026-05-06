@@ -29,8 +29,8 @@ from typing import Any
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from repomap.core import RepoMapEngine
-from repomap.support import (
+from .core import RepoMapEngine
+from . import (
     Edge,
     FileCacheEntry,
     IncrementalCache,

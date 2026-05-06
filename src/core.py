@@ -25,15 +25,15 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from repomap.ai import (
+from .ai import (
     render_call_chain_report,
     render_file_detail_report,
     render_overview_report,
 )
-from repomap.parser import EXT_TO_LANG, TreeSitterAdapter
-from repomap.ranking import EdgeBuilder, GraphAnalyzer
-from repomap.resolver import ImportResolver
-from repomap.support import (
+from .parser import EXT_TO_LANG, TreeSitterAdapter
+from .ranking import EdgeBuilder, GraphAnalyzer
+from .resolver import ImportResolver
+from . import (
     RepoGraph,
     ScanStats,
     Symbol,
@@ -265,7 +265,7 @@ class RepoMapEngine:
         # 全量扫描后保存增量基线
         if not self._inc_cache_loaded and self.scan_state == "scanned":
             try:
-                from repomap.toolkit import save_incremental_cache
+                from .toolkit import save_incremental_cache
                 save_incremental_cache(str(self.project_root), self)
             except Exception as e:
                 logger.debug(f"Failed to save incremental cache: {e}")
@@ -294,7 +294,7 @@ class RepoMapEngine:
     def _load_incremental_cache_if_valid(self) -> Any | None:
         """加载增量缓存并校验有效性（项目路径 + git HEAD 匹配）。"""
         try:
-            from repomap.toolkit import load_incremental_cache
+            from .toolkit import load_incremental_cache
             cache = load_incremental_cache(str(self.project_root))
             if cache is None or not cache.files:
                 return None
@@ -370,7 +370,7 @@ class RepoMapEngine:
         self.graph.file_imports[file_path] = list(entry.imports)
 
         # 还原 import bindings
-        from repomap.support import JSImportBinding
+        from . import JSImportBinding
         self.graph.file_import_bindings[file_path] = [
             JSImportBinding(
                 local_name=b["local_name"], imported_name=b["imported_name"],
@@ -380,7 +380,7 @@ class RepoMapEngine:
         ]
 
         # 还原 exports
-        from repomap.support import JSExportBinding
+        from . import JSExportBinding
         self.graph.file_exports[file_path] = [
             JSExportBinding(
                 exported_name=b["exported_name"], source_name=b.get("source_name"),
@@ -716,7 +716,7 @@ class RepoMapEngine:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # 从 parser 模块导出常量以保持兼容性
-from repomap.parser import QUERIES
+from .parser import QUERIES
 
 __all__ = [
     "DEFAULT_MAX_FILE_BYTES",

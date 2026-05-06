@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from repomap.support import RepoGraph
+    from . import RepoGraph
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -83,8 +83,8 @@ def is_noise_file(file_path: str) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def classify_file_role(file_path: str) -> str:
-    """基于路径的粗略角色分类。"""
+def classify_file_role(file_path: str, graph: "RepoGraph | None" = None) -> str:
+    """基于路径和符号信息的角色分类。"""
     path = file_path.lower()
     if is_test_like_file(file_path):
         return "test"
@@ -97,6 +97,32 @@ def classify_file_role(file_path: str) -> str:
         return "backend"
     if any(path.endswith(ext) for ext in [".config.ts", ".config.js", ".config.tsx", "package.json"]):
         return "config"
+
+    # 结合符号信息进行更精确的分类
+    if graph is not None:
+        symbol_ids = graph.file_symbols.get(file_path, [])
+        if symbol_ids:
+            # 统计符号类型
+            kind_counts: dict[str, int] = {}
+            for sid in symbol_ids:
+                symbol = graph.symbols.get(sid)
+                if symbol:
+                    kind_counts[symbol.kind] = kind_counts.get(symbol.kind, 0) + 1
+
+            # 如果文件包含大量导出符号，可能是核心模块
+            exported_count = sum(1 for sid in symbol_ids
+                               if graph.symbols.get(sid) and graph.symbols[sid].visibility == "exported")
+            if exported_count >= 3:
+                return "core"
+
+            # 如果文件包含大量类/接口，可能是模型/类型定义
+            if kind_counts.get("class", 0) >= 2 or kind_counts.get("interface", 0) >= 2:
+                return "model"
+
+            # 如果文件包含大量函数，可能是工具/服务
+            if kind_counts.get("function", 0) >= 3:
+                return "service"
+
     return "other"
 
 

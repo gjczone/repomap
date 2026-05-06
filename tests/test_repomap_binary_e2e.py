@@ -22,7 +22,7 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
         cls.output_dir = Path(cls.temp_dir.name)
 
         build = subprocess.run(
-            [sys.executable, "-m", "repomap_cli", "build-binary", "--output", str(cls.output_dir)],
+            [sys.executable, "-m", "src.cli", "build-binary", "--output", str(cls.output_dir)],
             cwd=cls.repo_root,
             capture_output=True,
             text=True,

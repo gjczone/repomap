@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from repomap.lsp import (
+from src.lsp import (
     _json_rpc_frame,
     _read_lsp_message,
     _npm_prefix_bin,
@@ -56,7 +56,7 @@ class RepoMapLspTests(unittest.TestCase):
                 write_file(home, relative, "#!/bin/sh\nexit 0\n")
 
             with patch("pathlib.Path.home", return_value=home):
-                with patch("repomap_lsp._npm_prefix_bin", return_value=[home / ".npm-global" / "bin" / command_name]):
+                with patch("src.lsp._npm_prefix_bin", return_value=[home / ".npm-global" / "bin" / command_name]):
                     candidates = _trusted_user_lsp_candidates(command_name)
 
             candidate_set = {path.relative_to(home).as_posix() for path in candidates if home in path.parents}
@@ -92,7 +92,7 @@ class RepoMapLspTests(unittest.TestCase):
             user_server.chmod(user_server.stat().st_mode | stat.S_IXUSR)
 
             with patch("shutil.which", return_value="/usr/bin/pyright-langserver"):
-                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[user_server]):
+                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[user_server]):
                     detection = detect_lsp_server(project_root, "python", "main.py")
 
             self.assertEqual(detection.status, "available")
@@ -119,7 +119,7 @@ class RepoMapLspTests(unittest.TestCase):
             write_file(project_root, "src/App.tsx", "export function App() { return null }\n")
 
             with patch("shutil.which", return_value=None):
-                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[]):
+                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
                     detection = detect_lsp_server(project_root, "typescript", "src/App.tsx")
 
             self.assertEqual(detection.status, "available")
@@ -135,7 +135,7 @@ class RepoMapLspTests(unittest.TestCase):
             user_server.chmod(user_server.stat().st_mode | stat.S_IXUSR)
 
             with patch("shutil.which", return_value=None):
-                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[user_server]):
+                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[user_server]):
                     detection = detect_lsp_server(project_root, "python", "main.py")
 
             self.assertEqual(detection.status, "available")
@@ -146,7 +146,7 @@ class RepoMapLspTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "print('hi')\n")
             with patch("shutil.which", return_value=None):
-                with patch("repomap_lsp._trusted_user_lsp_candidates", return_value=[]):
+                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
                     result = collect_lsp_diagnostics(project_root, ["main.py"])
 
             self.assertEqual(result[0].status, "skipped")
@@ -217,7 +217,7 @@ while True:
             self.assertEqual(result[0].diagnostics[0].file, "src/app.ts")
             self.assertEqual(result[0].diagnostics[0].message, "fake diagnostic")
     def test_fake_lsp_server_returns_definition_and_references(self) -> None:
-        from repomap.lsp import collect_lsp_symbol_evidence
+        from src.lsp import collect_lsp_symbol_evidence
 
         with tempfile.TemporaryDirectory() as project_root:
             server = write_file(

@@ -75,8 +75,7 @@ For most non-trivial coding tasks:
 10. If you need recent history for a symbol: use `git-history`.
 11. If you need dead-code candidates: use `orphan`; review high (≥70) and medium (40-69) confidence tiers; use `--min-confidence 70` to filter noise; verify each candidate with `refs` before deletion.
 12. If installed repomap may be stale or unhealthy: use `doctor`.
-13. If later graph diff evidence matters, run `cache save` before target edits; after edits use `diff` for graph-only comparison or `verify --with-diff` for final evidence.
-14. If you are maintaining repomap itself and must rebuild it: use `build-binary`, then smoke-test before replacing PATH.
+13. If you are maintaining repomap itself and must rebuild it: use `build-binary`, then smoke-test before replacing PATH.
 
 ## Workflow patterns
 
@@ -121,11 +120,11 @@ For most non-trivial coding tasks:
 3. Add `--with-diff` when a pre-edit `cache save` baseline exists and graph-change evidence matters.
 4. Use `verify --project <project> --quick`, `check --project <project>`, `diagnostics --project <project> --source lsp --files <file...>`, or `diff --project <project>` directly when you need specific evidence instead of the aggregated gate.
 
-## LSP and Claude Code plugins
+## LSP
 
-Keep Claude Code LSP plugins enabled when they are working. They do not replace this skill.
+Keep your LSP plugins enabled when they are working. They do not replace this skill.
 
-Use `repomap` as the workflow and evidence entrypoint: repository map, impact planning, risk review, and `verify` final gate. Use Claude Code LSP plugins as underlying IDE-like precision tools for editor/agent definition, reference, and diagnostic help.
+Use `repomap` as the workflow and evidence entrypoint: repository map, impact planning, risk review, and `verify` final gate. Use LSP as underlying IDE-like precision tools for definition, reference, and diagnostic help.
 
 When you need LSP evidence inside the repomap workflow, choose repomap's opt-in LSP paths: `repomap query-symbol --project <project> --symbol <name> --with-lsp`, `repomap refs --project <project> --symbol <name> --with-lsp`, `repomap check --project <project> --with-lsp`, or `repomap verify --project <project> --with-lsp`. Do not treat plugin presence as a substitute for `impact` or `verify`.
 
@@ -153,7 +152,7 @@ When you need LSP evidence inside the repomap workflow, choose repomap's opt-in 
 
 ## References
 
-Read only when needed:
+Read only when needed. These files are in the skill directory (`~/.agents/skills/repomap/references/`), which may be outside the current workspace. Use `exec_shell cat` to read them:
 
 - `references/command-map.md`: complete command inventory, options, and deterministic agent command mapping.
 - `references/prompt-examples.md`: natural-language user phrasing examples mapped to agent actions; use only when intent-to-command mapping is unclear.

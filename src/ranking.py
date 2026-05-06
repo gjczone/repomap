@@ -19,11 +19,11 @@ from collections import deque
 from pathlib import PurePosixPath
 from typing import Any, TYPE_CHECKING
 
-from repomap.support import Edge, RepoGraph, Symbol, call_reference_parts
-from repomap.topic import is_test_like_file
+from . import Edge, RepoGraph, Symbol, call_reference_parts
+from .topic import is_test_like_file
 
 if TYPE_CHECKING:
-    from repomap.core import RepoMapEngine
+    from .core import RepoMapEngine
 
 logger = logging.getLogger("repomap")
 

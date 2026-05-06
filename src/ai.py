@@ -4,9 +4,9 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from repomap.core import RepoMapEngine
+    from .core import RepoMapEngine
 
-from repomap.topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
+from .topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
 
 
 RISK_MARK = {"high": "[high]", "medium": "[medium]", "low": "[low]"}
@@ -66,7 +66,7 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
 
 def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
     """生成一句话项目摘要：语言、框架、项目类型。"""
-    from repomap.parser import EXT_TO_LANG
+    from .parser import EXT_TO_LANG
 
     # 统计语言分布
     lang_counts: dict[str, int] = {}
@@ -654,7 +654,7 @@ def render_query_report(
         for sym in ranked[:5]:
             if symbols_shown >= max_symbols:
                 break
-            role_hint = classify_file_role(m.path)
+            role_hint = classify_file_role(m.path, engine.graph)
             lines.append(f"| `{sym['name']}` | `{m.path}` | {sym['line']} | {role_hint} |")
             symbols_shown += 1
     lines.append("")
@@ -1033,7 +1033,7 @@ def render_diff_risk_report(
 
     lines.append("## Changed Files\n")
     for f in changed_files:
-        role = classify_file_role(f)
+        role = classify_file_role(f, engine.graph)
         lines.append(f"- `{f}` ({role})")
     lines.append("")
 

@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -465,9 +466,15 @@ class DiagnosticRunner:
                 skip_reason="cargo not found",
             )
 
+        # 显示进度提示
+        print(f"[{tool}] Running cargo check (may take a minute for large projects)...", file=sys.stderr)
+
         cmd = ["cargo", "check", "--message-format", "json"]
         exit_code, output, duration = self._run_command(cmd, tool)
         errors, warnings = self._parse_cargo_output(output)
+
+        # 显示完成提示
+        print(f"[{tool}] Completed in {duration}ms", file=sys.stderr)
 
         return DiagnosticResult(
             tool=tool,
@@ -921,7 +928,7 @@ class RepoMapChecker:
                 skipped=True,
                 skip_reason="no explicit files; pass --modified-file or use diagnostics --files",
             )]
-        from repomap.lsp import collect_lsp_diagnostics
+        from .lsp import collect_lsp_diagnostics
 
         diagnostic_results: list[DiagnosticResult] = []
         for run in collect_lsp_diagnostics(self.project_root, target_files, timeout=lsp_timeout, max_files=lsp_max_files):

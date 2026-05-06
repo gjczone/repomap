@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
-from repomap.ai import (
+from ..ai import (
     _build_query_reading_order,
     _get_hot_files,
     _rank_symbols_for_file,
@@ -21,10 +21,10 @@ from repomap.ai import (
     render_routes_report,
     render_verify_report,
 )
-from repomap.check import RepoMapChecker
-from repomap.core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
-from repomap.parser import EXT_TO_LANG
-from repomap import (
+from ..check import RepoMapChecker
+from ..core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
+from ..parser import EXT_TO_LANG
+from .. import (
     Edge,
     HttpRoute,
     RepoGraph,
@@ -35,8 +35,8 @@ from repomap import (
     serialize_edge,
     serialize_symbol,
 )
-from repomap.toolkit import diff_project, save_cache, scan_project
-from repomap.topic import (
+from ..toolkit import diff_project, save_cache, scan_project
+from ..topic import (
     FileMatch,
     TestMatch,
     classify_file_role,
@@ -254,7 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_project_args(routes_parser)
     routes_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
-    subparsers.add_parser("doctor", help="Validate runtime and build prerequisites.")
+    doctor_parser = subparsers.add_parser("doctor", help="Validate runtime and build prerequisites.")
+    doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
 
     build_parser_cmd = subparsers.add_parser("build-binary", help="Build a one-file executable with PyInstaller.")
     build_parser_cmd.add_argument("--output", default="dist", help="Directory for the final binary.")
@@ -377,7 +378,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "routes":
         return run_routes(args.project, args.max_files, args.json)
     if command == "doctor":
-        return run_doctor()
+        return run_doctor(args.project)
     if command == "build-binary":
         return run_build_binary(args.output, args.name)
     parser.error(f"unknown command: {command}")
@@ -685,6 +686,10 @@ def _select_symbol_match(
     lines = [f"> 符号 `{symbol}` 存在多个候选，请用 `--file-path` 指定目标文件："]
     for item in candidates[:10]:
         lines.append(f"- `{item.file}:{item.line}` ({item.kind})")
+    if len(candidates) > 10:
+        lines.append(f"- ...还有 {len(candidates) - 10} 个候选")
+    lines.append(f"\n提示: 使用 `--file-path <file>` 参数来指定目标文件，例如:")
+    lines.append(f"  repomap call-chain --symbol {symbol} --file-path {candidates[0].file}")
     return None, "\n".join(lines)
 
 
@@ -867,7 +872,7 @@ def run_call_chain(
 
 
 def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout: float) -> dict[str, Any]:
-    from repomap.lsp import collect_lsp_symbol_evidence, run_result_to_dict
+    from ..lsp import collect_lsp_symbol_evidence, run_result_to_dict
 
     run = collect_lsp_symbol_evidence(
         engine.project_root,
@@ -954,6 +959,15 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
     try:
         engine = _scan_engine(project, max_files)
         normalized_file_path = _normalize_project_relative_path(engine.project_root, file_path, must_exist=True)
+
+        # 动态调整 max_symbols：如果用户未指定（使用默认值），根据文件符号数量自动调整
+        if max_symbols == DEFAULT_FILE_DETAIL_MAX_SYMBOLS:
+            file_symbol_count = len(engine.graph.file_symbols.get(normalized_file_path, []))
+            if file_symbol_count > 50:
+                max_symbols = min(file_symbol_count, 50)  # 大文件最多显示 50 个符号
+            elif file_symbol_count > 20:
+                max_symbols = file_symbol_count  # 中等文件显示所有符号
+
         print(engine.render_file_detail(normalized_file_path, max_symbols=max_symbols, max_chars=max_chars))
         return 0
     except Exception as exc:
@@ -1081,7 +1095,7 @@ def run_query(
             file_data = analysis.get(file_path, {})
             score = topic_score(query, file_path, file_data, engine.graph, keyword_weights=kw_weights)
             if score > 0:
-                role = classify_file_role(file_path)
+                role = classify_file_role(file_path, engine.graph)
                 reasons = _build_match_reasons(query, file_path, engine.graph)
                 matches.append(FileMatch(path=file_path, role=role, score=score, reasons=reasons))
 
@@ -1166,7 +1180,7 @@ def _query_symbols_json(
                 "kind": sym["kind"],
                 "file": m.path,
                 "line": sym["line"],
-                "role": classify_file_role(m.path),
+                "role": classify_file_role(m.path, engine.graph),
             })
     return result
 
@@ -1230,7 +1244,7 @@ def _impact_read_next(
 
 def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[str, Any]:
     try:
-        from repomap.lsp import detect_lsp_server, detection_to_dict, language_for_file
+        from ..lsp import detect_lsp_server, detection_to_dict, language_for_file
     except Exception as exc:
         return {"available": False, "servers": [], "suggestedCommands": [], "reason": str(exc)}
 
@@ -1600,7 +1614,7 @@ def _verify_lsp_payload(
     if not changed_files:
         return {"enabled": True, "status": "skipped", "runs": [], "summary": {}, "reason": "no changed files"}
     try:
-        from repomap.lsp import collect_lsp_diagnostics, run_result_to_dict
+        from ..lsp import collect_lsp_diagnostics, run_result_to_dict
 
         runs = collect_lsp_diagnostics(project_root, changed_files, timeout=timeout, max_files=max_files)
         run_dicts = [run_result_to_dict(run) for run in runs]
@@ -1634,8 +1648,8 @@ def _verify_graph_diff_payload(project_root: str, enabled: bool, incoming_map: d
         return {"enabled": True, "status": "skipped", "summary": {}, "breakingChanges": [], "reason": result["error"]}
     # 如果提供了 incoming_map，二次调用带调用者分析的 compare
     if incoming_map is not None:
-        from repomap.toolkit import load_cache
-        from repomap import compare_graph_snapshots
+        from ..toolkit import load_cache
+        from .. import compare_graph_snapshots
         cache = load_cache(project_root)
         if cache:
             current_symbols, current_edges = scan_project(project_root, max_files=5000)
@@ -1767,6 +1781,16 @@ def run_verify(
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(render_verify_report(payload))
+
+        # 如果没有 git 变更，给出下一步建议
+        if not changed_files:
+            print("\n> 未检测到 git 变更。", file=sys.stderr)
+            if quick:
+                print("> verify --quick 模式只分析 git 变更，没有变更时无法提供风险评估。", file=sys.stderr)
+                print("> 建议: 先进行代码修改，然后运行 `repomap verify` 进行完整验证。", file=sys.stderr)
+            else:
+                print("> 建议: 使用 `repomap overview` 了解项目结构，或使用 `repomap check` 进行编译检查。", file=sys.stderr)
+
         return 1 if status == "failed" else 0
     except Exception as exc:
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
@@ -2121,9 +2145,18 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
         lines.extend(_render_tier("中置信（需要确认）", "🟡", medium, limit))
         lines.extend(_render_tier("低置信（可能为活跃代码）", "🟢", low, limit))
 
-        if low:
-            lines.append("> 使用 `--min-confidence 40` 过滤低置信项。")
-        lines.append("> 不能仅据此删除，需要额外代码/业务验证。使用 `--json` 获取完整结构化输出。")
+        # 如果过滤后无结果，给出建议
+        if not high and not medium and not low:
+            if min_confidence > 0:
+                lines.append(f"\n> 使用 `--min-confidence {min_confidence}` 过滤后无结果。")
+                lines.append(f"> 尝试降低置信度阈值，例如: `--min-confidence {max(0, min_confidence - 20)}`")
+            else:
+                lines.append("\n> 未发现死代码候选。")
+                lines.append("> 这可能意味着项目代码质量良好，或者需要调整分析参数。")
+        else:
+            if low:
+                lines.append("> 使用 `--min-confidence 40` 过滤低置信项。")
+            lines.append("> 不能仅据此删除，需要额外代码/业务验证。使用 `--json` 获取完整结构化输出。")
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -2144,7 +2177,7 @@ def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
 def run_lsp_doctor(project: str, as_json: bool = False) -> int:
     try:
         project_root = _resolve_project(project)
-        from repomap.lsp import detect_lsp_servers, detection_to_dict
+        from ..lsp import detect_lsp_servers, detection_to_dict
 
         detections = detect_lsp_servers(project_root)
         payload = {
@@ -2193,7 +2226,7 @@ def run_diagnostics(
         if source != "lsp":
             print(f"[{CLI_NAME}] unsupported diagnostics source: {source}", file=sys.stderr)
             return 2
-        from repomap.lsp import collect_lsp_diagnostics, run_result_to_dict
+        from ..lsp import collect_lsp_diagnostics, run_result_to_dict
 
         runs = collect_lsp_diagnostics(project_root, normalized_files, timeout=lsp_timeout, max_files=lsp_max_files)
         payload = {
@@ -2373,8 +2406,12 @@ def _module_origin(module_name: str) -> str:
     return spec.origin or "built-in"
 
 
-def run_doctor() -> int:
-    from repomap.parser import TreeSitterAdapter
+def run_doctor(project: str | None = None) -> int:
+    from ..parser import TreeSitterAdapter
+
+    # 如果提供了 --project 参数，显示提示（doctor 不使用它，但保持一致性）
+    if project:
+        print(f"Note: --project is accepted for consistency but not used by doctor command.", file=sys.stderr)
 
     adapter = TreeSitterAdapter()
     parsers = sorted(adapter.parsers)

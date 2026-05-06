@@ -21,8 +21,8 @@ from collections import defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from repomap.parser import EXT_TO_LANG
-from repomap.support import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph
+from .parser import EXT_TO_LANG
+from . import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph
 
 logger = logging.getLogger("repomap")
 
