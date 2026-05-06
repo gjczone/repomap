@@ -61,26 +61,37 @@ If ~/.local/bin is not on PATH:
 
 ### macOS / Windows — build from source
 
-No prebuilt binary yet. Build locally:
+No prebuilt binary yet. Copy this to your AI agent:
 
-```bash
-# 1. Clone and install skill
-git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
-cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
-rm -rf /tmp/repomap-install
+```
+Install repomap from source for me:
 
-# 2. Clone and build binary
-git clone https://github.com/gjczone/repomap.git ~/repomap-src
-cd ~/repomap-src
-uv run --with pyinstaller python -m repomap.cli build-binary --output dist
+1. Clone and install the skill:
+   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+   rm -rf /tmp/repomap-install
 
-# 3. Install binary
-mkdir -p ~/.local/bin
-cp dist/repomap ~/.local/bin/repomap
-chmod +x ~/.local/bin/repomap
+2. Clone and build the binary:
+   git clone https://github.com/gjczone/repomap.git ~/repomap-src
+   cd ~/repomap-src
+   uv run --with pyinstaller python -m repomap.cli build-binary --output dist
 
-# 4. Verify
-repomap doctor
+3. Install the binary:
+   mkdir -p ~/.local/bin
+   cp dist/repomap ~/.local/bin/repomap
+   chmod +x ~/.local/bin/repomap
+
+4. Set up language support:
+   Tell me: "Check what languages I use and set up repomap accordingly."
+   I will install tree-sitter parsers for your languages. If you use Java,
+   Kotlin, Swift, C/C++, C#, PHP, or Ruby, I will also run uv sync --all-extras.
+   Then I'll run repomap lsp doctor and suggest LSP install commands if needed.
+
+5. Verify:
+   repomap doctor
+
+If ~/.local/bin is not on PATH:
+   export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Requirements: Python 3.10+, [uv](https://docs.astral.sh/uv/) package manager.

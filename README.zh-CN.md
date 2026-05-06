@@ -57,26 +57,36 @@
 
 ### macOS / Windows — 从源码构建
 
-暂无预编译二进制，需要本地构建：
+暂无预编译二进制。复制下面这段话给你的 AI agent：
 
-```bash
-# 1. 克隆并安装 skill
-git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
-cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
-rm -rf /tmp/repomap-install
+```
+请帮我从源码安装 repomap：
 
-# 2. 克隆并构建二进制
-git clone https://github.com/gjczone/repomap.git ~/repomap-src
-cd ~/repomap-src
-uv run --with pyinstaller python -m repomap.cli build-binary --output dist
+1. 克隆并安装 skill：
+   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+   rm -rf /tmp/repomap-install
 
-# 3. 安装二进制
-mkdir -p ~/.local/bin
-cp dist/repomap ~/.local/bin/repomap
-chmod +x ~/.local/bin/repomap
+2. 克隆并构建二进制：
+   git clone https://github.com/gjczone/repomap.git ~/repomap-src
+   cd ~/repomap-src
+   uv run --with pyinstaller python -m repomap.cli build-binary --output dist
 
-# 4. 验证
-repomap doctor
+3. 安装二进制：
+   mkdir -p ~/.local/bin
+   cp dist/repomap ~/.local/bin/repomap
+   chmod +x ~/.local/bin/repomap
+
+4. 设置语言支持：
+   问我"你主要用哪些编程语言"，然后根据我的回答安装对应的 tree-sitter 解析器。
+   如果我用 Java、Kotlin、Swift、C/C++、C#、PHP、Ruby，还需要执行 uv sync --all-extras。
+   然后运行 repomap lsp doctor 检查 LSP，缺失则提示安装命令。
+
+5. 验证：
+   repomap doctor
+
+如果 ~/.local/bin 不在 PATH 里：
+   export PATH="$HOME/.local/bin:$PATH"
 ```
 
 需要：Python 3.10+, [uv](https://docs.astral.sh/uv/) 包管理器。
