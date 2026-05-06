@@ -3,6 +3,3 @@ __pycache__/
 .venv/
 dist/.pyinstaller/
 .pytest_cache/
-
-# Local-only docs
-docs/

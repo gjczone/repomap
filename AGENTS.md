@@ -120,7 +120,21 @@ The public README files serve different audiences than this document:
 - LSP is strictly opt-in, local-only. Never auto-install servers, never run `npx`/`pnpx`/`bunx`.
 - `verify` suggests tests but does not run them. Agents must run tests explicitly.
 - Cache directories are keyed by canonical project path.
-- `.gitignore` keeps `AGENTS.md`, `CLAUDE.md`, and `docs/` local-only (not in public repo).
+- `.gitignore` keeps `docs/` local-only (not in public repo).
+
+## Agent Boundary Discovery
+
+When using `repomap`, AI agents encounter tool boundaries that specs don't cover. These discoveries are logged in [`docs/BOUNDARIES.md`](docs/BOUNDARIES.md) for continuous improvement.
+
+**What to log**: language/framework gaps, performance boundaries, output precision issues, workflow friction, edge cases.
+
+**When to log**: after any `repomap` command that fails or produces unexpected results; when output requires post-processing; when a real coding task exposes a capability gap.
+
+**Format**: each entry uses `[ ]` (pending) or `[x]` (resolved) checkbox format with discovery scenario, current behavior, expected behavior, and impact on agent workflow.
+
+**Workflow**: use repomap normally → hit a boundary → find alternative approach → log the discovery → after fix is implemented, verify and mark `[x]`.
+
+The SKILL.md `## Optimization Feedback` section is the authoritative procedure for what to capture and how to format entries.
 
 ## Skill Distribution
 
