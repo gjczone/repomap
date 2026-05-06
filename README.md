@@ -11,7 +11,7 @@
 - **Before editing**: entry points, keyword-to-file mapping, change impact, risk level, suggested reading order
 - **After editing**: changed files, risk assessment, suggested tests, compiler/linter diagnostics
 
-It doesn't modify code. It doesn't replace tests. It just gives the agent a quick structural overview before it dives into files.
+It doesn't modify code. It doesn't replace tests. It just gives the agent a "map" before reading files, and a safety check after editing.
 
 ---
 
@@ -141,7 +141,7 @@ repomap verify --project /path/to/project
 
 `repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — using tree-sitter + PageRank to give CLI AI agents codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding. We keep the "repo map" name to honor that origin.
 
-`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone), a non-programmer, using DeepSeek-V4-Pro.
+`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone), a non-programmer, using DeepSeek-V4-Pro (~90% of development), with GLM-5.1 and MIMO-V2.5-Pro for cross-validation and review.
 
 ---
 

@@ -9,7 +9,7 @@
 - **动手前**：项目入口在哪、关键词对应哪些文件、改一个文件会影响谁、风险有多高、该先读什么
 - **动手后**：改了哪些文件、风险等级、建议跑哪些测试、诊断结果有没有问题
 
-它不改代码，不替代测试。只是在 agent 深入阅读文件之前，先给一个快速的代码结构概览。
+它不改代码，不替代测试。只是在 agent 读文件前给一张"地图"，改代码后帮忙确认改了哪些、有没有风险。
 
 ---
 
@@ -139,7 +139,7 @@ repomap verify --project /path/to/project
 
 `repomap` 的名字和核心理念来自 **[aider](https://github.com/Aider-AI/aider)**。aider 作者 Paul Gauthier 首创了 "repo mapping" ——用 tree-sitter + PageRank 在 CLI 里给 AI agent 提供代码库感知能力。他证明了一个反直觉的洞察：一张紧凑的结构化地图，对 AI 的价值往往超过大量原始代码。我们保留了 "repo map" 这个名称，以表达对起源的敬意。
 
-`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。由 [@gjczone](https://github.com/gjczone)（非程序员）使用 DeepSeek-V4-Pro 开发。
+`repomap` 在这个基础上进行了大幅延展：15 种语言、增量扫描、改动前影响分析、改动后验证门控、可选本地 LSP 集成。由 [@gjczone](https://github.com/gjczone)（非程序员）使用 DeepSeek-V4-Pro（约 90% 开发量）开发，GLM-5.1 和 MIMO-V2.5-Pro 辅助交叉验证与审核。
 
 ---
 
