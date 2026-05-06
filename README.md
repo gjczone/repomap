@@ -136,7 +136,9 @@ Install repomap for me:
 4. Verify:
    repomap.exe doctor
 
-Note: use repomap.exe instead of repomap in all commands.
+Note for LLM agent: on Windows the binary is repomap.exe. If repomap.exe is on
+PATH, the SKILL.md commands (repomap overview, repomap verify, etc.) work as-is.
+If not on PATH, use the full path or repomap.exe in every command.
 ```
 
 > After installation, the agent automatically uses repomap during coding tasks — it calls commands like `overview`, `impact`, and `verify` on its own when needed.
