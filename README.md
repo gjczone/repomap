@@ -77,7 +77,28 @@ Install repomap for me:
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-macos
    chmod +x ~/.local/bin/repomap
 
-3. Set up language support and verify — same as Linux steps 3-4 above.
+3. Set up language support (agent handles this):
+   Tell your agent: "Check what languages I use and set up repomap accordingly."
+   The agent will install tree-sitter parsers for your languages. 8 languages
+   work out of the box; if you use Java, Kotlin, Swift, C/C++, C#, PHP, or Ruby,
+   the agent will also run `uv sync --all-extras` for you.
+   
+   Then the agent runs `repomap lsp doctor` to check LSP. If any are missing:
+
+   | Language | LSP install |
+   |----------|------------|
+   | TypeScript | `npm install -g typescript-language-server` |
+   | Python | `npm install -g pyright` |
+   | Rust | `rustup component add rust-analyzer` |
+   | Go | `go install golang.org/x/tools/gopls@latest` |
+
+   You don't need to understand what these are. The agent handles everything.
+
+4. Verify:
+   repomap doctor
+
+If ~/.local/bin is not on PATH:
+   export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ### Windows (x86_64)
@@ -95,8 +116,27 @@ Install repomap for me:
    mkdir -p ~/AppData/Local/Microsoft/WindowsApps
    curl -L -o ~/AppData/Local/Microsoft/WindowsApps/repomap.exe https://github.com/gjczone/repomap/releases/latest/download/repomap.exe
 
-3. Set up language support and verify — same as Linux steps 3-4 above.
-   Note: run repomap.exe instead of repomap in the terminal.
+3. Set up language support (agent handles this):
+   Tell your agent: "Check what languages I use and set up repomap accordingly."
+   The agent will install tree-sitter parsers for your languages. 8 languages
+   work out of the box; if you use Java, Kotlin, Swift, C/C++, C#, PHP, or Ruby,
+   the agent will also run `uv sync --all-extras` for you.
+   
+   Then the agent runs `repomap lsp doctor` to check LSP. If any are missing:
+
+   | Language | LSP install |
+   |----------|------------|
+   | TypeScript | `npm install -g typescript-language-server` |
+   | Python | `npm install -g pyright` |
+   | Rust | `rustup component add rust-analyzer` |
+   | Go | `go install golang.org/x/tools/gopls@latest` |
+
+   You don't need to understand what these are. The agent handles everything.
+
+4. Verify:
+   repomap.exe doctor
+
+Note: use repomap.exe instead of repomap in all commands.
 ```
 
 > After installation, the agent automatically uses repomap during coding tasks — it calls commands like `overview`, `impact`, and `verify` on its own when needed.
