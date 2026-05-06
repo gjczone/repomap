@@ -1,6 +1,6 @@
-# RepoMap — Repository Intelligence for AI Coding Agents
+# RepoMap — Skill + CLI for AI-Agent Repository Intelligence
 
-> **A CLI tool that gives AI agents (Claude Code, Codex, OpenCode) a "project map" — so they know what to read, what a change affects, and what to verify — before and after editing code.**
+> **A skill + CLI tool that gives AI agents (Claude Code, Codex, OpenCode) a "project map" — so they know what to read, what a change affects, and what to verify — before and after editing code.**
 >
 > Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept.
 
@@ -17,6 +17,8 @@ It doesn't modify code. It doesn't replace tests. It does the one thing CLI agen
 
 ## Install
 
+### Linux (x86_64) — prebuilt binary available
+
 Copy this to your AI agent:
 
 ```
@@ -28,7 +30,7 @@ Install repomap for me:
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. Download binary (Linux x86_64):
+2. Download binary:
    mkdir -p ~/.local/bin
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
@@ -40,11 +42,39 @@ If ~/.local/bin is not on PATH:
    export PATH="$HOME/.local/bin:$PATH"
 ```
 
-> Manual: clone → `cp skills/repomap ~/.claude/skills/` → download binary → done.
+### macOS / Windows — build from source
+
+No prebuilt binary yet. Build locally:
+
+```bash
+# 1. Clone and install skill
+git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+rm -rf /tmp/repomap-install
+
+# 2. Clone and build binary
+git clone https://github.com/gjczone/repomap.git ~/repomap-src
+cd ~/repomap-src
+uv run --with pyinstaller python -m repomap.cli build-binary --output dist
+
+# 3. Install binary
+mkdir -p ~/.local/bin
+cp dist/repomap ~/.local/bin/repomap
+chmod +x ~/.local/bin/repomap
+
+# 4. Verify
+repomap doctor
+```
+
+Requirements: Python 3.10+, [uv](https://docs.astral.sh/uv/) package manager.
+
+> After installation, the skill auto-discovers — the agent calls `repomap` commands on its own when working with code.
 
 ---
 
 ## Typical Usage
+
+> The commands below are called **by the AI agent via skill**, not by the human. After installation, the agent reads `SKILL.md` and decides when to invoke each command based on the task at hand.
 
 ### Before editing
 
@@ -99,11 +129,11 @@ repomap verify --project /path/to/project
 
 ## Supported Languages
 
-| Status | Languages |
-|--------|-----------|
-| Built-in | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON |
-| Optional | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby (install extra tree-sitter bindings) |
-| LSP (opt-in) | TypeScript, Python, Rust, Go (requires local language server) |
+| Tier | Languages | Notes |
+|------|-----------|-------|
+| **Built-in** | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON | Always available |
+| **Optional** | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby | Install extra tree-sitter bindings: `uv sync --all-extras` |
+| **LSP (opt-in)** | TypeScript, Python, Rust, Go | Needs language server already installed on your machine |
 
 ---
 
@@ -117,8 +147,8 @@ repomap verify --project /path/to/project
 
 ## Related Projects
 
+- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer. Paul Gauthier first conceived of tree-sitter + PageRank for AI-agent codebase awareness. This project stands on that foundation.
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — `deepmap` (Rust port of `repomap`'s engine, [PR submitted](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap))
-- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer
 
 ---
 

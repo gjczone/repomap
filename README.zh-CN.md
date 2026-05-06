@@ -1,6 +1,6 @@
-# RepoMap — AI Agent 的代码库地图
+# RepoMap — Skill + CLI，AI Agent 的仓库智能层
 
-> **一个 CLI 工具，让 Claude Code、Codex、OpenCode 等 AI agent 拥有"项目地图"——知道应该读哪个文件、改了会影响谁、改完该验证什么。**
+> **一个 skill + CLI 工具，让 Claude Code、Codex、OpenCode 等 AI agent 拥有"项目地图"——知道应该读哪个文件、改了会影响谁、改完该验证什么。**
 >
 > 灵感源于 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。
 
@@ -15,6 +15,8 @@
 
 ## 安装
 
+### Linux (x86_64) — 有预编译二进制
+
 复制下面这段话给你的 AI agent：
 
 ```
@@ -26,7 +28,7 @@
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. 下载二进制文件（Linux x86_64）：
+2. 下载二进制文件：
    mkdir -p ~/.local/bin
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
@@ -38,11 +40,39 @@
    export PATH="$HOME/.local/bin:$PATH"
 ```
 
-> 手动安装：clone 仓库 → `cp skills/repomap ~/.claude/skills/` → 下载二进制 → 完成。
+### macOS / Windows — 从源码构建
+
+暂无预编译二进制，需要本地构建：
+
+```bash
+# 1. 克隆并安装 skill
+git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+rm -rf /tmp/repomap-install
+
+# 2. 克隆并构建二进制
+git clone https://github.com/gjczone/repomap.git ~/repomap-src
+cd ~/repomap-src
+uv run --with pyinstaller python -m repomap.cli build-binary --output dist
+
+# 3. 安装二进制
+mkdir -p ~/.local/bin
+cp dist/repomap ~/.local/bin/repomap
+chmod +x ~/.local/bin/repomap
+
+# 4. 验证
+repomap doctor
+```
+
+需要：Python 3.10+, [uv](https://docs.astral.sh/uv/) 包管理器。
+
+> 安装完成后，skill 自动生效——agent 在处理代码时会自行调用 `repomap` 命令。
 
 ---
 
 ## 典型用法
+
+> 以下命令均由 **AI agent 通过 skill 自动调用**，不需要人手动输入。安装后 agent 会读取 `SKILL.md`，根据当前任务自行决定调用哪个命令。
 
 ### 改代码前：了解 → 评估 → 计划
 
@@ -97,11 +127,11 @@ repomap verify --project /path/to/project
 
 ## 支持语言
 
-| 状态 | 语言 |
-|------|------|
-| 内置 | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON |
-| 可选 | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby（需安装额外 tree-sitter 绑定） |
-| LSP（opt-in） | TypeScript, Python, Rust, Go（需本机已安装对应语言服务器） |
+| 级别 | 语言 | 说明 |
+|------|------|------|
+| **内置** | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON | 始终可用 |
+| **可选** | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby | 需安装额外 tree-sitter 绑定：`uv sync --all-extras` |
+| **LSP（opt-in）** | TypeScript, Python, Rust, Go | 需要本机已安装对应语言服务器 |
 
 ---
 
@@ -115,8 +145,8 @@ repomap verify --project /path/to/project
 
 ## 相关项目
 
+- **[aider](https://github.com/Aider-AI/aider)** — CLI 环境下 repo mapping 理念的原创者。Paul Gauthier 最早构思了 tree-sitter + PageRank 做 AI agent 代码库感知。此项目立于其肩膀之上。
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — `deepmap`（repomap 引擎的 Rust 移植，[PR 提交中](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap)）
-- **[aider](https://github.com/Aider-AI/aider)** — CLI 环境下 repo mapping 理念的原创者
 
 ---
 
