@@ -60,7 +60,7 @@ required_texts=(
   "AI agent"
   "Claude Code LSP"
   "--with-lsp"
-  "支撑文件"
+  "supporting file"
 )
 for required in "${required_texts[@]}"; do
   grep -F -- "$required" "$SKILL_MD" >/dev/null || err "${LINENO}" "required_text=${required}" "missing_in_skill"
@@ -72,7 +72,7 @@ for required in \
   "diagnostics" \
   "cache save" \
   "diff" \
-  "支撑文件"; do
+  "supporting file"; do
   grep -F -- "$required" "$COMMAND_MAP" >/dev/null || err "${LINENO}" "command_map_required=${required}" "missing"
 done
 

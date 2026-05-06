@@ -148,7 +148,7 @@ When you need LSP evidence inside the repomap workflow, choose repomap's opt-in 
 - `.tsx` uses the dedicated TSX parser. Import dependency extraction should use module source strings, not imported symbol names.
 - Path-taking commands normalize `./...` and absolute in-project paths and must reject paths outside the project.
 - `routes` is a production HTTP/API route inventory. It filters common test/e2e/spec DSL noise such as Playwright `test.describe`, `console.log`, and ordinary Array/Option calls; use `query` / `file-detail` for mock routes inside tests.
-- `overview` is primarily a source-symbol graph. Its `支撑文件（非符号图）` / supporting-file section is a lightweight inventory of docs/scripts/config only; it does not parse Markdown/shell/service files and does not replace `AGENTS.md`/`CLAUDE.md` context.
+- `overview` is primarily a source-symbol graph. Its "supporting files (non-AST)" section is a lightweight inventory of docs/scripts/config only; it does not parse Markdown/shell/service files and does not replace `AGENTS.md`/`CLAUDE.md` context.
 - LSP support is opt-in and local-only: repomap checks project-local executables, PATH, and trusted user tool directories, but does not use plugin/MCP, install servers, bundle servers, run `npx`/`pnpx`/`bunx`, or run a daemon.
 
 ## References

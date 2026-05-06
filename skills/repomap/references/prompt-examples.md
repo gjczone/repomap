@@ -15,7 +15,7 @@ Use this file only when an AI agent needs examples for mapping natural-language 
 
 User phrasing example:
 
-`repomap 好像还是旧版本，帮我确认一下`
+`I think repomap is still the old version, can you confirm?`
 
 Agent action:
 
@@ -32,7 +32,7 @@ Why:
 
 User phrasing example:
 
-`重新构建 repomap 二进制并替换旧版本`
+`Rebuild the repomap binary and replace the old one`
 
 Agent action:
 
@@ -51,7 +51,7 @@ Important:
 
 User phrasing example:
 
-`帮我快速理解这个项目`
+`Help me quickly understand this project`
 
 Agent action:
 
@@ -67,7 +67,7 @@ Why:
 
 User phrasing example:
 
-`这个仓库大概有多少文件和符号？`
+`About how many files and symbols are in this repo?`
 
 Agent action:
 
@@ -83,7 +83,7 @@ Why:
 
 User phrasing example:
 
-`哪些文件最复杂，应该优先看？`
+`Which files are the most complex and should be looked at first?`
 
 Agent action:
 
@@ -99,7 +99,7 @@ Why:
 
 User phrasing example:
 
-`terminal 相关的代码在哪？`
+`Where is the terminal-related code?`
 
 Agent action:
 
@@ -116,7 +116,7 @@ Why:
 
 User phrasing example:
 
-`只看 src/auth 里面登录相关代码`
+`Only look at login-related code inside src/auth`
 
 Agent action:
 
@@ -132,7 +132,7 @@ Why:
 
 User phrasing example:
 
-`帮我找 calculate_kpi 在哪里`
+`Help me find where calculate_kpi is`
 
 Agent action:
 
@@ -145,7 +145,7 @@ If multiple candidates appear, add `--file-path <file>` before relying on the re
 
 User phrasing example:
 
-`api.ts 里的 getMetadata 能不能被找到？`
+`Can getMetadata in api.ts be found?`
 
 Agent action:
 
@@ -161,7 +161,7 @@ Why:
 
 User phrasing example:
 
-`先别打开源码，告诉我 service.py 里有什么`
+`Don't open the source yet, tell me what's in service.py`
 
 Agent action:
 
@@ -176,7 +176,7 @@ Why:
 
 User phrasing example:
 
-`如果我改 VirtualKeyboard.tsx 会影响哪些文件？`
+`If I modify VirtualKeyboard.tsx, which files will be affected?`
 
 Agent action:
 
@@ -194,7 +194,7 @@ Why:
 
 User phrasing example:
 
-`我要改 useChartLinkage.ts，先帮我判断怎么下手`
+`I need to modify useChartLinkage.ts, first help me figure out how to approach it`
 
 Agent action:
 
@@ -212,7 +212,7 @@ Why:
 
 User phrasing example:
 
-`如果我改 helper 会影响哪些地方`
+`If I modify helper, which areas will be affected`
 
 Agent action:
 
@@ -231,7 +231,7 @@ Why:
 
 User phrasing example:
 
-`这个函数的定义和引用要更准一点，用 LSP 看看`
+`I need more accurate definition and references for this function, use LSP`
 
 Agent action:
 
@@ -248,7 +248,7 @@ Important:
 
 User phrasing example:
 
-`帮我列一下这个项目有哪些 HTTP 接口`
+`List all the HTTP endpoints in this project`
 
 Agent action:
 
@@ -266,7 +266,7 @@ Why:
 
 User phrasing example:
 
-`我改了几处代码，提交前帮我看看有没有风险`
+`I've modified some code, help me check for risks before committing`
 
 Agent action:
 
@@ -286,7 +286,7 @@ If the task only needs risk without diagnostics, choose `repomap verify --projec
 
 User phrasing example:
 
-`我刚改了几处代码，看看有没有明显问题`
+`I've just modified some code, check for obvious issues`
 
 Agent action:
 
@@ -304,7 +304,7 @@ Important:
 
 User phrasing example:
 
-`我改完了，加上 LSP 诊断再看一下`
+`I'm done with changes, add LSP diagnostics and review again`
 
 Agent action:
 
@@ -320,7 +320,7 @@ Important:
 
 User phrasing example:
 
-`不用风险报告，只跑一下静态检查`
+`No risk report needed, just run static analysis`
 
 Agent action:
 
@@ -338,7 +338,7 @@ repomap check --project <project> --since-commit <rev>
 
 User phrasing example:
 
-`只对这两个文件跑 LSP 诊断`
+`Run LSP diagnostics on only these two files`
 
 Agent action:
 
@@ -354,7 +354,7 @@ Why:
 
 User phrasing example:
 
-`这个项目本机能用哪些 language server？`
+`Which language servers are available locally for this project?`
 
 Agent action:
 
@@ -370,7 +370,7 @@ Important:
 
 User phrasing example:
 
-`我已经缓存过 baseline，提交前连结构变化一起看`
+`I've already cached the baseline, also check structural changes before committing`
 
 Agent action:
 
@@ -386,7 +386,7 @@ Important:
 
 User phrasing example:
 
-`这次改动前先缓存 graph baseline`
+`Cache the graph baseline before this round of changes`
 
 Agent action:
 
@@ -402,7 +402,7 @@ Important:
 
 User phrasing example:
 
-`我已经缓存过了，帮我看看这次结构上有什么变化`
+`I've already cached it, help me see the structural changes this time`
 
 Agent action:
 
@@ -419,7 +419,7 @@ Important:
 
 User phrasing example:
 
-`这个函数最近是谁改的，为什么容易出问题`
+`Who recently modified this function and why is it error-prone`
 
 Agent action:
 
@@ -431,7 +431,7 @@ Agent action:
 
 User phrasing example:
 
-`帮我找可能没被用到的代码`
+`Help me find potentially unused code`
 
 Agent action:
 
@@ -450,7 +450,7 @@ Why:
 
 User phrasing example:
 
-`为什么 session.pty.onData() 没连到另一个文件里的 onData？`
+`Why doesn't session.pty.onData() connect to onData in another file?`
 
 Agent answer:
 

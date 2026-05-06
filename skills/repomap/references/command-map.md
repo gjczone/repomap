@@ -145,7 +145,7 @@ Claude Code LSP plugins and `repomap` are complementary:
 
 ## Important Semantics
 
-- `overview`: source-symbol graph first; `支撑文件（非符号图）` is a lightweight inventory for docs/scripts/config and does not replace `AGENTS.md`/`CLAUDE.md` context.
+- `overview`: source-symbol graph first; `supporting files (non-AST)` is a lightweight inventory for docs/scripts/config and does not replace `AGENTS.md`/`CLAUDE.md` context.
 - `verify`: default post-edit evidence gate. Aggregates Git changed files, risk, suggested tests, `check`, optional LSP diagnostics, and optional graph diff. Requires a Git repository; fails clearly in non-Git projects. `status=failed` should block completion; `warning` should be reported as incomplete confidence, not hidden.
 - `verify --quick`: parses `git status --porcelain` and `git rev-parse --show-toplevel` for risk-only review (skips compiler/LSP checks); requires a Git repository. Staged, unstaged, untracked, and rename paths must be preserved without truncation.
 - `check`: if any non-skipped underlying tool exits non-zero, the report is failed even when no structured issue is parsed. Explain the failing tool from the report; do not assume `repomap` itself is broken. When ALL diagnostic tools are skipped (visible as `tools_run=0` in the summary), the report status is `unknown`, not `passed` — no tool actually verified the project.
