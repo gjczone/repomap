@@ -38,7 +38,7 @@
 
 简单说：AI 不用再靠 `grep` + 逐文件阅读来猜项目结构，而是先拿到一张地图，再决定读什么、改什么、验证什么。
 
-`repomap` 的核心引擎已用 Rust 重写并集成到 [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) 中，作为内置工具 **deepmap**。Python 版 CLI 仍独立维护。
+`repomap` 的核心引擎已用 Rust 重写，[正在提交 PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 集成到 [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) 中，作为内置工具 **deepmap**。Python 版 CLI 仍独立维护。
 
 ## 起源
 
