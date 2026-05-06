@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: Use this skill for any non-trivial coding task in a repository. repomap is a CLI tool that scans the codebase with tree-sitter and returns structured context — project overview, topic search, file detail, call chains, impact analysis, and post-edit verification. Call it before reading files, before editing, and after editing. Skip only for tiny exact-line fixes or non-code tasks.
+description: DO NOT read source files directly when entering a codebase. Always call `repomap overview` or `repomap query` FIRST to get a structural map of the project — entry points, key symbols, call chains, and reading order. This gives you more information per token than raw file reads. Also call `repomap impact --with-symbols` before editing any file, and `repomap verify` after editing to confirm safety. Skip repomap ONLY for trivial single-line fixes or pure non-coding tasks. In any other coding scenario, repomap should be your FIRST tool call — before grep, before read_file, before anything else.
 ---
 
 # repomap
