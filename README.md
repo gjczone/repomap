@@ -109,4 +109,6 @@ Python, JavaScript / TypeScript（含 TSX）, Go, Rust, Java, Kotlin, Swift, C/C
 
 ## 许可证
 
+[English version](./README.en.md)
+
 MIT — [LICENSE](./LICENSE)
