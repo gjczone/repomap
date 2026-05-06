@@ -1,98 +1,760 @@
-# RepoMap CLI — 给 AI 代码助手用的项目地图
+# RepoMap — CLI/TUI AI 代码助手的项目地图
 
-`repomap` 是一个命令行工具，它会读取一个代码项目，整理出“项目地图”：哪些文件重要、某个功能可能在哪、一个文件被谁使用、改它可能影响什么、应该优先看哪些测试、当前改动风险有多高。
+`repomap` 是一个仓库智能层（repository intelligence layer），专为 CLI/TUI 环境中的 AI 代码助手设计。它读取代码项目，生成结构化的"项目地图"：入口文件、关键符号、调用链、热点文件、阅读顺序、改动影响范围和风险评估。
 
-如果把一个代码项目想成一栋很大的楼，普通搜索相当于在楼里喊关键词；`repomap` 更像是先拿到楼层图、房间用途、通道关系和安全出口。它的核心价值不是替代程序员或测试，而是让 AI 代码助手在动手改代码前少猜一点、少乱翻文件、少漏掉影响范围。
+如果把代码项目比作一栋大楼，普通搜索（grep / find）相当于在楼里挨个房间喊关键词；`repomap` 则是先给你楼层平面图、房间用途表、通道关系和安全出口。它的核心价值不是替代程序员或测试，而是让 AI 代码助手在动手改代码前少猜一点、少乱翻文件、少漏掉影响范围。
 
-## 给完全不了解 repomap 的人
+`repomap` 已被集成到 [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) 中，作为内置 Rust 工具 **deepmap**。Python 版本的 CLI 仍然独立维护，两者的核心算法（tree-sitter AST 解析 + PageRank 图分析）同源。
 
-### 它解决什么问题？
+---
 
-AI 代码助手经常会遇到三个问题：
+## 目录
 
-1. **不知道从哪里开始看**：项目文件很多，只靠 `grep` / `find` 容易读一堆不相关文件。
-2. **不知道改动会影响谁**：改一个文件或函数前，不清楚谁在调用它、它又依赖谁。
-3. **不知道该验证什么**：改完之后，不知道应该跑哪些测试、看哪些风险。
+- [起源与致谢](#起源与致谢)
+- [解决的问题](#解决的问题)
+- [快速开始](#快速开始)
+- [安装](#安装)
+- [命令总览](#命令总览)
+- [核心工作流](#核心工作流)
+- [命令详细说明](#命令详细说明)
+- [项目结构](#项目结构)
+- [维护策略](#维护策略)
+- [已知限制](#已知限制)
+- [许可证](#许可证)
+- [相关项目](#相关项目)
 
-`repomap` 的作用就是把这些问题变成更结构化的提示：
+---
 
-- 先看项目总览：`overview`
-- 按业务词找代码：`query`
-- 看某个文件里有什么：`file-detail`
-- 改文件前看影响和风险：`impact --with-symbols`
-- 改完后做交付前证据汇总：`verify`（快速模式 `verify --quick` 跳过编译器/LSP，只看变更风险）
-- 做质量检查：`check`
-- 有本地语言服务器时，再额外用 LSP 做更精确的诊断或引用证据
+## 起源与致谢
 
-### 谁应该用？
+`repomap` 的核心理念源于 [aider](https://github.com/Aider-AI/aider) —— 一个开创性的 AI 结对编程 CLI 工具。aider 的作者最早提出了"在命令行环境中使用 tree-sitter 解析代码语法树，结合 PageRank 算法生成项目地图，让 AI 拥有代码库感知能力"的想法。这个想法非常优雅且实用。
 
-- **AI 代码助手 / Agent**：这是主要使用者。它可以先用 `repomap` 建立上下文，再决定读哪些文件和怎么改。
-- **人类开发者**：也可以用它快速理解陌生项目、改动影响、测试建议。
-- **非技术负责人**：不需要理解所有命令，只要知道它能帮助 AI 在改代码前做“地图和风险评估”。
+我们在 aider 的 repomap 基础上做了大量扩展，使其更适合 CLI/TUI agent 工作流：
 
-### 它不会做什么？
+- 从单一 overview 扩展为完整的命令家族（impact / verify / query / call-chain / routes / orphan 等）
+- 增加了编辑前影响分析和编辑后证据汇总
+- 增加了主题搜索（query）和死代码检测（orphan）
+- 增加了基于 Git 变更的风险评估
+- 增加了可选的本地 LSP 集成（诊断、定义跳转、引用查找）
+- 增加了缓存快照和图对比（cache save / diff）
 
-`repomap` 的边界很明确：
+本项目由一位非专业开发者借助 AI 编程助手构建。它不是一个商业产品，而是一个来自实践的开源工具，目标是让 AI 代码助手在终端环境中的工作更高效、更可靠。
 
-- 不会自动改代码。
-- 不会替代真实测试。
-- 不会自动安装工具或语言服务器。
-- 不会启动后台常驻服务。
-- 不依赖 IDE、插件、MCP server。
-- LSP 能力是可选的，只在明确加 `--with-lsp` 或相关命令时使用。
+**我们站在 aider 的肩膀上。** 没有 aider 的先行探索，就不会有 repomap。如果你还不了解 aider，强烈建议去看看。
+
+---
+
+## 解决的问题
+
+### 背景：CLI 工具 vs IDE 工具的代码感知鸿沟
+
+在 CLI 编码工具（aider、Claude Code、DeepSeek-TUI、Cursor CLI 模式等）中，AI agent 历史上几乎没有代码库感知能力。它的工作方式大致是：
+
+1. 用户说"改一下登录逻辑"
+2. AI 用 `grep` / `find` 搜索关键词
+3. AI 读取搜索到的文件
+4. AI 猜测要改哪里，然后动手
+
+这种方式的问题很明显：
+
+- **不知道从哪里开始看**：项目文件很多，只靠文本搜索容易漏掉关键文件，或者读一堆不相关文件。
+- **不知道改动会影响谁**：改一个文件或函数前，不清楚谁在调用它、它又依赖谁。常常改完才发现破坏了其他功能。
+- **不知道该验证什么**：改完之后，不知道应该跑哪些测试、看哪些风险点。
+- **上下文窗口有限**：AI 能读的文件有限，没法把整个项目都塞进上下文。必须有一个机制来决定"哪些文件最值得读"。
+
+相比之下，IDE 工具（Cursor、Trae、Qoder）内置了 LSP（语言服务器协议）和代码索引，天然拥有完整的代码库感知能力：跳转定义、查找引用、重构预览、诊断信息等。
+
+`repomap` 的目标是**弥合这个鸿沟** —— 给 CLI agent 提供一个 IDE 级别的项目地图，而不需要 IDE、MCP 服务器、插件或后台守护进程。
+
+### 它不是要替代 IDE
+
+重要说明：`repomap` 的目标不是达到 IDE 级别的代码理解（IDE 有嵌入模型、LSP 持久连接、增量索引等重型机制）。它的目标是**用一份紧凑、高信号密度的项目地图，显著提升 CLI agent 的代码理解效率**。
+
+具体来说：
+
+- **不会自动改代码**。
+- **不会替代真实测试**。
+- **不会自动安装工具或语言服务器**。
+- **不会启动后台常驻服务**。
+- **不依赖 IDE、插件、MCP server**。
+- **LSP 能力是可选的**，只在明确加 `--with-lsp` 或相关命令时使用。
+
+### 核心能力
+
+| 能力 | 说明 |
+|------|------|
+| 结构感知 | 用 tree-sitter 解析语法树，提取函数、类、方法、导入/导出关系 |
+| 图分析 | 用 PageRank 算法计算文件/符号的重要性，识别核心模块 |
+| 调用链追踪 | 追踪符号的调用者和被调用者 |
+| 影响分析 | 评估文件改动的波及范围和风险 |
+| 主题搜索 | 用业务关键词搜索代码，不需要知道精确的文件名 |
+| 死代码检测 | 发现未被引用或低引用的符号 |
+| 变更验证 | 汇总改动、风险、诊断、测试建议 |
+| 可选 LSP | 本地语言服务器的精确诊断、定义跳转、引用查找 |
+
+---
+
+## 快速开始
+
+### 一键安装（二进制）
+
+从 [Releases 页面](https://github.com/Hmbown/DeepSeek-TUI/releases) 下载预编译二进制，或自行构建：
+
+```bash
+# 放在 PATH 中
+cp repomap ~/.local/bin/
+repomap --help
+```
+
+### Python 源码运行
+
+```bash
+git clone https://github.com/Hmbown/DeepSeek-TUI.git
+cd repomap
+
+# 使用 uv（推荐）
+uv run python -m repomap_cli doctor
+
+# 或者用 pip
+pip install -e .
+repomap doctor
+```
+
+### 自检
+
+```bash
+repomap doctor
+```
+
+这行命令检查：Python 版本、tree-sitter 解析器是否可用、本地是否有可用的 LSP 服务器。
+
+### 第一个项目地图
+
+```bash
+repomap overview --project /path/to/your/project
+```
+
+这将输出：项目结构概览、核心文件、入口点、热点文件、关键符号和建议阅读顺序。
 
 ### 最常用的一条工作流
 
 当 AI 准备修改一个已知文件时，推荐流程是：
 
-> 不传 `--project` 时，`repomap` 会扫描当前工作目录；传了 `--project` 时，会扫描指定目录。AI/Agent 调用时建议始终传绝对项目路径，避免上层工具从 home 目录启动子进程导致误扫。
-
 ```bash
+# 1. 查看文件结构
 repomap file-detail --project /path/to/project --file-path src/foo.ts
+
+# 2. 评估改动影响（编辑前计划）
 repomap impact --project /path/to/project --files src/foo.ts --with-symbols
-# 修改代码后
+
+# 3. 修改代码后验证
 repomap verify --project /path/to/project
 ```
 
 通俗解释：
 
-1. 先看这个文件里面有哪些关键结构。
+1. 先看这个文件里面有哪些关键结构（函数、类、导出）。
 2. 再看改它会影响哪些文件、哪些符号、哪些测试，以及风险高不高。
-3. 改完后用 `verify` 汇总变更、风险、建议测试、诊断结果和可选 LSP / graph diff 证据。
+3. 改完后用 `verify` 汇总变更、风险、建议测试和诊断结果。
 
-### 为什么 `impact --with-symbols` 很重要？
+---
 
-普通 `impact` 只回答“这个文件改动可能影响哪些文件”。加上 `--with-symbols` 后，它会更像一个编辑前计划器，额外告诉 AI：
+## 安装
 
-- 目标文件里的关键函数 / 类 / 方法
-- 建议下一步阅读哪些文件，按优先级排序
-- 哪些测试可能相关
-- 改动风险说明
-- 本机是否有可用的 LSP，可以进一步做精确诊断或引用检查
+### 方式一：预编译二进制（推荐）
 
-这能让 AI 在写代码前先形成计划，而不是边猜边改。
+从 GitHub Releases 下载对应平台的二进制文件：
 
-## 项目定位
+```bash
+# Linux x86_64
+wget https://github.com/Hmbown/DeepSeek-TUI/releases/latest/download/repomap-linux-x86_64
+mv repomap-linux-x86_64 ~/.local/bin/repomap
+chmod +x ~/.local/bin/repomap
+repomap doctor
+```
 
-`repomap` is an **AI-agent repository intelligence layer** for CLI/TUI coding workflows. It gives agents an IDE-like project map without requiring an IDE, MCP server, plugin, daemon, or bundled language servers.
+### 方式二：Python 源码
 
-The goal is to stop agents from understanding projects only through `grep`, `find`, and raw file reads. `repomap` provides compact, high-value guidance before and during work: what to read, what a file or symbol affects, which tests matter, what changed, where the risk is, and when optional local LSP evidence can improve confidence.
+```bash
+# 克隆仓库
+git clone https://github.com/Hmbown/DeepSeek-TUI.git
+cd DeepSeek-TUI/repomap
 
-AST graph and repository structure are the default source of truth. Local LSP diagnostics, definitions, and references are opt-in evidence when explicitly requested.
+# 使用 uv（推荐，自动管理依赖）
+uv run python -m repomap_cli --help
 
-This project replaces the old MCP protocol surface with direct CLI commands so skills can call `repomap` as a normal binary or Python command, without starting an MCP server.
+# 或使用脚本入口
+uv run repomap --help
+```
 
-## What Changed
+也可以用 pip 安装依赖后运行：
 
-- Former MCP tools are now direct CLI subcommands.
-- The CLI is optimized for AI-agent workflows: first-look overview, focused code discovery, edit planning, post-edit risk review, diagnostics, and optional local LSP evidence.
-- JS/TS `import` / `export` bindings are parsed from tree-sitter AST instead of regex.
-- Binary delivery is treated as a first-class artifact.
-- The runtime no longer depends on `repomap_server.py` or `MCPServer`.
+```bash
+pip install tree-sitter tree-sitter-python tree-sitter-javascript tree-sitter-typescript tree-sitter-go tree-sitter-rust tree-sitter-html tree-sitter-css tree-sitter-json
+python -m repomap_cli doctor
+```
 
-## Former MCP -> CLI Mapping
+### 方式三：符号链接到 PATH
 
-| Former MCP Tool | CLI Command |
+```bash
+ln -sf /path/to/repomap/dist/repomap ~/.local/bin/repomap
+repomap --help
+```
+
+### 方式四：DeepSeek-TUI 内置 deepmap
+
+如果你使用 DeepSeek-TUI，直接使用 `deepmap` 命令即可：
+
+```bash
+deepmap overview --project /path/to/project
+deepmap impact --project /path/to/project --files src/main.rs --with-symbols
+```
+
+---
+
+## 命令总览
+
+`repomap` 的所有命令按使用场景分类：
+
+### 项目发现（Project Discovery）
+
+| 命令 | 用途 |
+|------|------|
+| `overview` | 初次进入项目时的全局概览：入口点、核心文件、热点、关键符号、阅读顺序 |
+| `query` | 主题/关键词搜索，当你不知道精确文件名时使用 |
+| `query-symbol` | 精确或模糊的符号查找 |
+| `file-detail` | 查看文件的符号结构，含签名信息 |
+
+### 编辑计划（Edit Planning）
+
+| 命令 | 用途 |
+|------|------|
+| `impact` | 文件级影响分析：改了某个文件会影响谁 |
+| `impact --with-symbols` | 增强版编辑前计划器：含关键符号、建议阅读顺序、关联测试、风险说明、LSP 可用性提示 |
+| `call-chain` | 追踪符号的调用者和被调用者 |
+| `refs` | 查找符号的所有引用位置（支持 `--with-lsp` 获取本地精确引用） |
+
+### 验证与质量（Verification & Quality）
+
+| 命令 | 用途 |
+|------|------|
+| `verify` | 编辑后证据汇总：变更文件、风险、测试建议、check 结果、可选 LSP 诊断和图对比 |
+| `verify --quick` | 快速模式：跳过编译器/LSP，只看变更和风险 |
+| `check` | 运行语言诊断工具（tsc、cargo check、ruff、mypy、go vet 等） |
+| `diagnostics` | 针对特定文件的 LSP 精确诊断 |
+
+### 专项分析（Specialized Analysis）
+
+| 命令 | 用途 |
+|------|------|
+| `routes` | HTTP/API 路由清单 |
+| `orphan` | 死代码检测：发现未被引用或低引用的符号 |
+| `hotspots` | 高复杂度/高变更频率的文件清单 |
+| `git-history` | 符号的 Git 历史上下文（谁改过、为什么改） |
+
+### 基础设施（Infrastructure）
+
+| 命令 | 用途 |
+|------|------|
+| `cache save` | 编辑前保存图快照，用于后续对比 |
+| `diff` | 对比当前图与缓存快照的差异 |
+| `lsp doctor` | 检查本地可用的 LSP 服务器 |
+| `doctor` | 整体自检：解析器、依赖、LSP |
+
+---
+
+## 核心工作流
+
+### 初次接触陌生项目
+
+```bash
+repomap overview --project /path/to/project
+repomap query --project /path/to/project --query "feature or domain keyword"
+repomap file-detail --project /path/to/project --file-path src/foo.ts
+```
+
+适用场景：AI 第一次进入项目，需要了解项目结构、核心文件、入口点和相关测试。
+
+### 定位功能 / Bug / 符号
+
+```bash
+repomap query --project /path/to/project --query "auth token refresh"
+repomap query-symbol --project /path/to/project --symbol refreshToken
+repomap refs --project /path/to/project --symbol refreshToken
+repomap call-chain --project /path/to/project --symbol refreshToken
+```
+
+适用场景：你知道业务关键词，但不知道具体文件在哪。
+
+### 编辑前规划（推荐）
+
+```bash
+repomap file-detail --project /path/to/project --file-path src/foo.ts
+repomap impact --project /path/to/project --files src/foo.ts --with-symbols
+```
+
+`--with-symbols` 会额外输出：
+
+- **关键符号**：目标文件中的重要函数/类/方法。如果你要改其中之一，说明改的是行为敏感区域。
+- **建议阅读顺序**：优先看目标文件，然后是高置信度受影响文件，再是关联测试。
+- **风险等级 / 风险说明**：业务层面的警告信号，比如大范围结构影响、敏感领域、配置/构建变更。
+- **LSP 可用性提示**：本地是否有可用的 LSP 做更精确的检查。
+
+### 编辑后验证
+
+```bash
+repomap verify --project /path/to/project
+repomap verify --project /path/to/project --with-lsp
+repomap verify --project /path/to/project --with-diff
+```
+
+`verify` 输出：
+
+- Git 变更文件清单
+- 风险评估和遗漏检查警告
+- 受影响文件和关联测试建议
+- `check` 结果（编译器/类型检查/代码检查）
+- 可选：LSP 诊断（`--with-lsp`）
+- 可选：图对比差异（`--with-diff`，需事先用 `cache save` 保存基线）
+- 最终检查清单：告诉 AI 哪些证据还没覆盖
+
+### 行为变更前的符号追踪
+
+```bash
+repomap query-symbol --project /path/to/project --symbol helper --file-path src/foo.ts
+repomap call-chain --project /path/to/project --symbol helper --file-path src/foo.ts
+repomap refs --project /path/to/project --symbol helper --file-path src/foo.ts --with-lsp
+```
+
+适用场景：准备修改一个函数/方法的行为，先搞清楚所有调用者和被调用者。
+
+### 仅知道业务关键词时
+
+```bash
+repomap query --project /path/to/project --query "login token refresh"
+```
+
+然后检查最相关的文件：
+
+```bash
+repomap file-detail --project /path/to/project --file-path src/auth/session.ts
+```
+
+### 快速变更风险检查
+
+```bash
+repomap verify --project /path/to/project --quick
+```
+
+适合提交前快速检查：检测所有变更文件，运行影响分析，去重测试建议，标记缺失测试覆盖，输出风险等级。不运行编译器/LSP 检查，所以速度很快。
+
+---
+
+## 命令详细说明
+
+### overview — 项目全局概览
+
+初次进入项目的首选命令。
+
+```bash
+repomap overview --project /path/to/project
+```
+
+输出内容：
+
+- **项目结构**：目录拓扑和模块划分
+- **入口点**：`main`、`index`、入口配置文件等
+- **核心文件**：PageRank 排名最高的关键实现文件
+- **热点文件**：符号密度高或近期变更频繁的文件
+- **关键符号**：重要的函数、类、方法
+- **建议阅读顺序**：从入口到核心实现再到测试
+- **支撑文件清单**：README、CLAUDE.md、package.json、脚本等非 AST 文件
+
+可选参数：
+
+- `--with-heat`：标记近期变更文件
+- `--with-co-change`：启用 Git 协同变更分析（较慢）
+- `--json`：JSON 格式输出
+
+---
+
+### query — 主题/关键词搜索
+
+当你不知道精确文件名时的首选命令。
+
+```bash
+repomap query --project /path/to/project --query "auth token refresh"
+```
+
+用业务关键词搜索代码库，通过路径匹配、文件名匹配和符号名匹配来发现相关文件。输出包含建议阅读顺序、核心文件、支撑文件、关联测试和关键符号。
+
+参数：
+
+- `--query`：搜索关键词（必填）
+- `--paths`：限定搜索目录
+- `--exclude`：排除目录
+- `--no-tests`：不包含测试文件
+- `--json`：JSON 格式输出
+
+---
+
+### query-symbol — 符号查找
+
+```bash
+repomap query-symbol --project /path/to/project --symbol helper
+repomap query-symbol --project /path/to/project --symbol helper --file-path src/foo.ts
+```
+
+精确或模糊的符号名查找。加上 `--file-path` 可在多文件重复符号名时消歧。加上 `--with-lsp` 可获取本地 LSP 的精确定义位置。
+
+---
+
+### file-detail — 文件符号详情
+
+```bash
+repomap file-detail --project /path/to/project --file-path src/foo.ts
+```
+
+输出指定文件中的符号清单，含类型（函数/类/方法/变量/接口/类型）、签名和行号范围。默认输出紧凑格式，支持 `--full` 展开。
+
+---
+
+### call-chain — 调用链追踪
+
+```bash
+repomap call-chain --project /path/to/project --symbol helper
+repomap call-chain --project /path/to/project --symbol helper --depth 3
+repomap call-chain --project /path/to/project --symbol helper --file-path src/foo.ts
+```
+
+追踪符号的调用者（callers）和被调用者（callees）。默认深度为 2 层。通过树形缩进展示调用链结构。加上 `--file-path` 进行同名符号消歧。
+
+---
+
+### impact — 影响分析（编辑前计划器）
+
+```bash
+repomap impact --project /path/to/project --files src/foo.ts
+repomap impact --project /path/to/project --files src/foo.ts --with-symbols
+repomap impact --project /path/to/project --files src/foo.ts --with-symbols --json
+```
+
+核心编辑前规划命令。回答一个问题："如果我要改这个文件，我应该先知道什么？"
+
+普通 `impact` 输出：
+
+- 目标文件
+- 可能受影响的其他文件（通过调用/导入关系发现）
+- 关联测试文件
+- 风险等级和说明
+
+`--with-symbols` 额外输出：
+
+- **关键符号**：文件中的重要函数/类/方法及其简要说明
+- **建议阅读顺序**：优先看哪些文件
+- **风险说明**：结构性风险（如改了核心模块）、领域敏感性（如改了支付/鉴权）、变更类型风险（如改了配置/构建）
+- **LSP 可用性提示**：是否建议用 LSP 做进一步精确检查
+
+---
+
+### verify — 编辑后证据汇总
+
+```bash
+repomap verify --project /path/to/project
+repomap verify --project /path/to/project --quick
+repomap verify --project /path/to/project --with-lsp
+repomap verify --project /path/to/project --with-diff
+repomap verify --project /path/to/project --json
+```
+
+编辑后的标准证据门禁。在一个报告中聚合：
+
+1. Git 变更文件（暂存/未暂存/未跟踪/重命名）
+2. 风险评估和遗漏检查警告
+3. 受影响文件和关联测试建议
+4. `check` 结果（运行语言诊断工具）
+5. 可选：LSP 诊断（`--with-lsp`）
+6. 可选：图对比差异（`--with-diff`，需事先 `cache save`）
+7. 最终检查清单
+
+`--quick` 模式跳过编译器/LSP 检查，只做 Git 变更分析和风险评估，适合提交前快速检查。
+
+注意：`verify` 不会自动运行项目测试套件。它会建议可能相关的测试，但 AI 需要自行运行或明确说明为什么跳过。
+
+---
+
+### check — 语言诊断
+
+```bash
+repomap check --project /path/to/project
+repomap check --project /path/to/project --modified-file src/foo.ts
+repomap check --project /path/to/project --with-lsp --modified-file src/foo.ts
+```
+
+运行项目语言相关的诊断工具：
+
+- TypeScript / JavaScript：`tsc --noEmit`
+- Rust：`cargo check`
+- Python：`ruff check`、`mypy`
+- Go：`go vet`
+
+`--modified-file` 仅检查指定文件（传给工具做增量检查）。`--with-lsp` 会额外启动本地 LSP 获取诊断。
+
+---
+
+### routes — HTTP/API 路由清单
+
+```bash
+repomap routes --project /path/to/project
+repomap routes --project /path/to/project --json
+```
+
+扫描项目中的 HTTP/API 路由定义。支持常见框架：
+
+- Express / Fastify / Koa（JS/TS）
+- Flask / FastAPI / Django（Python）
+- Gin / Echo（Go）
+- Axum / Actix（Rust）
+
+输出每个路由的：HTTP 方法、路径、处理器函数和所在文件。`--json` 输出机器可读格式。
+
+注意：`routes` 聚焦生产路由定义，会自动过滤测试/e2e/spec 文件中的路由噪音。
+
+---
+
+### orphan — 死代码检测
+
+```bash
+repomap orphan --project /path/to/project
+repomap orphan --project /path/to/project --json
+repomap orphan --project /path/to/project --min-confidence 0.3
+```
+
+发现项目中未被引用或引用次数极低的符号。输出包括：符号名、类型、所在文件、引用次数和置信度评分。
+
+`--min-confidence` 设置置信度阈值（默认 0.1），值越低发现的候选越多但误报也越多。
+
+---
+
+### refs — 引用发现
+
+```bash
+repomap refs --project /path/to/project
+repomap refs --project /path/to/project --symbol helper
+repomap refs --project /path/to/project --symbol helper --file-path src/foo.ts --with-lsp
+```
+
+查找符号的所有引用位置。不加 `--symbol` 时扫描全局引用拓扑。加上 `--with-lsp` 时启动本地 LSP 获取精确引用证据。
+
+---
+
+### diagnostics — LSP 诊断
+
+```bash
+repomap diagnostics --project /path/to/project --source lsp --files src/foo.ts src/bar.ts
+```
+
+针对特定文件启动本地 LSP 服务器并获取诊断结果（错误、警告、信息）。比 `check` 更精确，但需要 LSP 服务器可用。
+
+---
+
+### lsp doctor — LSP 可用性检查
+
+```bash
+repomap lsp doctor --project /path/to/project
+```
+
+检测项目本地可用的 LSP 服务器。检查路径包括：
+
+- 项目本地 `node_modules/.bin/` 等
+- 系统 `PATH`
+- npm / pnpm / yarn / bun 的全局 bin 目录
+- pipx / uv 的 bin 目录
+- cargo / go 的 bin 目录
+- mason 的 bin 目录
+
+支持检测的 LSP 服务器：
+
+- `typescript-language-server`（JS/TS）
+- `pyright-langserver` / `pylsp`（Python）
+- `rust-analyzer`（Rust）
+- `gopls`（Go）
+
+注意：`lsp doctor` 只检测不安装。缺失的 LSP 服务器会报告为"跳过"，不影响 `repomap` 核心功能。
+
+---
+
+### cache save / diff — 图快照与对比
+
+```bash
+# 编辑前保存基线
+repomap cache save --project /path/to/project
+
+# ... 执行编辑 ...
+
+# 对比当前图与基线
+repomap diff --project /path/to/project
+repomap verify --project /path/to/project --with-diff
+```
+
+`cache save` 将当前符号图的快照保存到 `~/.cache/repomap/`。`diff` 对比当前图与基线图的差异。缓存按项目规范路径键控，因此相同项目的相对和绝对路径引用共享缓存，不同目录下的同名项目保持隔离。
+
+---
+
+### doctor — 整体自检
+
+```bash
+repomap doctor
+```
+
+检查：Python 版本、tree-sitter 解析器可用性（JS/TS/Python/Go/Rust/HTML/CSS/JSON）、项目依赖完整性、本地 LSP 可用性。建议在新环境安装后首先运行。
+
+---
+
+## 项目结构
+
+```
+repomap/
+├── repomap_cli/              # CLI 入口模块
+│   └── __init__.py           # 命令路由和参数解析
+├── repomap_core.py           # 扫描管线：文件遍历、AST 解析、图构建
+├── repomap_parser.py         # tree-sitter AST 解析，导入/导出绑定提取
+├── repomap_resolver.py       # 导入路径解析（含别名、baseUrl、monorepo）
+├── repomap_ranking.py        # 图分析：PageRank、中心度、依赖连通性
+├── repomap_topic.py          # 主题评分、测试文件匹配、文件角色识别
+├── repomap_check.py          # 语言诊断工具封装（tsc、cargo check、ruff 等）
+├── repomap_lsp.py            # LSP 集成：启动、诊断、定义跳转、引用查找
+├── repomap_toolkit.py        # 缓存、diff、Git 历史等辅助逻辑
+├── repomap_ai.py             # Markdown 报告渲染和 LLM 提示生成
+├── repomap_support.py        # 核心数据结构定义
+├── tests/                    # 单元测试和二进制 E2E 测试
+│   ├── test_repomap_*.py     # 各模块单元测试
+│   └── test_repomap_binary_e2e.py  # 二进制端到端测试
+├── docs/                     # 文档
+│   └── deliverables/         # 交付报告
+├── dist/                     # 构建产物
+│   └── repomap               # Linux 预编译二进制
+├── skills/                   # AI 技能定义
+├── .github/workflows/        # CI 构建矩阵
+│   └── build-binaries.yml    # 跨平台构建工作流
+├── AGENTS.md                 # AI agent 上下文说明
+├── CLAUDE.md -> AGENTS.md    # 软链接
+├── SKILL.md                  # AI 技能描述
+├── pyproject.toml            # Python 项目配置
+└── uv.lock                   # 依赖锁定文件
+```
+
+### 各模块职责
+
+| 文件 | 职责 |
+|------|------|
+| `repomap_cli/` | CLI 入口和参数解析。所有子命令的路由逻辑 |
+| `repomap_core.py` | 扫描管线核心。统合文件遍历、AST 解析、依赖图构建和 PageRank 计算 |
+| `repomap_parser.py` | tree-sitter 语法解析。提取符号定义、导入/导出绑定。支持 JS/TS/Python/Go/Rust |
+| `repomap_resolver.py` | 导入路径解析。处理别名、`baseUrl`、monorepo 自引用、`node_modules` 查找 |
+| `repomap_ranking.py` | 图分析引擎。PageRank、入度/出度、连通分量、符号中心度 |
+| `repomap_topic.py` | 主题搜索。关键词评分、文件角色分类、测试匹配启发式 |
+| `repomap_check.py` | 外部诊断工具封装。运行 tsc / cargo check / ruff / mypy / go vet 并解析输出 |
+| `repomap_lsp.py` | LSP 集成层。服务器发现、stdio 协议、诊断/定义/引用请求 |
+| `repomap_toolkit.py` | 辅助逻辑。缓存读写、图 diff、Git 历史、变更汇总 |
+| `repomap_ai.py` | Markdown 报告渲染。把所有命令输出格式化为 AI 友好的文本 |
+| `repomap_support.py` | 核心数据类型。符号、文件节点、图边、配置结构 |
+
+### 数据流
+
+```
+文件系统
+    │
+    ▼
+repomap_core.py  ──►  repomap_parser.py  ──►  AST 节点 + 导入绑定
+    │                                                │
+    │                                                ▼
+    │                                    repomap_resolver.py  ──► 解析后的导入图
+    │                                                │
+    ▼                                                ▼
+repomap_ranking.py  ◄────────────────  完整符号依赖图
+    │
+    ▼
+PageRank 分数 + 中心度指标
+    │
+    ▼
+命令层（overview / query / impact / verify / ...）
+    │
+    ▼
+repomap_ai.py  ──►  Markdown / JSON 输出
+```
+
+---
+
+## 维护策略
+
+### 更新节奏
+
+不需要固定的频繁发版节奏，除非出现以下情况：
+
+- CLI 开始遗漏你仓库中的重要符号关系
+- 你用的框架出现了新的导入/导出模式
+- tree-sitter 解析器行为变化
+- `check` 支持的语言工具链有重大变化
+- 你增加了对工作流有价值的新命令
+
+建议的实际节奏：
+
+- 每次有实质性影响假阳性/假阴性时：尽快更新
+- 每次增加新的语言模式或仓库风格支持时：尽快更新
+- 否则：每 1-2 个月做一次轻量自检
+
+### 自检命令
+
+```bash
+repomap doctor
+repomap overview --project /some/repo
+repomap query --project /some/repo --query main
+repomap impact --project /some/repo --files src/main.ts --with-symbols
+repomap verify --project /some/repo
+```
+
+### 构建二进制
+
+```bash
+# 需要安装 PyInstaller
+pip install pyinstaller
+python -m repomap_cli build-binary --output dist
+./dist/repomap doctor
+```
+
+### 运行测试
+
+```bash
+# 运行全部单元测试
+uv run --with tree-sitter,tree-sitter-* python -m unittest discover -s tests -v
+
+# 运行二进制端到端测试（会构建二进制再运行）
+uv run --with pyinstaller,tree-sitter,tree-sitter-* python -m unittest tests/test_repomap_binary_e2e.py -v
+```
+
+---
+
+## 已知限制
+
+- **动态调度**：运行时动态分发、反射、运行时生成代码和字符串构建的调用可能被遗漏。
+- **跨平台二进制**：Linux 二进制可在本地构建。Windows/macOS 二进制需在对应平台或 CI（GitHub Actions）上构建。
+- **图对比**：`diff` 和 `verify --with-diff` 依赖于编辑前通过 `cache save` 保存的缓存基线。
+- **路由检测**：`routes` 聚焦生产路由定义，会过滤测试/e2e 文件中的 DSL 噪音。如需 mock 路由，请使用 `query` 或 `file-detail`。
+- **概览文件清单**：`overview` 对非 AST 文件（Markdown、shell、service 文件）仅做轻量清单列出，不解析其内容。
+- **主题搜索**：`query` 使用手工加权的关键词评分（路径 + 文件名 + 符号名）。后续计划升级为 BM25 以获得更好的多关键词排序。
+- **事件级耦合**：`impact` 和 `verify --quick` 通过图边分析检测受影响文件，但事件级耦合（CustomEvent、postMessage）尚未检测（计划作为独立的 `event-map` 命令）。
+- **测试匹配**：使用 5 级启发式（名称 → 路径 → 导入 → 符号 → Git 协同变更）。覆盖率取决于项目结构和 Git 历史深度。
+- **Git 依赖**：`verify --quick` 依赖于 `git status`，在 Git 仓库中效果最佳。
+- **JS/TS 语法**：`.tsx` 文件使用专用的 TSX tree-sitter 语法解析，`doctor` 会报告解析器可用性。
+
+---
+
+## 从 MCP 到 CLI
+
+`repomap` 的早期版本基于 MCP（Model Context Protocol）服务器运行。现在的版本是直接 CLI 子命令，不再依赖 MCP 服务器、后台进程或长时间运行的守护进程。
+
+| 之前的 MCP 工具 | 现在的 CLI 命令 |
 |---|---|
 | `repomap_scan` | `repomap scan --project <path>` |
 | `repomap_overview` | `repomap overview --project <path>` |
@@ -106,792 +768,69 @@ This project replaces the old MCP protocol surface with direct CLI commands so s
 | `repomap_refs` | `repomap refs --project <path> [--symbol <name>]` |
 | `repomap_orphan` | `repomap orphan --project <path> [--json] [--min-confidence N]` |
 | `repomap_check` | `repomap check --project <path>` |
-| *(new)* | `repomap query --project <path> --query <keyword>` |
-| *(new)* | `repomap impact --project <path> --files <file...> [--with-symbols]` |
-| *(new)* | `repomap verify --project <path> [--quick] [--with-lsp] [--with-diff]` |
-| *(new)* | `repomap routes --project <path> [--json]` |
-| *(new)* | `repomap diagnostics --project <path> --source lsp --files <file...>` |
-| *(new)* | `repomap lsp doctor --project <path>` |
+| *(新增)* | `repomap query --project <path> --query <keyword>` |
+| *(新增)* | `repomap impact --project <path> --files <file...> [--with-symbols]` |
+| *(新增)* | `repomap verify --project <path> [--quick] [--with-lsp] [--with-diff]` |
+| *(新增)* | `repomap routes --project <path> [--json]` |
+| *(新增)* | `repomap diagnostics --project <path> --source lsp --files <file...>` |
+| *(新增)* | `repomap lsp doctor --project <path>` |
 
-## Command Semantics
+---
 
-This section is for technical readers who need exact behavior. If you only want the practical workflow, read **给完全不了解 repomap 的人** and **AI Agent Workflow** first.
+## 跨平台构建
 
-The old MCP server kept an in-memory scan state between tool calls. This CLI is intentionally stateless.
-
-- If `--project` is omitted, commands use the current working directory. If `--project` is provided, commands use that explicit directory.
-- Commands that need a symbol graph scan the target project during that invocation.
-- `cache save` stores a graph baseline in `~/.cache/repomap/` before target edits. `diff` and `verify --with-diff` read that saved baseline later; there is no public `cache load` action.
-- Cache directories are keyed by the canonical project path so relative and absolute references to the same project share a cache while same-name projects in different directories stay isolated.
-- Session scan cache restores only when both the source fingerprint and saved `project_root` match the current project.
-- `check` can resolve symbols without a long-lived server by scanning internally.
-- `check` treats any non-skipped underlying tool with a non-zero exit code as a failed report, even if no structured issue can be parsed.
-- `check --modified-file` accepts only paths inside the project and passes incremental file operands after `--` where supported, so file names cannot be interpreted as tool options.
-- `query --paths/--exclude`, `impact --files`, and `file-detail --file-path` normalize `./...` and absolute in-project paths to project-relative paths; outside-project paths fail clearly.
-- `impact --with-symbols` turns file-level impact into an edit-planning report with key symbols, ordered read-next guidance, and lightweight local LSP availability hints; it only detects LSP availability and does not start servers.
-- `query --paths` and `query --exclude` match path segments (`src` matches `src/a.py` but not `src2/a.py`).
-- `verify --quick` preserves porcelain status spacing and reports staged, unstaged, untracked, and rename paths without truncation; it fails clearly when `git rev-parse` or `git status --porcelain` fails.
-- `verify` aggregates post-edit evidence from git changed files, risk analysis, `check`, optional LSP diagnostics, and optional graph diff; it does not run project tests automatically and treats missing cache baseline as a non-fatal skipped graph diff. Use `--quick` to skip compiler/LSP checks for a faster change-risk-only report.
-- Member calls such as `obj.method()` avoid unrelated fallback targets unless same-file or import evidence exists.
-- TS/JS config aliases respect `baseUrl` when resolving non-relative `paths` targets.
-- Python dotted imports such as `from pkg.sub import helper` resolve to package paths like `pkg/sub.py` or `pkg/sub/__init__.py`.
-- Unresolvable imported names are not silently rebound to same-named global symbols, which avoids misleading call-chain edges.
-- JS/TS object literal API methods such as `export const api = { getMetadata: () => ... }` are emitted as named method symbols.
-- `overview` is primarily a source-symbol graph. It also lists a small `支撑文件（非符号图）` inventory for key docs, manifests, scripts, and service/config files such as `AGENTS.md`, `CLAUDE.md`, `README.md`, `SKILL.md`, `package.json`, `scripts/*.sh`, and `*.service`. This inventory does not parse or summarize those files and does not replace injected agent context.
-- `overview --with-heat` can mark recently changed files, and `overview --with-co-change` explicitly enables the heavier Git co-change section; default `overview` does not run Git history scans.
-- `.tsx` files use the dedicated TSX tree-sitter grammar, and `doctor` reports parser availability plus module load paths.
-- Anonymous default exports and CommonJS function exports are bound to stable anonymous symbols so default import / require call chains can resolve them.
-- Package self-reference imports using `package.json` `name` + `exports` resolve relative to the package root, including monorepo sub-packages.
-- LSP integration is opt-in and local-only: `repomap lsp doctor` detects locally installed LSP servers, `diagnostics --source lsp --files ...` starts them on demand through stdio, `check --with-lsp --modified-file ...` merges their diagnostics, and `query-symbol --with-lsp` / `refs --with-lsp` can add definition/reference evidence for one selected symbol. Detection checks project-local executables, `PATH`, and trusted user tool directories used by npm/pnpm/yarn/bun/pipx/uv/mason/cargo/go. `repomap` does not depend on plugin/MCP, does not run `npx`/`pnpx`/`bunx`, does not install servers, does not bundle servers, and does not keep a background daemon.
-
-This makes the CLI predictable for skills and shell automation.
-
-## AI Agent Workflow
-
-Use `repomap` wherever repository intelligence can reduce uncertainty, save context, or prevent risky edits — not only before reading files.
-
-### First touch / unfamiliar repository
+### 本地 Linux 构建
 
 ```bash
-repomap overview --project /path/to/project
-repomap query --project /path/to/project --query "feature or domain keyword"
-repomap file-detail --project /path/to/project --file-path src/foo.ts
-```
-
-Use this when the agent needs a project map, likely entry points, core files, related tests, and a compact reading order before raw file reads.
-
-### Locate a feature, bug, or symbol
-
-```bash
-repomap query --project /path/to/project --query "auth token refresh"
-repomap query-symbol --project /path/to/project --symbol refreshToken
-repomap refs --project /path/to/project --symbol refreshToken
-repomap call-chain --project /path/to/project --symbol refreshToken
-```
-
-Use `--file-path` to disambiguate repeated symbol names. Add `--with-lsp` only when exact local definition/reference evidence is worth the LSP startup cost.
-
-### Plan an edit to known files
-
-```bash
-repomap file-detail --project /path/to/project --file-path src/foo.ts
-repomap impact --project /path/to/project --files src/foo.ts --with-symbols
-```
-
-Use this before non-trivial edits. `--with-symbols` adds key symbols, an ordered read-next list, related tests, risk notes, and lightweight LSP availability hints before changing code.
-
-What to look for:
-
-- **Key Symbols**: important functions/classes/methods inside the target files. If you plan to change one of these, treat the change as behavior-sensitive.
-- **Read Next**: a prioritized list of files to inspect next. Start with `target`, then high-confidence affected files, then related tests.
-- **Risk Level / Risk Notes**: business-facing warning signs such as broad structural impact, sensitive domains, or config/build changes.
-- **LSP hint**: only says whether local LSP evidence is available. It does not start a server unless you later run an LSP command.
-
-### Plan a behavior change to a known symbol
-
-```bash
-repomap query-symbol --project /path/to/project --symbol helper --file-path src/foo.ts
-repomap call-chain --project /path/to/project --symbol helper --file-path src/foo.ts
-repomap refs --project /path/to/project --symbol helper --file-path src/foo.ts --with-lsp
-```
-
-Use this before changing function/class/method behavior so the agent knows callers, callees, and reference evidence.
-
-### When you only know a topic
-
-If you do not know the file name yet, start with `query`:
-
-```bash
-repomap query --project /path/to/project --query "login token refresh"
-```
-
-Then inspect the top file:
-
-```bash
-repomap file-detail --project /path/to/project --file-path src/auth/session.ts
-```
-
-### When you already know the file
-
-Use `impact --with-symbols` before non-trivial edits:
-
-```bash
-repomap impact --project /path/to/project --files src/auth/session.ts --with-symbols
-```
-
-This is the best default pre-edit command because it combines local file symbols, affected files, related tests, risk, and LSP availability hints in one report.
-
-### Validate after edits
-
-```bash
-repomap verify --project /path/to/project
-repomap verify --project /path/to/project --with-lsp
-repomap verify --project /path/to/project --with-diff
-```
-
-Use this before final handoff. `verify` summarizes changed files, risk, suggested tests, `check` results, optional focused LSP diagnostics, and optional graph diff evidence in one report. It does not run your suggested tests automatically; run or account for them separately when needed.
-
-## Reading Value Policy
-
-`repomap` now distinguishes between:
-
-- graph centrality: raw PageRank and dependency connectivity
-- reading value: symbols and files that are more useful for understanding or modifying behavior
-
-In practice this means:
-
-- `overview` prioritizes key implementation symbols instead of dumping raw PageRank leaders
-- text output defaults are now sized for AI workflows instead of terminal-dump completeness
-- `hotspots` uses effective symbol density, so HTML tags, CSS selectors, and JSON keys do not drown real code
-- lockfiles such as `package-lock.json` are skipped from symbol scan because they distort repo understanding without helping navigation
-- entry files can still appear in reading order even when they contain little or no extractable symbol structure, including after CLI session-cache restore
-- `call-chain` ignores low-signal non-callable targets such as JSON keys, so object/config noise does not leak into runtime call graphs
-- `file-detail` now defaults to a compact symbol slice, and `overview/query-symbol/call-chain/file-detail` all support explicit text caps
-- raw PageRank is still available in `query-symbol`, `file-detail`, and the graph itself when you need centrality
-
-## AST Accuracy Upgrade
-
-JS/TS import/export bindings are now extracted from tree-sitter AST nodes instead of raw regex matching.
-
-Benefits:
-
-- Ignores fake hits inside comments and strings
-- Captures `export * as utils from './utils'`
-- Preserves named/default/namespace import structure
-- Preserves CommonJS `require()` and `module.exports` AST handling
-
-Current AST-backed coverage includes:
-
-- ES module default imports
-- ES module named imports and aliases
-- ES module namespace imports
-- Re-exports and local exports
-- `export *`
-- `export * as <name>`
-- CommonJS destructured `require`
-- CommonJS `module.exports = { ... }`
-- CommonJS `exports.name = value`
-- JS/TS object literal function properties: `getMetadata: () => ...`, `getKpi: async () => ...`, and `getItem: function () { ... }`
-
-### Local LSP Diagnostics (opt-in)
-
-```bash
-repomap lsp doctor --project /path/to/project
-repomap diagnostics --project /path/to/project --source lsp --files src/foo.ts
-repomap check --project /path/to/project --with-lsp --modified-file src/foo.ts
-repomap query-symbol --project /path/to/project --symbol helper --with-lsp
-repomap refs --project /path/to/project --symbol helper --with-lsp
-```
-
-`repomap` only detects or starts LSP servers already installed on the machine or in the project, such as `typescript-language-server`, `pyright-langserver`, `pylsp`, `rust-analyzer`, or `gopls`. Detection checks project-local executables, `PATH`, and trusted user tool directories used by npm/pnpm/yarn/bun/pipx/uv/mason/cargo/go. It does not use plugin/MCP, does not run `npx`/`pnpx`/`bunx`, does not install servers, does not bundle servers in the binary, and does not run a background daemon. Missing servers are reported as skipped, not as a core `repomap` failure. Symbol-level LSP evidence is intentionally limited to explicit `--with-lsp` requests and a selected symbol, so normal graph commands remain fast and deterministic.
-
-## Installation
-
-### Python Command
-
-```bash
-cd /home/guojiancheng/.A1/repomap
-uv run python -m repomap_cli --help
-```
-
-### Script Entry Point
-
-```bash
-cd /home/guojiancheng/.A1/repomap
-uv run repomap --help
-```
-
-### Put The Binary On PATH
-
-`/home/guojiancheng/.local/bin` is already on this machine's `PATH`, so the recommended setup is:
-
-```bash
-ln -sf /home/guojiancheng/.A1/repomap/dist/repomap /home/guojiancheng/.local/bin/repomap
-repomap --help
-```
-
-If you rebuild the binary later, the symlink still points at the newest file in `dist/repomap`.
-
-For a future AI assistant, use:
-
-- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/repomap/docs/for-ai-smoke-check.md)
-- [Repomap Acceptance Checklist](/home/guojiancheng/.A1/repomap/docs/acceptance-checklist.md)
-
-## Binary Location
-
-Current Linux binary:
-
-`/home/guojiancheng/.A1/repomap/dist/repomap`
-
-Current PATH entry:
-
-`/home/guojiancheng/.local/bin/repomap`
-
-## Quick Start
-
-### Self Check
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli doctor
-```
-
-### Project Map
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli overview --project /path/to/project
-```
-
-### Call Chain
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli call-chain --project /path/to/project --symbol helper --depth 3
-```
-
-### Symbol Query
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli query-symbol --project /path/to/project --symbol helper
-```
-
-### Cache + Diff
-
-Use `cache save` before the target edits when you know you will want a later graph-only comparison. After edits, use `diff` for the advanced graph comparison, or `verify --with-diff` for final evidence.
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli cache save --project /path/to/project
-
-# after the target edits
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli diff --project /path/to/project
-```
-
-### Impact Analysis / Edit Plan
-
-Use this before changing a known file:
-
-```bash
-repomap impact --project /path/to/project --files src/foo.ts --with-symbols
-```
-
-Plain-language meaning:
-
-- “I may change this file; tell me what else might matter before I edit.”
-
-The report includes:
-
-- input files: the files you asked about
-- edit plan: a short suggested order for reviewing evidence
-- key symbols: important functions/classes/methods in those files
-- read-next list: target files, affected files, and related tests in a useful order
-- likely affected files: other files connected through call/import evidence
-- suggested tests: test files likely worth running
-- risk level and notes: low/medium/high plus reasons
-- LSP hint: whether local language-server evidence is available for a deeper check
-
-If you do not need the extra planning sections, this shorter form still works:
-
-```bash
-repomap impact --project /path/to/project --files src/foo.ts
-```
-
-JSON output for automation:
-
-```bash
-repomap impact --project /path/to/project --files src/foo.ts --with-symbols --json
-```
-
-Important: `--with-symbols` only detects whether LSP help is available. It does not start an LSP server. To actually use LSP evidence, run focused commands such as `diagnostics --source lsp`, `query-symbol --with-lsp`, or `refs --with-lsp`.
-
-### Verify / Post-edit Evidence Gate
-
-Use this after edits and before final handoff:
-
-```bash
-repomap verify --project /path/to/project
-```
-
-Plain-language meaning:
-
-- “I changed code; collect the evidence I need before saying the work is done.”
-
-The report includes:
-
-- changed files from Git
-- risk level and missing-check warnings
-- affected files and suggested tests
-- `check` result from project diagnostics
-- optional LSP diagnostics when `--with-lsp` is enabled
-- optional graph diff when `--with-diff` is enabled and a cache baseline exists
-- a final checklist that tells the AI what evidence is still missing
-
-Useful variants:
-
-```bash
-repomap verify --project /path/to/project --json
-repomap verify --project /path/to/project --with-lsp
-repomap verify --project /path/to/project --with-diff
-```
-
-Important: `verify` does not automatically run your project test suite. It suggests likely tests and reports diagnostics; the agent still needs to run or explicitly account for real tests when the change requires them.
-
-### Diagnostics
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli check --project /path/to/project
-```
-
-### Topic Search (new)
-
-```bash
-uv run python -m repomap_cli query --project /path/to/project --query "auth"
-```
-
-AI-friendly keyword-based code discovery. Finds relevant files by path, filename, and symbol name matching — without needing to know exact symbol names. Output includes reading order, core/supporting files, related tests, and key symbols. Supports `--json`, `--paths <dirs>`, `--exclude <dirs>`, `--no-tests`.
-
-### Impact Analysis (new)
-
-```bash
-uv run python -m repomap_cli impact --project /path/to/project --files src/foo.ts --with-symbols
-```
-
-File-level change impact: shows who references your symbols, who your symbols call, related tests, and a three-layer risk assessment (structural + domain + change-type). Add `--with-symbols` for edit planning: key symbols in target files, ordered read-next guidance, and local LSP availability hints. Supports `--json`.
-
-### Verify / Post-edit Evidence Gate (new)
-
-```bash
-uv run python -m repomap_cli verify --project /path/to/project
-```
-
-Post-edit evidence gate: detects changed files, summarizes risk and suggested tests, runs `check`, and can include focused LSP diagnostics with `--with-lsp` or graph diff with `--with-diff`. Supports `--json`.
-
-### Change Risk / Quick Verify
-
-```bash
-repomap verify --project /path/to/project --quick
-uv run python -m repomap_cli verify --project /path/to/project --quick
-```
-
-Pre-commit safety check: detects all changed files (staged, unstaged, untracked, renamed), runs impact analysis on them, suggests de-duplicated tests to run, flags missing test coverage, and gives a risk level — without running compiler/LSP checks. Supports `--json`. For the full gate including diagnostics, use `verify` without `--quick`.
-
-## Command Value Assessment
-
-Use the public commands by value tier, not by historical availability.
-
-### Primary workflow commands
-
-These should be the default choices for most agent work:
-
-- `overview` — first-look project map. It prioritizes source graph reading order, module summaries, entry points, API routes, hotspots, key implementation symbols, and a small non-AST supporting-file inventory.
-- `query` — topic / feature discovery when you know business words but not exact files or symbols.
-- `file-detail` — focused inspection when the target file is already known.
-- `impact --with-symbols` — default pre-edit planning command for known files; combines key symbols, affected files, read-next guidance, likely tests, risk, and LSP availability hints.
-- `query-symbol` — exact/fuzzy symbol lookup.
-- `call-chain` — caller/callee context before changing behavior.
-- `refs` — reference discovery, with optional `--with-lsp` for local exact evidence.
-- `verify` — default post-edit evidence gate.
-- `verify --quick` — risk-only post-edit check for current Git changes; replaces the old public `diff-risk` command.
-- `check` — lower-level compiler/type/lint diagnostics.
-- `orphan` — dead-code candidate discovery.
-
-### Focused secondary commands
-
-Keep these, but use them only when the question is narrow:
-
-- `routes` — direct HTTP/API route inventory with optional `--json` machine-readable output. Prefer this over generic `overview` when the task is “show routes/endpoints”; route inventory filters common test/e2e/spec DSL noise.
-- `diagnostics` — focused diagnostics for explicit files, usually `diagnostics --source lsp --files ...`.
-- `lsp doctor` — inspect local LSP availability; does not install or start project-wide daemons.
-- `hotspots` — dense-file inventory when complexity/churn triage is the explicit goal.
-- `git-history` — local history or ownership context; not part of the default first-pass workflow.
-- `diff` — advanced graph-only comparison against a baseline saved before the target edits.
-
-### Low-level baseline command
-
-- `cache save` — prepare a graph baseline before target edits. It is intentionally narrow and only exposes `save`; graph comparison reads the baseline through `diff` or `verify --with-diff`.
-
-### Removed public command surface
-
-- `diff-risk` is no longer public. Use `verify --quick` for current-change risk analysis.
-- `cache load` is no longer public. Baseline reads are internal to `diff` and `verify --with-diff`.
-
-## Product Roadmap For Agent Workflows
-
-This roadmap records where `repomap` should evolve next. Items below P0 are product plans, not all implemented features.
-
-### P0 — Align docs and skill with the product goal
-
-Status: current documentation work.
-
-- Position `repomap` as a CLI/TUI AI-agent repository intelligence layer.
-- Make usage explicit across the whole workflow: discovery, edit planning, symbol tracing, post-edit validation, diagnostics, and final evidence.
-- Keep LSP local-only and opt-in.
-
-### P1 — Make `impact` an edit-planning command
-
-Status: implemented for file-level impact through `--with-symbols`.
-
-Current shape:
-
-```bash
-repomap impact --project /path/to/project --files src/foo.ts --with-symbols
-```
-
-This answers what agents need before editing:
-
-- target files
-- key symbols
-- incoming references through affected files
-- outgoing dependencies / calls through affected files
-- related tests
-- risk reasons
-- suggested read-next order
-- whether local LSP evidence is available or recommended
-
-Future expansion may add symbol-level impact:
-
-```bash
-repomap impact --project /path/to/project --symbol helper --file-path src/foo.ts
-```
-
-### P2 — Add a post-edit evidence gate
-
-Status: implemented as `verify`.
-
-```bash
-repomap verify --project /path/to/project
-repomap verify --project /path/to/project --with-lsp
-repomap verify --project /path/to/project --with-diff
-```
-
-This does not replace real tests. It tells agents what changed, what is risky, what diagnostics say, which tests are suggested, and what evidence is still missing.
-
-### P3 — Make LSP evidence easier to choose, still opt-in
-
-Keep LSP startup explicit, but make recommendations smarter:
-
-- `lsp doctor` can explain which commands can benefit from available servers.
-- `impact` can suggest `refs --with-lsp` for risky symbols.
-- `verify` can add focused LSP diagnostics through `--with-lsp` for changed files.
-
-Do not auto-install servers, run `npx`/`pnpx`/`bunx`, create a daemon, or make LSP mandatory.
-
-### P4 — Improve `query` / `overview` feature slices
-
-Status: partially implemented for `overview` through the lightweight `支撑文件（非符号图）` inventory.
-
-Agents need the smallest useful reading set, not a long list. Current `overview` now separates source-symbol graph output from non-AST supporting files such as injected context docs, README/SKILL files, manifests, scripts, and service/config files. Future work should keep improving:
-
-- core files vs supporting files
-- tests and config files
-- entry points
-- key symbols
-- why each file matters
-- suggested read order
-- stable, compact defaults for large repos
-
-### P5 — Measure whether repomap improves agent work
-
-Add evaluation and smoke scenarios that compare workflows with and without `repomap`:
-
-- number of file reads / grep searches needed to locate code
-- whether edit impact and related tests were identified before changes
-- whether final reports cite real verification evidence
-- whether LSP evidence reduced wrong reference assumptions
-
-## Binary Build
-
-### Local Linux Build
-
-```bash
-uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli build-binary --output dist
-
+# 使用 PyInstaller 构建单文件二进制
+pip install pyinstaller
+python -m repomap_cli build-binary --output dist
+
+# 验证
 ./dist/repomap doctor
-./dist/repomap overview --project /path/to/project
+./dist/repomap overview --project /some/repo
 ```
 
-### Binary E2E
+### CI 矩阵构建
 
-The test suite includes binary runtime E2E coverage:
+参见 `.github/workflows/build-binaries.yml`：
 
-```bash
-uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v
-```
+- Ubuntu Linux → `dist/repomap`
+- Windows → `dist/repomap.exe`
+- macOS → `dist/repomap`
 
-This test really builds the executable, then runs the built binary.
+CI 工作流运行顺序：完整测试套件 → 二进制构建 → 二进制冒烟测试 → 构建产物上传。
 
-## New Computer Migration
+### Windows 注意事项
 
-If you move to a new machine, there are two supported paths.
+- 输出文件名为 `repomap.exe`
+- 冒烟测试通过 PowerShell 运行
+- PATH 安装路径通常为 `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`
+- 建议通过 GitHub Actions 在 `windows-latest` 上构建，不推荐在 Linux 上交叉编译
 
-### Option A: Copy Source + Rebuild Binary
+### macOS 注意事项
 
-Recommended.
+- 输出文件名仍为 `repomap`
+- 必须在 macOS 原生 runner 上构建
+- 分发到外部使用时可能需要 Apple 签名/公证
+- 未签名的二进制可能触发 Gatekeeper 警告
 
-Copy:
+---
 
-- `/home/guojiancheng/.A1/repomap`
-- `/home/guojiancheng/.agents/skills/repomap`
+## 相关项目
 
-Then on the new machine:
+- [aider](https://github.com/Aider-AI/aider) — AI 结对编程 CLI 工具，repomap 的理念起源。我们对 aider 团队的开创性工作表示敬意。
+- [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) — repomap 已被集成为此项目的内置 Rust 工具 **deepmap**。DeepSeek-TUI 是一个终端界面的 AI 编程助手。
+- [tree-sitter](https://tree-sitter.github.io/tree-sitter/) — repomap 的核心解析引擎，提供增量语法解析能力。
 
-```bash
-cd /path/to/repomap
+---
 
-uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m repomap_cli build-binary --output dist
+## 许可证
 
-mkdir -p ~/.local/bin
-ln -sf /path/to/repomap/dist/repomap ~/.local/bin/repomap
-repomap doctor
-```
+[MIT](LICENSE)
 
-Why this is preferred:
+Copyright (c) 2026 gjczone
 
-- avoids OS / architecture mismatch
-- gives you a fresh binary against the new machine
-- keeps source and binary aligned
+---
 
-### Option B: Copy Built Binary Directly
-
-Only use this when the new machine is compatible with the current binary:
-
-- same OS family
-- same CPU architecture
-- compatible libc/runtime expectations
-
-For the current binary that means:
-
-- safe target: another Linux x86_64 machine with compatible runtime
-- not safe target: Windows
-- not safe target: macOS
-- risky target: very different Linux distro/runtime stack
-
-If you choose this path:
-
-```bash
-mkdir -p ~/.local/bin
-cp /path/from/old-machine/repomap ~/.local/bin/repomap
-chmod +x ~/.local/bin/repomap
-repomap doctor
-```
-
-### Skill Migration On New Computer
-
-Copy skill directory:
-
-`/home/guojiancheng/.agents/skills/repomap`
-
-After copying:
-
-1. verify `repomap` is on `PATH`
-2. run `repomap doctor`
-3. run the skill validator:
-
-```bash
-/home/guojiancheng/.agents/skills/repomap/scripts/validate-skill.sh /home/guojiancheng/.agents/skills/repomap
-```
-
-If you change the install path on the new machine, update the skill reference text if needed.
-
-## Maintenance / Update Strategy
-
-You do **not** need a fixed frequent release cadence unless one of these happens:
-
-- the CLI starts missing real symbol relationships in your repositories
-- a new framework or import/export pattern appears often in your codebase
-- tree-sitter bindings or parser behavior change
-- `check` starts lagging behind the languages/toolchains you use
-- you add new high-value commands for recurring workflows
-
-Recommended practical cadence:
-
-- after any false-positive / false-negative that materially hurts workflow: update soon
-- after adding a new language pattern or repository style: update soon
-- otherwise do a light smoke check every 1-2 months
-
-Good smoke check:
-
-```bash
-repomap doctor
-repomap overview --project /some/repo
-repomap query --project /some/repo --query main
-repomap impact --project /some/repo --files src/main.ts --with-symbols
-repomap verify --project /some/repo
-```
-
-There is also an AI-ready smoke-check guide here:
-
-- [For AI: Repomap Smoke Check](/home/guojiancheng/.A1/repomap/docs/for-ai-smoke-check.md)
-
-Short version:
-
-- no need for weekly churn
-- yes, it should evolve when your repositories or parser patterns evolve
-
-## Cross-Platform Build Flow
-
-Local Linux can only produce the Linux binary directly. Windows and macOS binaries must be built on:
-
-- native host
-- GitHub Actions matrix runner
-- another CI system with native target runners
-
-Included workflow:
-
-- `.github/workflows/build-binaries.yml`
-
-Targets:
-
-- Ubuntu Linux -> `dist/repomap`
-- Windows -> `dist/repomap.exe`
-- macOS -> `dist/repomap`
-
-The workflow runs:
-
-1. full test suite
-2. binary build
-3. binary smoke test
-4. artifact upload
-
-### Windows Notes
-
-Current status:
-
-- not a current delivery target for your day-to-day workflow
-- fully documented so the path is ready later
-
-What changes on Windows:
-
-- output file is `repomap.exe`
-- smoke test runs through PowerShell
-- PATH installation normally targets `%USERPROFILE%\\AppData\\Local\\Microsoft\\WindowsApps` or another user bin directory
-
-Recommended Windows release path:
-
-1. let GitHub Actions build `repomap.exe` on `windows-latest`
-2. download the artifact
-3. place it in a user-level PATH directory
-4. validate with `repomap.exe doctor`
-
-Important limitations:
-
-- do not claim Windows binary support from Linux local build
-- if future users need signed binaries, Authenticode signing must be added separately
-
-### macOS Notes
-
-Current status:
-
-- not a current delivery target for your day-to-day workflow
-- documented for future rollout
-
-What changes on macOS:
-
-- output file is still `repomap`
-- build must run on a native macOS runner
-- distribution may require codesign and notarization depending on trust requirements
-
-Recommended macOS release path:
-
-1. let GitHub Actions build on `macos-latest`
-2. smoke test with `./dist/repomap doctor`
-3. if distributing outside internal use, add Apple signing/notarization later
-
-Important limitations:
-
-- Linux cannot truthfully produce a final macOS binary
-- unsigned binaries may trigger Gatekeeper warnings on end-user machines
-
-## Skill Integration
-
-Future skill usage should call the `repomap` skill first, and that skill should execute the CLI directly.
-
-For natural-language examples that help an AI choose the right command, see:
-
-- `/home/guojiancheng/.agents/skills/repomap/references/prompt-examples.md`
-
-Examples:
-
-```bash
-repomap overview --project /repo
-repomap routes --project /repo --json
-repomap diagnostics --project /repo --source lsp --files src/foo.ts
-repomap cache save --project /repo      # before target edits, if graph diff evidence is needed
-repomap verify --project /repo --quick  # after edits, risk-only
-repomap verify --project /repo --with-diff
-```
-
-Recommended pattern:
-
-- use `overview` when first entering a codebase
-- use `query-symbol` or `file-detail` for pinpoint navigation
-- use `query` (topic search) when you know the feature area but not the symbol names
-- use `impact --with-symbols` before modifying known files to assess change blast radius, key symbols, read-next order, tests, risk, and LSP availability
-- use `verify` after edits as the default final evidence gate; use `verify --quick` for change-risk only (skips compiler/LSP)
-- use `routes` when the question is specifically API/HTTP endpoint inventory; add `--json` for smoke tests or other machine-readable checks
-- use `diagnostics` when you need focused LSP diagnostics for explicit files
-- use `check` when you need lower-level diagnostics details
-- use `cache save` before target edits only when later graph diff evidence is valuable
-- use `git-history` only when history or ownership context is the actual question
-- when another skill needs repo understanding, prefer delegating to the `repomap` skill so command selection stays consistent
-
-## Tests
-
-### Full Runtime Suite
-
-```bash
-uv run --with tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m unittest discover -s tests -v
-```
-
-### Full Suite Including Binary Build
-
-```bash
-uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-  python -m unittest discover -s tests -v
-```
-
-## Project Structure
-
-```text
-repomap/
-├── repomap_cli/            # standalone CLI entrypoint
-├── repomap_core.py         # scan pipeline
-├── repomap_parser.py       # AST parsing, import/export bindings
-├── repomap_resolver.py     # import resolution
-├── repomap_ranking.py      # graph analysis
-├── repomap_topic.py        # topic scoring, test matching, file roles
-├── repomap_check.py        # diagnostics
-├── repomap_toolkit.py      # cache/diff/git helper logic
-├── repomap_ai.py           # markdown report rendering
-├── repomap_support.py      # core data structures
-├── tests/                  # unit and binary E2E tests
-├── docs/deliverables/      # delivery reports
-├── dist/repomap            # Linux binary
-└── .github/workflows/      # CI matrix build flow
-```
-
-## Known Limits
-
-- Dynamic dispatch, reflection, runtime-generated code, and string-built calls can still be missed.
-- Windows/macOS binaries are defined in workflow, but not produced locally on Linux.
-- `diff` still depends on an existing saved cache baseline created with `cache save` before the target edits.
-- `routes` intentionally focuses on production HTTP/API route definitions and filters common test/e2e/spec DSL noise; use `query` or `file-detail` if you need mock route strings inside tests.
-- `overview` lists non-AST supporting files as a lightweight inventory only; it does not parse Markdown/shell/service files and does not replace `AGENTS.md` / `CLAUDE.md` context.
-- `query` uses hand-weighted keyword scoring (path + filename + symbol name). Will upgrade to BM25 in a future iteration for better multi-keyword ranking.
-- `impact` and `verify --quick` identify affected files via graph edge analysis; event-level coupling (CustomEvent, postMessage) is not yet detected (planned as `event-map` command).
-- Test matching uses 5-level heuristics (name → path → import → symbol → git co-change). Coverage depends on project structure and git history depth.
-- `verify --quick` depends on `git status` and works best within a git repository.
-
-## Delivery Status
-
-See:
-
-- `docs/deliverables/delivery-report-2026-04-26.md`
+**如果你觉得 repomap 有用，欢迎给 [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) 点个 Star。也建议去看看 [aider](https://github.com/Aider-AI/aider) —— 没有它的开创性工作，就不会有 repomap。**
