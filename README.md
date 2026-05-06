@@ -1,21 +1,23 @@
 # RepoMap — Repository Intelligence for AI Coding Agents
 
-> **One-liner: A CLI tool that gives AI agents (Claude Code, Codex, OpenCode) a "project map" — so they know what to read, what a change affects, and what to verify — before and after editing code.**
+> **A CLI tool that gives AI agents (Claude Code, Codex, OpenCode) a "project map" — so they know what to read, what a change affects, and what to verify — before and after editing code.**
+>
+> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept.
 
 [中文 README](README.zh-CN.md)
 
-`repomap` is a CLI tool. AI agents invoke it via skill to get structured repository-level context:
+`repomap` is a CLI tool distributed as a skill + binary. AI agents invoke it to get structured repository-level context instead of guessing via `grep` + raw file reads:
 
-- **Before editing**: where are the entry points? Which files match a keyword? What does a change affect? How risky is it? What should I read first?
-- **After editing**: what files changed? What's the risk level? Which tests should I run? Are there diagnostics issues?
+- **Before editing**: entry points, keyword-to-file mapping, change impact, risk level, suggested reading order
+- **After editing**: changed files, risk assessment, suggested tests, compiler/linter diagnostics
 
-It doesn't modify code or replace tests. It does the thing AI agents need most: **high-signal structural context in one command**, so they stop reading irrelevant files and guessing impact.
+It doesn't modify code. It doesn't replace tests. It does the one thing CLI agents historically lacked: **high-signal structural context in a single command**.
 
 ---
 
 ## Install
 
-Copy this to your AI agent (Claude Code, Cursor, or any agent with shell access):
+Copy this to your AI agent:
 
 ```
 Install repomap for me:
@@ -38,35 +40,38 @@ If ~/.local/bin is not on PATH:
    export PATH="$HOME/.local/bin:$PATH"
 ```
 
-> Manual install: clone → `cp skills/repomap ~/.claude/skills/` → download binary → done.
+> Manual: clone → `cp skills/repomap ~/.claude/skills/` → download binary → done.
 
 ---
 
 ## Typical Usage
 
-### Before editing: understand → assess → plan
+### Before editing
 
 ```bash
 # First contact: get project structure
 repomap overview --project /path/to/project
 
-# Search by business keyword
+# Search by business keyword (when you don't know file names)
 repomap query --project /path/to/project --query "auth token refresh"
 
-# Inspect a file
+# Inspect a file before reading it
 repomap file-detail --project /path/to/project --file-path src/auth/login.ts
 
-# Assess impact before changing
+# Assess impact before changing a file
 repomap impact --project /path/to/project --files src/auth/login.ts --with-symbols
+
+# Trace who calls a function and what it calls
+repomap call-chain --project /path/to/project --symbol refreshToken
 ```
 
-### After editing: verify → confirm
+### After editing
 
 ```bash
-# Quick risk check
+# Quick: changed files + risk + suggested tests
 repomap verify --project /path/to/project --quick
 
-# Full verification (with compiler/linter diagnostics)
+# Full: above + compiler/linter diagnostics + optional LSP
 repomap verify --project /path/to/project
 ```
 
@@ -76,36 +81,44 @@ repomap verify --project /path/to/project
 
 | Command | Purpose |
 |---------|---------|
-| `overview` | Project map: entry points, hotspots, key symbols, reading order |
-| `query --query <keywords>` | Keyword search when you don't know file names |
-| `file-detail --file-path <file>` | Symbols, signatures, and importance in a file |
-| `impact --files <files> --with-symbols` | Pre-edit: affected files, risk, suggested tests |
-| `call-chain --symbol <name>` | Trace callers and callees |
-| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |
-| `refs --symbol <name>` | Find symbol references |
-| `verify` | Post-edit: changed files, risk, diagnostics, suggested tests |
-| `verify --quick` | Quick risk check (skip compiler/LSP) |
-| `check` | Language diagnostics: tsc / cargo check / ruff / mypy / go vet |
-| `routes --json` | HTTP API route inventory |
-| `orphan` | Dead-code candidate detection |
-| `lsp doctor` | Check local LSP server availability |
-| `diagnostics --source lsp --files <files>` | LSP diagnostics for specific files |
+| `overview` | Project map: entry points, hotspots, key symbols (by PageRank), reading order |
+| `query --query <keywords>` | Topic/keyword search across paths, filenames, and symbols |
+| `file-detail --file-path <file>` | All symbols in a file: signatures, visibility, PageRank scores |
+| `impact --files <files> --with-symbols` | Pre-edit blast radius: affected files, key symbols, risk level, suggested tests |
+| `call-chain --symbol <name>` | Callers and callees of a symbol, sorted by importance |
+| `query-symbol --symbol <name>` | Exact or fuzzy symbol lookup (shows definition location) |
+| `refs --symbol <name>` | All references to a symbol (opt-in LSP for precise results) |
+| `verify` | Post-edit gate: git changes, risk, diagnostics, suggested tests |
+| `verify --quick` | Post-edit risk-only (skips compiler/LSP, faster) |
+| `check` | Language diagnostics: tsc, cargo check, ruff, mypy, go vet |
+| `routes --json` | HTTP API route inventory (FastAPI, Express, Axum, Spring Boot) |
+| `orphan` | Dead-code candidate detection with confidence tiers |
+| `lsp doctor` | Check locally installed LSP servers (typescript, pyright, rust-analyzer, gopls) |
 
 ---
 
 ## Supported Languages
 
-Python, JavaScript / TypeScript (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
+| Status | Languages |
+|--------|-----------|
+| Built-in | Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON |
+| Optional | Java, Kotlin, Swift, C/C++, C#, PHP, Ruby (install extra tree-sitter bindings) |
+| LSP (opt-in) | TypeScript, Python, Rust, Go (requires local language server) |
 
 ---
 
 ## Origin
 
-`repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered the concept of using tree-sitter + PageRank to give CLI AI agents codebase awareness — and proved the counterintuitive insight that a compact structural map often outperforms large amounts of raw code for agent understanding.
+`repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — using tree-sitter + PageRank to give CLI AI agents codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding. We keep the "repo map" name to honor that origin.
 
-We keep the "repo map" name to honor that origin, while evolving `repomap` as an independent MIT-licensed project. The core engine is being rewritten in Rust and [submitted as a PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) to [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) as the built-in tool **deepmap**.
+`repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built as an independent MIT-licensed project by a non-professional developer with the help of AI coding assistants.
 
-This project was built by a non-professional developer with the help of AI coding assistants.
+---
+
+## Related Projects
+
+- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — `deepmap` (Rust port of `repomap`'s engine, [PR submitted](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap))
+- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer
 
 ---
 
