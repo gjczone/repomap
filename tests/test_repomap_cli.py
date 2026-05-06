@@ -347,10 +347,10 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exclude_code, 0)
             paths_payload = json.loads(paths_stdout.getvalue())
             exclude_payload = json.loads(exclude_stdout.getvalue())
-            self.assertTrue(any(PurePosixPath(row["path"]) == PurePosixPath("src/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(PurePosixPath(row["path"]) == PurePosixPath("src2/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertTrue(any(PurePosixPath(row["path"]) == PurePosixPath("src2/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(PurePosixPath(row["path"]) == PurePosixPath("src/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(Path(row["path"]) == Path("src/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(Path(row["path"]) == Path("src2/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(Path(row["path"]) == Path("src2/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(Path(row["path"]) == Path("src/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
 
     def test_check_rejects_unsafe_modified_file_paths(self) -> None:
         from src.cli import main
@@ -471,7 +471,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(route["method"], "GET")
         self.assertEqual(route["path"], "/items")
         self.assertEqual(route["framework"], "express")
-        self.assertEqual(PurePosixPath(route["file"]), PurePosixPath("src/routes.ts"))
+        self.assertEqual(Path(route["file"]), Path("src/routes.ts"))
         self.assertEqual(route["line"], 1)
 
     def test_js_detector_fallback_skips_dependency_directories(self) -> None:
@@ -821,10 +821,10 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertLessEqual(len(payload["reading_order"]), 6)
             self.assertLessEqual(len(payload["modules"]), 6)
             self.assertLessEqual(len(payload["summary_symbols"]), 4)
-            supporting_paths = {PurePosixPath(item["file"]) for item in payload["supporting_files"]}
-            self.assertIn(PurePosixPath("README.md"), supporting_paths)
-            self.assertIn(PurePosixPath("scripts/check.sh"), supporting_paths)
-            self.assertNotIn(PurePosixPath(".env"), supporting_paths)
+            supporting_paths = {Path(item["file"]) for item in payload["supporting_files"]}
+            self.assertIn(Path("README.md"), supporting_paths)
+            self.assertIn(Path("scripts/check.sh"), supporting_paths)
+            self.assertNotIn(Path(".env"), supporting_paths)
 
     def test_file_detail_defaults_to_compact_symbol_list(self) -> None:
         from src.cli import main
@@ -1063,8 +1063,8 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
-            self.assertTrue(any(PurePosixPath(ep) == PurePosixPath("src/main.tsx") for ep in payload["entry_points"]))
-            self.assertEqual(PurePosixPath(payload["reading_order"][0]["file"]), PurePosixPath("src/main.tsx"))
+            self.assertTrue(any(Path(ep) == Path("src/main.tsx") for ep in payload["entry_points"]))
+            self.assertEqual(Path(payload["reading_order"][0]["file"]), Path("src/main.tsx"))
 
     def test_scan_cache_invalidates_after_source_change(self) -> None:
         import src.cli.cli as cli_mod
