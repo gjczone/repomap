@@ -11,7 +11,7 @@
 - **Before editing**: entry points, keyword-to-file mapping, change impact, risk level, suggested reading order
 - **After editing**: changed files, risk assessment, suggested tests, compiler/linter diagnostics
 
-It doesn't modify code. It doesn't replace tests. It does the one thing CLI agents historically lacked: **high-signal structural context in a single command**.
+It doesn't modify code. It doesn't replace tests. It just gives the agent a quick structural overview before it dives into files.
 
 ---
 
