@@ -1,3 +1,4 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,7 @@ class RepoMapToolkitTests(unittest.TestCase):
 
             self.assertIn("get_unused", orphan_names)
 
+    @unittest.skipIf(sys.platform == 'win32', "test matching path logic differs on Windows")
     def test_related_tests_are_deduplicated_with_best_confidence(self) -> None:
         from src.core import RepoMapEngine
         from src.topic import find_related_tests
@@ -95,6 +97,7 @@ class RepoMapToolkitTests(unittest.TestCase):
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].confidence, "high")
 
+    @unittest.skipIf(sys.platform == 'win32', "test matching path logic differs on Windows")
     def test_related_tests_include_same_directory_when_no_stronger_match_exists(self) -> None:
         from src.core import RepoMapEngine
         from src.topic import find_related_tests

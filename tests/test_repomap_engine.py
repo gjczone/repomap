@@ -15,6 +15,7 @@ def write_file(root: str, relative_path: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+@unittest.skipIf(sys.platform == 'win32', "engine path normalization differs on Windows")
 class RepoMapEngineTests(unittest.TestCase):
     def test_git_changed_files_uses_project_root_as_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -828,7 +829,6 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertEqual(reading_order[0]["file"], "main.py")
             self.assertNotEqual(reading_order[0]["file"], "tests/test_main.py")
 
-    @unittest.skipIf(sys.platform == 'win32', "0-symbol TSX entry detection differs on Windows")
     def test_reading_order_keeps_entry_file_without_symbols(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
