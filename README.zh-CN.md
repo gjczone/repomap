@@ -15,9 +15,9 @@
 
 ## 安装
 
-### Linux (x86_64) — 有预编译二进制
+Linux、macOS、Windows 均有预编译二进制。复制对应平台的安装说明给你的 AI agent：
 
-复制下面这段话给你的 AI agent：
+### Linux (x86_64)
 
 ```
 请帮我安装 repomap：
@@ -30,7 +30,7 @@
 
 2. 下载二进制文件：
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-linux
    chmod +x ~/.local/bin/repomap
 
 3. 设置语言支持（agent 自动处理）：
@@ -55,41 +55,43 @@
    export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### macOS / Windows — 从源码构建
-
-暂无预编译二进制。复制下面这段话给你的 AI agent：
+### macOS (arm64)
 
 ```
-请帮我从源码安装 repomap：
+请帮我安装 repomap：
 
-1. 克隆并安装 skill：
+1. 下载 skill：
+   mkdir -p ~/.claude/skills
    git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. 克隆并构建二进制：
-   git clone https://github.com/gjczone/repomap.git ~/repomap-src
-   cd ~/repomap-src
-   uv run --with pyinstaller python -m repomap.cli build-binary --output dist
-
-3. 安装二进制：
+2. 下载二进制文件：
    mkdir -p ~/.local/bin
-   cp dist/repomap ~/.local/bin/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-macos
    chmod +x ~/.local/bin/repomap
 
-4. 设置语言支持：
-   问我"你主要用哪些编程语言"，然后根据我的回答安装对应的 tree-sitter 解析器。
-   如果我用 Java、Kotlin、Swift、C/C++、C#、PHP、Ruby，还需要执行 uv sync --all-extras。
-   然后运行 repomap lsp doctor 检查 LSP，缺失则提示安装命令。
-
-5. 验证：
-   repomap doctor
-
-如果 ~/.local/bin 不在 PATH 里：
-   export PATH="$HOME/.local/bin:$PATH"
+3. 设置语言支持和验证——同 Linux 第 3-4 步。
 ```
 
-需要：Python 3.10+, [uv](https://docs.astral.sh/uv/) 包管理器。
+### Windows (x86_64)
+
+```
+请帮我安装 repomap：
+
+1. 下载 skill：
+   mkdir -p ~/.claude/skills
+   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+   rm -rf /tmp/repomap-install
+
+2. 下载二进制文件：
+   mkdir -p ~/AppData/Local/Microsoft/WindowsApps
+   curl -L -o ~/AppData/Local/Microsoft/WindowsApps/repomap.exe https://github.com/gjczone/repomap/releases/latest/download/repomap.exe
+
+3. 设置语言支持和验证——同 Linux 第 3-4 步。
+   注意：在终端中用 repomap.exe 代替 repomap。
+```
 
 > 安装完成后，agent 在编码任务中会自动使用 repomap —— 需要时自行调用 `overview`、`impact`、`verify` 等命令。
 

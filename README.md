@@ -17,9 +17,9 @@ It doesn't modify code. It doesn't replace tests. It just gives the agent a "map
 
 ## Install
 
-### Linux (x86_64) — prebuilt binary available
+Prebuilt binaries available for Linux, macOS, and Windows. Copy the instructions for your platform to your AI agent:
 
-Copy this to your AI agent:
+### Linux (x86_64)
 
 ```
 Install repomap for me:
@@ -32,7 +32,7 @@ Install repomap for me:
 
 2. Download binary:
    mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-linux
    chmod +x ~/.local/bin/repomap
 
 3. Set up language support (agent handles this):
@@ -59,42 +59,43 @@ If ~/.local/bin is not on PATH:
    export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### macOS / Windows — build from source
-
-No prebuilt binary yet. Copy this to your AI agent:
+### macOS (arm64)
 
 ```
-Install repomap from source for me:
+Install repomap for me:
 
-1. Clone and install the skill:
+1. Clone the skill:
+   mkdir -p ~/.claude/skills
    git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. Clone and build the binary:
-   git clone https://github.com/gjczone/repomap.git ~/repomap-src
-   cd ~/repomap-src
-   uv run --with pyinstaller python -m repomap.cli build-binary --output dist
-
-3. Install the binary:
+2. Download binary:
    mkdir -p ~/.local/bin
-   cp dist/repomap ~/.local/bin/repomap
+   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-macos
    chmod +x ~/.local/bin/repomap
 
-4. Set up language support:
-   Tell me: "Check what languages I use and set up repomap accordingly."
-   I will install tree-sitter parsers for your languages. If you use Java,
-   Kotlin, Swift, C/C++, C#, PHP, or Ruby, I will also run uv sync --all-extras.
-   Then I'll run repomap lsp doctor and suggest LSP install commands if needed.
-
-5. Verify:
-   repomap doctor
-
-If ~/.local/bin is not on PATH:
-   export PATH="$HOME/.local/bin:$PATH"
+3. Set up language support and verify — same as Linux steps 3-4 above.
 ```
 
-Requirements: Python 3.10+, [uv](https://docs.astral.sh/uv/) package manager.
+### Windows (x86_64)
+
+```
+Install repomap for me:
+
+1. Clone the skill:
+   mkdir -p ~/.claude/skills
+   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+   rm -rf /tmp/repomap-install
+
+2. Download binary:
+   mkdir -p ~/AppData/Local/Microsoft/WindowsApps
+   curl -L -o ~/AppData/Local/Microsoft/WindowsApps/repomap.exe https://github.com/gjczone/repomap/releases/latest/download/repomap.exe
+
+3. Set up language support and verify — same as Linux steps 3-4 above.
+   Note: run repomap.exe instead of repomap in the terminal.
+```
 
 > After installation, the agent automatically uses repomap during coding tasks — it calls commands like `overview`, `impact`, and `verify` on its own when needed.
 
