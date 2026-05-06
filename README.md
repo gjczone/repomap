@@ -1,114 +1,112 @@
-# RepoMap
+# RepoMap — Repository Intelligence for AI Coding Agents
 
-**一句话：让 Claude Code、Codex、OpenCode 等 AI agent 在命令行里拥有"项目地图"——知道应该读哪个文件、改了会影响谁、改完该验证什么。**
-
-`repomap` 是一个 CLI 工具。AI agent（如 Claude Code）通过 skill 调用它，在改动代码前后获得仓库级的结构化信息：
-
-- **动手前**：项目入口在哪、关键词对应哪些文件、改一个文件会影响谁、风险有多高、该先读什么
-- **动手后**：改了哪些文件、风险等级、建议跑哪些测试、诊断结果有没有问题
-
-它不会替你改代码，也不会替代测试。它做的是 AI agent 最缺的那件事：**在几十上百个文件里快速给出高信号的结构化上下文**，让 agent 少翻不相关的文件、不瞎猜影响范围。
-
----
-
-## 安装
-
-复制下面这段话给你的 AI agent，它会自动完成安装：
+> **For Humans** — Copy the prompt below. Paste it into Claude Code, Cursor, or any AI agent with shell access. The agent will install and configure everything automatically.
 
 ```
-请帮我安装 repomap：
+Install repomap for me:
 
-1. 下载 skill：
+1. Clone the skill to my skills directory:
    mkdir -p ~/.claude/skills
    git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. 下载二进制文件（Linux x86_64）：
+2. Download the prebuilt binary:
    mkdir -p ~/.local/bin
    curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
    chmod +x ~/.local/bin/repomap
 
-3. 验证：
+3. Verify:
    repomap doctor
 
-如果 ~/.local/bin 不在 PATH 里：
+If ~/.local/bin is not on PATH, add it:
    export PATH="$HOME/.local/bin:$PATH"
+   (add this line to ~/.bashrc or ~/.zshrc for persistence)
 ```
 
-> 手动安装：clone 仓库 → `cp skills/repomap ~/.claude/skills/` → 下载二进制 → 完成。
+> After installation, your AI agent will automatically discover the skill and use `repomap` whenever it needs to understand a codebase — no manual invocation needed.
 
 ---
 
-## 典型用法
+> **For AI Agents** — This section is written for you. Read it once when you start a session.  
+> `repomap` is a CLI binary on `PATH`. Invoke it as `repomap <command> --project <absolute_path>`.
+> Full command reference: `references/command-map.md`. Quick decision rules below.
 
-### 改代码前：了解 → 评估 → 计划
+## What is RepoMap
+
+`repomap` is a repository intelligence layer for CLI/TUI AI coding assistants. It scans a codebase with tree-sitter, builds a dependency graph, ranks symbols by PageRank, and produces structured reports that help AI agents decide what to read, what to change, and what to verify.
+
+In plain terms: instead of `grep` + `read file` guessing, the agent gets a **project map** — entry points, hotspots, key symbols, call chains, impact analysis, and risk assessment — in a single command.
+
+`repomap` is also integrated into [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) as the built-in Rust tool **deepmap**.
+
+## Quick Install
+
+### Option A: Copy-paste the prompt above to your AI agent (recommended)
+
+The block at the top of this README is designed to be pasted directly into any AI agent. The agent will execute the commands.
+
+### Option B: Manual install
 
 ```bash
-# 初次接触项目：快速了解结构
-repomap overview --project /path/to/project
+# 1. Clone the skill
+mkdir -p ~/.claude/skills
+git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/
+rm -rf /tmp/repomap-install
 
-# 按业务关键词找代码
-repomap query --project /path/to/project --query "用户认证 token"
+# 2. Download binary
+mkdir -p ~/.local/bin
+curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/raw/main/dist/repomap
+chmod +x ~/.local/bin/repomap
 
-# 详细看某个文件
-repomap file-detail --project /path/to/project --file-path src/auth/login.ts
-
-# 改之前评估影响
-repomap impact --project /path/to/project --files src/auth/login.ts --with-symbols
+# 3. Verify
+repomap doctor
 ```
 
-### 改代码后：验证 → 确认
+### Option C: Run from Python source (no binary)
 
 ```bash
-# 快速检查
-repomap verify --project /path/to/project --quick
-
-# 完整验证（含编译器/linter诊断）
-repomap verify --project /path/to/project
+git clone https://github.com/gjczone/repomap.git
+cd repomap
+uv run repomap --help
 ```
 
----
+## Supported Languages
 
-## 全部命令
+Python, JavaScript / TypeScript (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON. LSP integration for TypeScript / Python / Rust / Go is available on an opt-in basis.
 
-| 命令 | 用途 |
-|------|------|
-| `overview` | 项目总览：入口点、热点文件、关键符号、推荐阅读顺序 |
-| `query --query <关键词>` | 按业务主题搜索，不知道文件名时使用 |
-| `file-detail --file-path <文件>` | 查看文件的符号、签名和重要性 |
-| `impact --files <文件> --with-symbols` | 改动前分析：影响范围、风险、建议测试 |
-| `call-chain --symbol <名称>` | 追踪调用链：谁调它、它调谁 |
-| `query-symbol --symbol <名称>` | 精确/模糊查找符号定义 |
-| `refs --symbol <名称>` | 查找符号的引用 |
-| `verify` | 改动后汇总：变更、风险、诊断、建议测试 |
-| `verify --quick` | 快速风险检查（跳过编译/LSP） |
-| `check` | 语言诊断：tsc / cargo check / ruff / mypy / go vet |
-| `routes --json` | HTTP API 路由清单 |
-| `orphan` | 死代码候选检测 |
-| `lsp doctor` | 检查本机 LSP 服务器可用性 |
-| `diagnostics --source lsp --files <文件>` | 指定文件的 LSP 诊断 |
+## Command Overview
 
----
+| Command | Purpose |
+|---------|---------|
+| `overview` | First-look project map: entry points, hotspots, key symbols, reading order |
+| `query --query <topic>` | Topic/keyword search when you don't know exact file names |
+| `query-symbol --symbol <name>` | Exact or fuzzy symbol lookup |
+| `file-detail --file-path <file>` | Inspect a file's symbols with signatures and PageRank scores |
+| `call-chain --symbol <name>` | Trace callers and callees of a symbol |
+| `impact --files <files> --with-symbols` | Pre-edit planning: affected files, key symbols, risk, suggested tests |
+| `verify` | Post-edit evidence gate: changed files, risk, diagnostics, suggested tests |
+| `verify --quick` | Quick post-edit risk check (skips compiler/LSP) |
+| `check` | Run language diagnostics (tsc, cargo check, ruff, mypy, go vet) |
+| `routes --json` | HTTP/API route inventory |
+| `refs --symbol <name>` | Discover references to a symbol |
+| `orphan` | Dead-code candidate detection |
+| `cache save` / `diff` | Snapshot and compare graph state |
+| `lsp doctor` | Check local LSP server availability |
+| `diagnostics --source lsp --files <files>` | Focused LSP diagnostics |
 
-## 支持语言
+## Origin
 
-Python, JavaScript / TypeScript（含 TSX）, Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
+`repomap` is inspired by [aider](https://github.com/Aider-AI/aider), which pioneered the idea of using tree-sitter + PageRank to give CLI AI agents codebase awareness. aider proved a key insight: a compact 1K-token structural map often outperforms 50K tokens of raw code for agent understanding.
 
----
+On aider's shoulders, `repomap` extends the concept with 15-language support, incremental scanning, impact analysis, post-edit verification, LSP integration, and AI-friendly structured reports. Both `repomap` and the upstream `deepmap` Rust engine were built by a non-professional developer with the help of AI coding assistants.
 
-## 起源
+## License
 
-`repomap` 的名字和核心理念来自 **[aider](https://github.com/Aider-AI/aider)**。aider 作者 Paul Gauthier 最早提出"在 CLI 里用 tree-sitter + PageRank 给 AI 建项目地图"的思路，并证明了一个反直觉的事实：一张紧凑的结构化地图，对 AI 的价值往往超过大量原始代码。
+MIT — see [LICENSE](./LICENSE).
 
-我们保留了 "repo map" 这个名称以表达对起源的尊重，同时将 repomap 发展为独立的开源项目（MIT）。目前正在将其核心引擎用 Rust 重写，[提交 PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 集成到 [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) 中（内置工具 `deepmap`）。
+## Related Projects
 
-本项目由非专业开发者借助 AI 编程助手完成。
-
----
-
-## 许可证
-
-[English version](./README.en.md)
-
-MIT — [LICENSE](./LICENSE)
+- [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI) — `deepmap` is the Rust port of `repomap`'s engine, integrated as a built-in TUI tool
+- [aider](https://github.com/Aider-AI/aider) — the original inspiration for repo mapping in CLI environments
