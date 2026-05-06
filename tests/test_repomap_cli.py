@@ -347,10 +347,10 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exclude_code, 0)
             paths_payload = json.loads(paths_stdout.getvalue())
             exclude_payload = json.loads(exclude_stdout.getvalue())
-            self.assertTrue(any(row["path"] == "src/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(row["path"] == "src2/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertTrue(any(row["path"] == "src2/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(row["path"] == "src/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(Path(row["path"]) == Path("src/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(Path(row["path"]) == Path("src2/main.py") for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
+            self.assertTrue(any(Path(row["path"]) == Path("src2/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertFalse(any(Path(row["path"]) == Path("src/main.py") for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
 
     def test_check_rejects_unsafe_modified_file_paths(self) -> None:
         from src.cli import main
@@ -471,7 +471,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(route["method"], "GET")
         self.assertEqual(route["path"], "/items")
         self.assertEqual(route["framework"], "express")
-        self.assertEqual(route["file"], "src/routes.ts")
+        self.assertEqual(Path(route["file"]), Path("src/routes.ts"))
         self.assertEqual(route["line"], 1)
 
     def test_js_detector_fallback_skips_dependency_directories(self) -> None:
@@ -808,7 +808,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["project_root"], project_root)
+            self.assertEqual(Path(payload["project_root"]).resolve(), Path(project_root).resolve())
             self.assertIn("scan_stats", payload)
             self.assertIn("entry_points", payload)
             self.assertIn("hotspots", payload)
@@ -1063,8 +1063,8 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
-            self.assertIn("src/main.tsx", payload["entry_points"])
-            self.assertEqual(payload["reading_order"][0]["file"], "src/main.tsx")
+            self.assertTrue(any(Path(ep) == Path("src/main.tsx") for ep in payload["entry_points"]))
+            self.assertEqual(Path(payload["reading_order"][0]["file"]), Path("src/main.tsx"))
 
     def test_scan_cache_invalidates_after_source_change(self) -> None:
         import src.cli.cli as cli_mod
