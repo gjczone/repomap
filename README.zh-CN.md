@@ -35,8 +35,9 @@
 
 3. 设置语言支持（agent 自动处理）：
    告诉 agent："检查我用的语言，帮我把 repomap 的语言支持配好"。
-   agent 会安装对应语言的 tree-sitter 解析器，然后运行 `repomap lsp doctor` 检查 LSP 是否可用。
-   如果有缺失，agent 会提示安装命令：
+   agent 会安装对应语言的 tree-sitter 解析器。8 种语言开箱即用；如果你还用 Java、Kotlin、Swift、C/C++、C#、PHP、Ruby，agent 会额外执行 `uv sync --all-extras`。
+   
+   然后 agent 运行 `repomap lsp doctor` 检查 LSP。如果有缺失，会提示安装命令：
 
    | 语言 | LSP 安装命令 |
    |------|-------------|

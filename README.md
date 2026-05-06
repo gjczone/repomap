@@ -37,9 +37,11 @@ Install repomap for me:
 
 3. Set up language support (agent handles this):
    Tell your agent: "Check what languages I use and set up repomap accordingly."
-   The agent will install tree-sitter parsers for your languages, then run
-   `repomap lsp doctor` to check if LSP servers are available.
-   If any are missing, it will suggest install commands:
+   The agent will install tree-sitter parsers for your languages. 8 languages
+   work out of the box; if you use Java, Kotlin, Swift, C/C++, C#, PHP, or Ruby,
+   the agent will also run `uv sync --all-extras` for you.
+   
+   Then the agent runs `repomap lsp doctor` to check LSP. If any are missing:
 
    | Language | LSP install |
    |----------|------------|
