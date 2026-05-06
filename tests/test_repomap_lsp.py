@@ -3,6 +3,7 @@ import os
 import stat
 import sys
 import tempfile
+import unittest
 import threading
 import unittest
 from pathlib import Path
@@ -152,6 +153,7 @@ class RepoMapLspTests(unittest.TestCase):
             self.assertEqual(result[0].status, "skipped")
             self.assertIn("not found", result[0].reason)
 
+    @unittest.skipIf(sys.platform == 'win32', "fake LSP server uses Unix shebang")
     def test_fake_lsp_server_returns_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             server = write_file(
@@ -216,6 +218,7 @@ while True:
             self.assertEqual(len(result[0].diagnostics), 1)
             self.assertEqual(result[0].diagnostics[0].file, "src/app.ts")
             self.assertEqual(result[0].diagnostics[0].message, "fake diagnostic")
+    @unittest.skipIf(sys.platform == 'win32', "fake LSP server uses Unix shebang")
     def test_fake_lsp_server_returns_definition_and_references(self) -> None:
         from src.lsp import collect_lsp_symbol_evidence
 
