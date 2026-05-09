@@ -2,14 +2,14 @@
 
 `repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent *when* to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
-**Distribution**: users clone the skill directory + download the prebuilt binary. No server, no daemon, no MCP. See [README.md](./README.md) for the user-facing description.
+**Distribution**: users install via MCP (npx), npm, or skill + prebuilt binary. See [README.md](./README.md) for the user-facing description.
 
 ## Project Snapshot
 
 - **Shape**: Python package (`src/`) + prebuilt binaries for Linux/macOS/Windows (via GitHub Releases)
 - **Core capability**: tree-sitter AST → symbol extraction → import resolution → call-chain analysis → AI-friendly reports
 - **Languages**: Python, JS/TS (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
-- **Distribution**: `skills/repomap/` → `~/.claude/skills/repomap/`; binary → `~/.local/bin/repomap`
+- **Distribution**: MCP (`npx repomap-mcp-server`) / npm (`repomap-bin`) / skill (`skills/repomap/` → `~/.claude/skills/repomap/`) + binary (`~/.local/bin/repomap`)
 - **No server/daemon**: LSP integration is opt-in, local-only, stdio-based
 
 ## Commands
@@ -64,6 +64,10 @@ src/                    # Python package (flat)
 skills/repomap/            # AI agent skill definition
 ├── SKILL.md               # Agent decision procedure
 └── references/            # Command map, prompt examples, authoring checklist
+mcp/                       # MCP server (TypeScript)
+├── src/                   # MCP server source (index.ts, repomap.ts, tools.ts)
+├── repomap-bin/           # Binary finder + npm wrapper package
+└── package.json           # MCP server package metadata
 tests/                     # Test suite
 dist/repomap               # Local build output (CI builds Linux/macOS/Windows via GitHub Actions)
 ```
@@ -160,6 +164,65 @@ repomap overview --project . --quick
 ```
 
 The built binary at `dist/repomap` must be the one in PATH (symlinked or copied to `~/.local/bin/repomap`). After rebuild, run `repomap doctor` then `repomap overview --project . --quick` to smoke-test.
+
+## MCP Server
+
+`mcp/` is a TypeScript MCP (Model Context Protocol) server that exposes repomap commands as MCP tools for Claude Code, Cursor, VS Code, and other MCP-compatible clients.
+
+### Structure
+
+```
+mcp/
+├── src/index.ts        # MCP server entrypoint
+├── src/repomap.ts      # Binary invocation wrapper
+├── src/tools.ts        # MCP tool definitions (overview, query, impact, verify, etc.)
+├── repomap-bin/        # Binary finder + npm binary package
+│   ├── run.js          # CLI wrapper (resolves binary via dist/ -> npm -> vendor -> PATH)
+│   ├── index.js        # Programmatic API for getBinaryPath()
+│   └── package.json    # npm package metadata + optionalDependencies
+├── package.json        # MCP server package (depends on repomap-bin)
+└── tsconfig.json
+```
+
+### Binary resolution order
+
+`repomap-bin/run.js` searches for the repomap binary in this order:
+1. `../../dist/repomap` — local repo build (development)
+2. `node_modules/repomap-bin-<platform>/repomap` — npm platform package
+3. `vendor/repomap` — bundled fallback
+4. `repomap` on PATH — system install
+
+### Building the MCP server
+
+```bash
+cd mcp
+npm install
+npm run build     # compiles TypeScript → dist/
+```
+
+### Testing MCP tools locally
+
+```bash
+cd mcp
+npm run build
+node dist/index.js   # starts MCP server on stdio
+```
+
+### Publishing to npm
+
+```bash
+cd mcp
+npm version patch   # or minor/major
+npm publish         # publishes repomap-mcp-server + repomap-bin to npm
+```
+
+### MCP version sync
+
+When the CLI binary is updated (`src/` changes, binary rebuilt):
+- Bump `mcp/package.json` version to match
+- Bump `mcp/repomap-bin/package.json` version to match
+- Rebuild MCP: `cd mcp && npm run build`
+- No GitHub Release needed — npm publishes directly
 
 ## Skill Sync Rules
 
