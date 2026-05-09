@@ -1,0 +1,34 @@
+{
+  "name": "repomap-bin",
+  "version": "2.0.0",
+  "description": "Standalone repomap binary — tree-sitter AST code intelligence CLI",
+  "type": "module",
+  "bin": {
+    "repomap": "./run.js"
+  },
+  "files": [
+    "run.js",
+    "index.js"
+  ],
+  "optionalDependencies": {
+    "repomap-bin-linux-x64": "1.0.0",
+    "repomap-bin-darwin-arm64": "1.0.0",
+    "repomap-bin-windows-x64": "1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "repomap",
+    "tree-sitter",
+    "ast",
+    "code-analysis",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gjczone/repomap.git"
+  },
+  "homepage": "https://github.com/gjczone/repomap",
+  "license": "MIT"
+}

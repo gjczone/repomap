@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 dist/.pyinstaller/
 .pytest_cache/
+mcp/node_modules/
+mcp/dist/
+mcp/package-lock.json

@@ -6,7 +6,7 @@
 
 [中文 README](README.zh-CN.md)
 
-`repomap` is a CLI tool distributed as a skill + binary. AI agents invoke it to get structured repository-level context instead of guessing via `grep` + raw file reads:
+`repomap` is distributed three ways: as a CLI binary, an AI-agent skill, and an MCP server. AI agents invoke it to get structured repository-level context instead of guessing via `grep` + raw file reads:
 
 - **Before editing**: entry points, keyword-to-file mapping, change impact, risk level, suggested reading order
 - **After editing**: changed files, risk assessment, suggested tests, compiler/linter diagnostics
@@ -226,6 +226,31 @@ Without them, `overview` / `query` / `impact` still work — LSP only adds extra
 `repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — using tree-sitter + PageRank to give CLI AI agents codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding. We keep the "repo map" name to honor that origin.
 
 `repomap` extends the concept: 15 languages, incremental scanning, pre-edit impact analysis, post-edit verification, and optional local LSP integration. Built by [@gjczone](https://github.com/gjczone), a non-programmer, using DeepSeek-V4-Pro, with GLM-5.1 and MIMO-V2.5-Pro for cross-validation and review.
+
+## MCP Server
+
+For Claude Code, Cursor, VS Code, and other MCP-compatible clients, repomap also ships an MCP server that exposes all commands as MCP tools. Zero setup — binary auto-installs on first run.
+
+Add to your Claude Code settings:
+
+```json
+{
+  "mcpServers": {
+    "repomap": {
+      "command": "npx",
+      "args": ["--force-refresh", "-y", "repomap-mcp-server"]
+    }
+  }
+}
+```
+
+Or via CLI:
+
+```bash
+claude mcp add --transport stdio repomap -- npx --force-refresh -y repomap-mcp-server
+```
+
+The MCP server source lives in `mcp/` of this repo. Available MCP tools: `repomap_overview`, `repomap_query`, `repomap_impact`, `repomap_verify`, `repomap_routes`, `repomap_state_map`, `repomap_call_chain`, `repomap_refs`, `repomap_orphan`, `repomap_check`, `repomap_file_detail`, `repomap_query_symbol`, `repomap_hotspots`, `repomap_diff`, `repomap_cache_save`, `repomap_git_history`, `repomap_scan`.
 
 ---
 
