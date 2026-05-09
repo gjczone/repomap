@@ -108,8 +108,10 @@ def build_parser() -> argparse.ArgumentParser:
     overview_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     overview_parser.add_argument("--with-heat", action="store_true", default=False,
                                 help="Mark files changed in the last 30 days with [HOT].")
-    overview_parser.add_argument("--with-co-change", action="store_true", default=False,
-                                help="Include Git co-change coupling section; disabled by default for speed.")
+    overview_parser.add_argument("--with-co-change", action="store_true", default=True,
+                                help="Include Git co-change coupling section (enabled by default; use --no-co-change to skip).")
+    overview_parser.add_argument("--no-co-change", action="store_true", default=False,
+                                help="Skip Git co-change coupling section.")
     overview_parser.add_argument("--granularity", choices=["full", "medium", "compact", "auto"],
                                 default="auto",
                                 help="Report granularity (default: auto, based on project size).")
@@ -308,7 +310,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "overview":
         return run_overview(args.project, args.max_files, args.max_chars, args.json,
                            with_heat=getattr(args, "with_heat", False),
-                           with_co_change=getattr(args, "with_co_change", False),
+                           with_co_change=getattr(args, "with_co_change", True) and not getattr(args, "no_co_change", False),
                            granularity=getattr(args, "granularity", "auto"))
     if command == "call-chain":
         return run_call_chain(
@@ -676,23 +678,60 @@ def _select_symbol_match(
     symbol: str,
     *,
     file_path: str | None = None,
-) -> tuple[Any | None, str | None]:
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+) -> tuple[Any | None, str | None, str | None]:
+    """3-tier symbol resolution: LSP → tree-sitter same-file → global fuzzy.
+
+    Returns (symbol, error, resolution_tier).
+    resolution_tier is "lsp", "treesitter", or "fuzzy".
+    """
     matches = engine.query_symbol(symbol)
+    resolution_tier = "fuzzy"
+
+    # Tier 1: LSP definition lookup (highest precision)
+    if with_lsp and matches:
+        from ..lsp import collect_lsp_symbol_evidence
+        try:
+            best_match = matches[0]
+            lsp_result = collect_lsp_symbol_evidence(
+                str(engine.project_root), best_match.file,
+                best_match.line, symbol, timeout=lsp_timeout,
+            )
+            if lsp_result.status == "ok" and lsp_result.definitions:
+                # LSP confirmed the definition location
+                lsp_def = lsp_result.definitions[0]
+                for m in matches:
+                    if m.file == lsp_def.file and abs(m.line - lsp_def.line) <= 3:
+                        return m, None, "lsp"
+                # LSP found but at a different location; prefer LSP over tree-sitter
+                same_file = [m for m in matches if m.file == lsp_def.file]
+                if same_file:
+                    return same_file[0], None, "lsp"
+        except Exception:
+            pass  # LSP failed, fall through to tier 2
+
+    # Tier 2: Exact name match (tree-sitter precision)
     if not matches:
-        return None, f"> Symbol `{symbol}` not found"
+        return None, f"> Symbol `{symbol}` not found", "fuzzy"
 
     exact_matches = [item for item in matches if item.name == symbol]
     candidates = exact_matches or matches
+    if exact_matches:
+        resolution_tier = "treesitter"
 
+    # Tier 3: Global fuzzy with file filtering
     if file_path:
         filtered = [item for item in candidates if item.file == file_path]
         if not filtered:
-            return None, f"> Symbol `{symbol}` not found in `{file_path}`"
+            return None, f"> Symbol `{symbol}` not found in `{file_path}`", "fuzzy"
         candidates = filtered
+        resolution_tier = "treesitter"
 
     if len(candidates) == 1:
-        return candidates[0], None
+        return candidates[0], None, resolution_tier
 
+    # Ambiguous: multiple candidates
     lines = [f"> Symbol `{symbol}` has multiple candidates; use `--file-path` to specify:"]
     for item in candidates[:10]:
         lines.append(f"- `{item.file}:{item.line}` ({item.kind})")
@@ -700,7 +739,7 @@ def _select_symbol_match(
         lines.append(f"- ... {len(candidates) - 10} more candidates")
     lines.append(f"\nTip: use `--file-path <file>` to specify the target file, e.g.:")
     lines.append(f"  repomap call-chain --symbol {symbol} --file-path {candidates[0].file}")
-    return None, "\n".join(lines)
+    return None, "\n".join(lines), resolution_tier
 
 
 def _group_symbol_matches(results: list[Any], symbol: str) -> tuple[list[Any], list[Any]]:
@@ -843,7 +882,7 @@ def run_call_chain(
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        selected, error = _select_symbol_match(engine, symbol, file_path=file_path)
+        selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
         if error:
             print(error, file=sys.stderr)
             return 1
@@ -1942,7 +1981,7 @@ def run_verify(
 def run_git_history(project: str, max_files: int, symbol: str, file_path: str | None) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        selected, error = _select_symbol_match(engine, symbol, file_path=file_path)
+        selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
         if error:
             print(error, file=sys.stderr)
             return 1
@@ -2009,7 +2048,7 @@ def run_refs(
                 calls_in.setdefault(edge.target, set()).add(source_id)
 
         if symbol:
-            selected, error = _select_symbol_match(engine, symbol, file_path=file_path)
+            selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
             if error:
                 print(error, file=sys.stderr)
                 return 1

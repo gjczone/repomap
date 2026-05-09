@@ -670,6 +670,12 @@ class RepoMapEngine:
         """返回提取到的 HTTP 路由列表。"""
         return self.routes
 
+    def file_clusters(self, limit: int = 8) -> list[dict[str, Any]]:
+        """Detect module clusters from the file dependency graph."""
+        from .ranking import detect_file_clusters, format_cluster_summary
+        clusters = detect_file_clusters(self.graph)
+        return format_cluster_summary(clusters, top_n=limit)
+
     def summary_symbols(self, limit_files: int = 6, per_file: int = 4) -> list[dict[str, Any]]:
         """返回适合 overview 展示的关键实现符号。"""
         return self._analyzer.summary_symbols(limit_files, per_file)

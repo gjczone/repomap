@@ -409,6 +409,14 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
             )
         lines.append("")
 
+    clusters = engine.file_clusters(8)
+    if clusters:
+        lines.append("## Module Clusters (auto-detected)\n")
+        for c in clusters:
+            reps = c.get("representatives", [])[:3]
+            lines.append(f"- **{c['label']}** ({c['size']} files): {', '.join(f'`{r}`' for r in reps)}")
+        lines.append("")
+
     entries = engine.entry_points()
     if entries:
         lines.append("## Entry Points\n")

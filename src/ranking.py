@@ -637,3 +637,123 @@ class EdgeBuilder:
         e = Edge(src, tgt, weight, kind)
         self.graph.outgoing[src].append(e)
         self.graph.incoming[tgt].append(e)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Community detection via Label Propagation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def detect_file_clusters(graph: "RepoGraph", max_iterations: int = 20) -> dict[str, int]:
+    """Detect module clusters from the file import/call graph using label propagation.
+
+    Returns dict mapping file_path -> cluster_id.
+    Clusters are numbered 0..N-1 by size (largest first).
+    """
+    files = sorted(graph.file_symbols.keys())
+    if len(files) < 3:
+        return {f: 0 for f in files}
+
+    # Build undirected adjacency with edge weights
+    neighbors: dict[str, dict[str, float]] = {f: {} for f in files}
+    for f in files:
+        # Import edges
+        for imported in graph.file_imports.get(f, []):
+            if imported in neighbors:
+                neighbors[f][imported] = neighbors[f].get(imported, 0) + 1.0
+                neighbors[imported][f] = neighbors[imported].get(f, 0) + 1.0
+        # Call edges
+        for called, _ in graph.file_calls.get(f, []):
+            if called in neighbors:
+                neighbors[f][called] = neighbors[f].get(called, 0) + 0.5
+                neighbors[called][f] = neighbors[called].get(f, 0) + 0.5
+
+    # Initialize labels by directory structure for meaningful cluster seeds
+    from pathlib import PurePosixPath
+    dir_labels: dict[str, int] = {}
+    next_dir_id = 0
+    labels: dict[str, int] = {}
+    for f in files:
+        # Use top-2 directory levels as initial label
+        parts = PurePosixPath(f).parts
+        if len(parts) >= 2:
+            d = f"{parts[0]}/{parts[1]}"
+        elif len(parts) == 1 and parts[0] != f:
+            d = parts[0]
+        else:
+            d = "__root__"
+        if d not in dir_labels:
+            dir_labels[d] = next_dir_id
+            next_dir_id += 1
+        labels[f] = dir_labels[d]
+
+    # Label propagation
+    for _ in range(max_iterations):
+        changed = 0
+        # Randomize order each iteration for stability
+        import random
+        order = list(files)
+        random.shuffle(order)
+        for f in order:
+            if not neighbors[f]:
+                continue
+            # Count neighbor labels weighted by edge weight
+            label_counts: dict[int, float] = {}
+            for nb, weight in neighbors[f].items():
+                lbl = labels.get(nb)
+                if lbl is not None:
+                    label_counts[lbl] = label_counts.get(lbl, 0) + weight
+            if not label_counts:
+                continue
+            # Most common label
+            new_label = max(label_counts, key=label_counts.get)
+            if labels[f] != new_label:
+                labels[f] = new_label
+                changed += 1
+        if changed == 0:
+            break
+
+    # Remap cluster IDs by size (largest first)
+    cluster_sizes: dict[int, int] = {}
+    for lbl in labels.values():
+        cluster_sizes[lbl] = cluster_sizes.get(lbl, 0) + 1
+    sorted_clusters = sorted(cluster_sizes.items(), key=lambda x: -x[1])
+    remap = {old: new for new, (old, _) in enumerate(sorted_clusters)}
+    return {f: remap[lbl] for f, lbl in labels.items()}
+
+
+def format_cluster_summary(clusters: dict[str, int], top_n: int = 8) -> list[dict]:
+    """Format cluster detection results for overview rendering.
+
+    Returns list of dicts with keys: cluster_id, size, files (top representatives),
+    top_directory, label (heuristic name).
+    """
+    from collections import defaultdict
+    from pathlib import PurePosixPath
+
+    grouped: dict[int, list[str]] = defaultdict(list)
+    for f, cid in clusters.items():
+        grouped[cid].append(f)
+
+    results = []
+    for cid in sorted(grouped, key=lambda c: -len(grouped[c]))[:top_n]:
+        members = grouped[cid]
+        # Find common directory prefix
+        dirs = [str(PurePosixPath(f).parent) for f in members]
+        top_dir = max(set(dirs), key=dirs.count) if dirs else ""
+        # Top representative files (non-test, high symbol count)
+        reps = [f for f in members if "test" not in f.lower()][:5]
+        if not reps:
+            reps = members[:5]
+
+        # Heuristic label from common directory
+        label = top_dir.split("/")[-1] if "/" in top_dir else top_dir
+
+        results.append({
+            "cluster_id": cid,
+            "size": len(members),
+            "label": label,
+            "top_dir": top_dir,
+            "representatives": reps,
+        })
+    return results
