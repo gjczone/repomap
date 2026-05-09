@@ -205,12 +205,8 @@ When using the MCP server (`repomap-mcp-server`), the following tools are availa
 
 ## Related Projects
 
-- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer.
-- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — `deepmap` (Rust port of repomap's engine).
-- **[srcwalk](https://github.com/sting8k/srcwalk)** — Rust CLI with multi-hop call graph traversal.
-- **[Canopy](https://github.com/LioraLabs/canopy)** — local semantic code search with knowledge graph.
-- **[GitNexus](https://github.com/abhigyanpatwari/GitNexus)** — MCP-native knowledge graph for Claude Code.
-- **[Graphify](https://github.com/safishamsi/graphify)** — knowledge graph from tree-sitter + LLM.
+- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer. repomap's core idea (tree-sitter + PageRank for agent codebase awareness) comes from aider.
+- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — we contributed `deepmap`, a Rust port of repomap's engine, via [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap).
 
 ---
 

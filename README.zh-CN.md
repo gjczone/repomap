@@ -203,12 +203,8 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 ## 相关项目
 
-- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱
-- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — `deepmap`（repomap 引擎的 Rust 移植）
-- **[srcwalk](https://github.com/sting8k/srcwalk)** — 带多跳调用图遍历的 Rust CLI
-- **[Canopy](https://github.com/LioraLabs/canopy)** — 本地语义代码搜索与知识图谱
-- **[GitNexus](https://github.com/abhigyanpatwari/GitNexus)** — Claude Code 的 MCP 原生知识图谱
-- **[Graphify](https://github.com/safishamsi/graphify)** — tree-sitter + LLM 知识图谱
+- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。repomap 的核心思想（tree-sitter + PageRank 为 AI 代理提供代码库感知）源自 aider。
+- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们通过 [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
 
 ---
 
