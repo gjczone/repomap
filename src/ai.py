@@ -17,7 +17,7 @@ CONFIDENCE_MARK = {"high": "HIGH", "medium": "MED", "low": "LOW"}
 def _truncate_output(output: str, max_chars: int) -> str:
     if max_chars <= 0 or len(output) <= max_chars:
         return output
-    return output[:max_chars] + "\n\n…（超出字符限制，已截断）"
+    return output[:max_chars] + "\n\n[output truncated]"
 
 
 def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
@@ -113,32 +113,32 @@ def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
             frameworks.append("react")
 
     # 项目类型
-    ptype = "应用"
+    ptype = "Application"
     entries = engine.entry_points()
     if entries:
         entry_str = " ".join(entries).lower()
         if "main.rs" in entry_str or "main.go" in entry_str or "main.c" in entry_str:
-            ptype = "二进制/CLI 应用"
+            ptype = "Binary/CLI App"
         elif "lib.rs" in entry_str and "main.rs" not in entry_str:
-            ptype = "库"
+            ptype = "Library"
         elif any("server" in e for e in entries) or routes:
-            ptype = "Web 服务"
+            ptype = "Web Service"
     if "tui" in file_str or any("tui" in f.lower() for f in file_set):
-        ptype = "TUI 应用" if ptype == "二进制/CLI 应用" else ptype
+        ptype = "TUI App" if ptype == "Binary/CLI App" else ptype
 
-    parts = [f"**项目类型**: {ptype}"]
-    parts.append(f"**语言**: {lang_str}")
+    parts = [f"**Project Type**: {ptype}"]
+    parts.append(f"**Language**: {lang_str}")
     if frameworks:
-        parts.append(f"**框架**: {', '.join(frameworks)}")
+        parts.append(f"**Framework**: {', '.join(frameworks)}")
     return " | ".join(parts)
 
 
 def _auto_granularity(engine: "RepoMapEngine") -> str:
-    """根据项目规模自动选择报告粒度。
+    """Auto-select report granularity based on project size.
 
-    - full:    < 50 个文件 —— 完整报告
-    - medium:  50-300 个文件 —— 精简报告
-    - compact: > 300 个文件 —— 极简报告
+    - full:    < 50 files — comprehensive report
+    - medium:  50-300 files — moderate report
+    - compact: > 300 files — compact report
     """
     file_count = engine.scan_stats.processed_files
     if file_count < 50:
@@ -149,12 +149,35 @@ def _auto_granularity(engine: "RepoMapEngine") -> str:
         return "compact"
 
 
-def render_routes_report(engine: "RepoMapEngine") -> str:
-    """渲染 HTTP 路由表（独立命令用）。"""
+def render_routes_report(engine: "RepoMapEngine", consumers: dict | None = None) -> str:
+    """Render HTTP route table (standalone command)."""
     routes = engine.list_routes()
     if not routes:
-        return "未检测到 HTTP 路由定义。"
+        return "No HTTP routes detected."
+    if consumers:
+        return _format_route_lines_with_consumers(routes, consumers)
     return _format_route_table(routes)
+
+
+def _format_route_lines_with_consumers(routes: list, consumers: dict) -> str:
+    """Format route table with consumer information."""
+    lines: list[str] = []
+    lines.append("## API Routes with Consumers\n")
+    for r in sorted(routes, key=lambda r: (r.file, r.line)):
+        route_key = f"{r.method} {r.path}"
+        lines.append(f"\n### {r.method} `{r.path}`\n")
+        lines.append(f"- **Handler**: `{r.handler}` — `{r.file}:{r.line}` ({r.framework})")
+        route_consumers = consumers.get(route_key, [])
+        if route_consumers:
+            lines.append("- **Consumers**:")
+            for c in route_consumers:
+                conf = {"high": "HIGH", "medium": "MED", "low": "LOW"}.get(c.confidence, c.confidence)
+                lines.append(f"  - `{c.file}:{c.line}` [{conf}: {c.match_type}]")
+                if c.context:
+                    lines.append(f"    > {c.context}")
+        else:
+            lines.append("- **Consumers**: none detected")
+    return "\n".join(lines)
 
 
 def _render_route_section(engine: "RepoMapEngine") -> list[str]:
@@ -169,7 +192,7 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
     """格式化路由为 Markdown 行。"""
     from collections import Counter
 
-    lines = ["## API 路由\n"]
+    lines = ["## API Routes\n"]
     method_order = {"GET": 0, "POST": 1, "PUT": 2, "PATCH": 3, "DELETE": 4, "HEAD": 5, "OPTIONS": 6, "USE": 7, "ALL": 8}
     routes_sorted = sorted(routes, key=lambda r: (r.file, r.line))
 
@@ -181,18 +204,18 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
         for file, file_routes in list(by_file.items())[:6]:
             methods = Counter(r.method for r in file_routes)
             method_str = " ".join(f"{m}x{methods[m]}" for m in ("GET", "POST", "PUT", "DELETE", "PATCH") if methods[m])
-            lines.append(f"- `{file}` — {len(file_routes)} 个路由（{method_str}）")
+            lines.append(f"- `{file}` — {len(file_routes)} routes（{method_str}）")
         if len(by_file) > 6:
-            lines.append(f"- …还有 {len(by_file) - 6} 个文件包含路由")
+            lines.append(f"- ... {len(by_file) - 6} more files with routes")
     else:
         if len(routes_sorted) > 20 and compact:
-            lines.append(f"> （共 {len(routes)} 个路由，以下展示 Top 20）\n")
+            lines.append(f"> （{len(routes)} routes total, showing top 20）\n")
         lines.append("| Method | Path | Handler | File | Framework |")
         lines.append("|--------|------|---------|------|-----------|")
         for r in routes_sorted[:20]:
             lines.append(f"| {r.method} | `{r.path}` | `{r.handler}` | `{r.file}:{r.line}` | {r.framework} |")
         if len(routes_sorted) > 20 and compact:
-            lines.append(f"\n…还有 {len(routes_sorted) - 20} 个路由")
+            lines.append(f"\n... {len(routes_sorted) - 20} more routes")
     lines.append("")
     return lines
 
@@ -265,11 +288,11 @@ def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
 
     pairs.sort(key=lambda x: -x[2])
     lines = [
-        "## 隐式耦合（Git 共变）\n",
-        "> 以下文件在 git 历史中频繁一起修改，可能存在未在代码中显式声明的隐含关联。\n",
+        "## Implicit Coupling (Git Co-change)\n",
+        "> Files frequently changed together in git history; may indicate implicit dependencies not declared in code.\n",
     ]
     for file_a, file_b, count in pairs[:10]:
-        lines.append(f"- `{file_a}` ↔ `{file_b}` — 共变 {count} 次")
+        lines.append(f"- `{file_a}` ↔ `{file_b}` — co-changed {count} times")
     lines.append("")
     return lines
 
@@ -291,9 +314,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 8, 8, 10, 6, 4, 8
 
     lines: list[str] = []
-    lines.append(f"# 项目地图 — {engine.project_root.name}")
+    lines.append(f"# Project Map — {engine.project_root.name}")
     if granularity != "full":
-        lines[-1] += f"（{granularity} 模式）"
+        lines[-1] += f" ({granularity} mode)"
     lines[-1] += "\n"
     file_analysis = engine.file_analysis()
     semantic_symbol_total = round(sum(row.get("semantic_symbol_count", 0.0) for row in file_analysis.values()), 1)
@@ -304,19 +327,19 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
     import_config_count = len(engine._resolver.import_configs) if engine._resolver else 0
 
     stats_line = (
-        f"**文件数**: {engine.scan_stats.processed_files}  "
-        f"**符号数**: {len(engine.graph.symbols)}  "
-        f"**有效符号**: {semantic_symbol_total}  "
-        f"**依赖边**: {edge_count}  "
-        f"**过滤路径**: {engine.scan_stats.filtered_path_files}  "
-        f"**过滤大文件**: {engine.scan_stats.filtered_large_files}"
+        f"**Files**: {engine.scan_stats.processed_files}  "
+        f"**Symbols**: {len(engine.graph.symbols)}  "
+        f"**Semantic symbols**: {semantic_symbol_total}  "
+        f"**Edges**: {edge_count}  "
+        f"**Filtered paths**: {engine.scan_stats.filtered_path_files}  "
+        f"**Filtered large files**: {engine.scan_stats.filtered_large_files}"
     )
     if import_config_count:
-        stats_line += f"  **解析配置**: {import_config_count}"
+        stats_line += f"  **Import configs**: {import_config_count}"
     lines.append(stats_line + "\n")
 
     if engine.scan_stats.truncated_files:
-        lines.append(f"> `max_files` 截断了 {engine.scan_stats.truncated_files} 个候选文件\n")
+        lines.append(f"> `max_files` truncated {engine.scan_stats.truncated_files} candidate files\n")
 
     # 一句话项目摘要
     summary = _project_summary(engine, granularity)
@@ -330,21 +353,21 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     suggestions = engine.suggested_reading_order(reading_limit)
     if suggestions:
-        lines.append("## 推荐阅读顺序\n")
+        lines.append("## Recommended Reading Order\n")
         for index, item in enumerate(suggestions, 1):
             hot_tag = " [HOT]" if item["file"] in hot_files else ""
-            highlights = f"；关键符号: {', '.join(item['top_symbols'])}" if item["top_symbols"] else ""
+            highlights = f"; key symbols: {', '.join(item['top_symbols'])}" if item["top_symbols"] else ""
             count_text = (
-                f"有效符号 {item['semantic_symbol_count']}"
+                f"Semantic symbols {item['semantic_symbol_count']}"
                 if item.get("semantic_symbol_count") is not None
                 and item.get("semantic_symbol_count") != item["symbol_count"]
-                else f"符号数 {item['symbol_count']}"
+                else f"Symbols {item['symbol_count']}"
             )
             if (
                 item.get("semantic_symbol_count") is not None
                 and item.get("semantic_symbol_count") != item["symbol_count"]
             ):
-                count_text += f"（总符号 {item['symbol_count']}）"
+                count_text += f"(total symbols {item['symbol_count']}）"
             lines.append(
                 f"{index}. `{item['file']}`{hot_tag} — {item['reason']}；"
                 f"{count_text}{highlights}"
@@ -353,9 +376,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     supporting_files = engine.supporting_files(supporting_limit)
     if supporting_files:
-        lines.append("## 支撑文件（非符号图）\n")
+        lines.append("## Supporting Files (non-AST)\n")
         lines.append(
-            "> 符号图优先覆盖源码；以下仅动态列出关键文档、脚本和配置，不能替代 AGENTS.md/CLAUDE.md 的人工上下文。\n"
+            "> Source graph prioritizes source code; key docs, scripts, and configs listed below. Does not replace AGENTS.md/CLAUDE.md context.\n"
         )
         for item in supporting_files:
             lines.append(
@@ -366,29 +389,29 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     modules = engine.module_summary(module_limit)
     if modules:
-        lines.append("## 模块摘要\n")
+        lines.append("## Module Summary\n")
         for module in modules:
-            highlights = f"；关键符号: {', '.join(module['highlights'])}" if module["highlights"] else ""
+            highlights = f"; key symbols: {', '.join(module['highlights'])}" if module["highlights"] else ""
             count_text = (
-                f"有效符号 {module['semantic_symbol_count']}"
+                f"Semantic symbols {module['semantic_symbol_count']}"
                 if module.get("semantic_symbol_count") is not None
                 and module.get("semantic_symbol_count") != module["symbol_count"]
-                else f"{module['symbol_count']} 符号"
+                else f"{module['symbol_count']} symbols"
             )
             if (
                 module.get("semantic_symbol_count") is not None
                 and module.get("semantic_symbol_count") != module["symbol_count"]
             ):
-                count_text += f"（总符号 {module['symbol_count']}）"
+                count_text += f"(total symbols {module['symbol_count']}）"
             lines.append(
-                f"- `{module['module']}` — {module['file_count']} 文件 / {count_text}"
-                f"；代表文件 `{module['representative_file']}`{highlights}"
+                f"- `{module['module']}` — {module['file_count']} files / {count_text}"
+                f"; representative `{module['representative_file']}`{highlights}"
             )
         lines.append("")
 
     entries = engine.entry_points()
     if entries:
-        lines.append("## 入口点\n")
+        lines.append("## Entry Points\n")
         for entry in entries[:6]:
             lines.append(f"- `{entry}`")
         lines.append("")
@@ -400,19 +423,19 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     hotspots = engine.hotspots(hotspot_limit)
     if hotspots:
-        lines.append("## 高密度文件（按有效符号密度，默认降低标签/配置噪音）\n")
+        lines.append("## High-Density Files (by semantic symbol density, label/config noise reduced)\n")
         for hotspot in hotspots:
             count_text = (
-                f"有效符号 {hotspot['semantic_symbol_count']}"
+                f"Semantic symbols {hotspot['semantic_symbol_count']}"
                 if hotspot.get("semantic_symbol_count") is not None
                 and hotspot.get("semantic_symbol_count") != hotspot["symbol_count"]
-                else f"{hotspot['symbol_count']} 个符号"
+                else f"{hotspot['symbol_count']}  symbols"
             )
             if (
                 hotspot.get("semantic_symbol_count") is not None
                 and hotspot.get("semantic_symbol_count") != hotspot["symbol_count"]
             ):
-                count_text += f"（总符号 {hotspot['symbol_count']}）"
+                count_text += f"(total symbols {hotspot['symbol_count']}）"
             lines.append(
                 f"- {RISK_MARK.get(hotspot['risk'], '[info]')} `{hotspot['file']}`"
                 f" — {count_text}"
@@ -421,12 +444,12 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     summary_sections = engine.summary_symbols(summary_files, summary_per_file)
     if summary_sections:
-        lines.append("## 关键实现符号\n")
-        lines.append("> 这里优先展示更适合阅读和改动分析的实现符号，默认降低测试、HTML 标签、CSS selector、JSON key 等低语义噪音。\n")
+        lines.append("## Key Implementation Symbols\n")
+        lines.append("> Implementation symbols ranked by importance; tests, HTML tags, CSS selectors, and JSON keys are deprioritized.\n")
         for section in summary_sections:
             lines.append(f"### `{section['file']}`\n")
             if section.get("reason"):
-                lines.append(f"- 理由: {section['reason']}")
+                lines.append(f"- Reason: {section['reason']}")
             for symbol_row in section["symbols"]:
                 pagerank = symbol_row["pagerank"] * 1000
                 visibility = VISIBILITY_MARK.get(symbol_row["visibility"], "[private]")
@@ -462,56 +485,44 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         if co_change_lines:
             lines.extend(co_change_lines)
 
-    # Quick Actions
-    lines.append("## Quick Actions\n")
-    top_file = suggestions[0]["file"] if suggestions else ""
-    top_symbol = suggestions[0]["top_symbols"][0] if suggestions and suggestions[0].get("top_symbols") else ""
-    lines.append(f"- 查看入口文件详情: `repomap file-detail --project . --file-path {top_file or 'repomap_core.py'}`")
-    if top_symbol:
-        lines.append(f"- 查看核心符号调用链: `repomap call-chain --project . --symbol {top_symbol}`")
-    lines.append("- 搜索特定主题: `repomap query --project . --query <keyword>`")
-    lines.append("- 检查诊断: `repomap check --project .`")
-    lines.append("- 完整验证: `repomap verify --project .`")
-    lines.append("")
-
     return _truncate_output("\n".join(lines), max_chars)
 
 
 def render_call_chain_report(engine: "RepoMapEngine", symbol_name: str, max_depth: int = 3) -> str:
     matches = engine.query_symbol(symbol_name)
     if not matches:
-        return f"> 未找到符号 `{symbol_name}`"
+        return f"> Symbol `{symbol_name}` not found"
 
     symbol = matches[0]
     chain = engine.call_chain(symbol.id, "both", max_depth)
     lines = [
-        f"## 调用链 — `{symbol.name}`\n",
-        f"- **类型**: {symbol.kind}",
-        f"- **位置**: `{symbol.file}:{symbol.line}`",
-        f"- **重要性**: PR={symbol.pagerank * 1000:.1f}",
-        f"- **签名**: `{symbol.signature}`" if symbol.signature else "",
+        f"## Call Chain — `{symbol.name}`\n",
+        f"- **Type**: {symbol.kind}",
+        f"- **Location**: `{symbol.file}:{symbol.line}`",
+        f"- **Importance**: PR={symbol.pagerank * 1000:.1f}",
+        f"- **Signature**: `{symbol.signature}`" if symbol.signature else "",
         "",
     ]
 
     callers = chain["callers"]
-    lines.append(f"### 被以下符号调用（{len(callers)}）\n")
+    lines.append(f"### Called by ({len(callers)})\n")
     if callers:
         for caller in callers[:20]:
             lines.append(f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`")
         if len(callers) > 20:
-            lines.append(f"- …还有 {len(callers) - 20} 个")
+            lines.append(f"- ... {len(callers) - 20} more")
     else:
-        lines.append("- （无，可能是入口点）")
+        lines.append("- (None — entry point)")
 
     callees = chain["callees"]
-    lines.append(f"\n### 调用了以下符号（{len(callees)}）\n")
+    lines.append(f"\n### Calls ({len(callees)})\n")
     if callees:
         for callee in callees[:20]:
             lines.append(f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`")
         if len(callees) > 20:
-            lines.append(f"- …还有 {len(callees) - 20} 个")
+            lines.append(f"- ... {len(callees) - 20} more")
     else:
-        lines.append("- （无，叶子函数）")
+        lines.append("- (None — leaf function)")
 
     return "\n".join(line for line in lines if line is not None)
 
@@ -529,7 +540,7 @@ def render_file_detail_report(
             file_path = matches[0]
             symbol_ids = engine.graph.file_symbols[file_path]
         else:
-            return f"> 文件 `{file_path}` 未找到或无符号"
+            return f"> File `{file_path}` not found or has no symbols"
 
     analysis = engine.file_analysis().get(file_path, {})
     symbols = sorted(
@@ -539,19 +550,19 @@ def render_file_detail_report(
     visible_symbols = symbols if max_symbols <= 0 else symbols[:max_symbols]
 
     lines = [
-        f"## 文件详情 — `{file_path}`\n",
-        f"共 {len(symbols)} 个符号",
+        f"## File Detail — `{file_path}`\n",
+        f"{len(symbols)}  symbols",
     ]
     if analysis:
         lines.append(
-            f"跨文件关联 {analysis.get('neighbor_count', 0)} 个，"
-            f"导出符号 {analysis.get('exported_count', 0)} 个\n"
+            f"Cross-file references: {analysis.get('neighbor_count', 0)}, "
+            f"exported symbols: {analysis.get('exported_count', 0)}\n"
         )
     else:
         lines.append("")
 
     if max_symbols > 0 and len(symbols) > len(visible_symbols):
-        lines.append(f"默认仅展开前 {len(visible_symbols)} 个符号，剩余 {len(symbols) - len(visible_symbols)} 个可用 `--max-symbols` 查看。\n")
+        lines.append(f"Showing first {len(visible_symbols)} of {len(symbols)} symbols; use `--max-symbols` to see more.\n")
 
     for symbol in visible_symbols:
         pagerank = symbol.pagerank * 1000
@@ -599,10 +610,14 @@ def render_query_report(
     lines.append(f"Matched symbols: {sym_count}\n")
 
     # Summary
-    roles = set(m.role for m in file_matches if m.role != "other")
-    role_hint = f"横跨 {'、'.join(sorted(roles))}" if roles else ""
-    if role_hint:
-        lines.append(f"## Summary\n{query} 主题{role_hint}。\n")
+    core_count = sum(1 for m in file_matches if m.role not in ("other", "test"))
+    test_count = sum(1 for m in file_matches if m.role == "test")
+    parts = [f"{len(file_matches)} files matched"]
+    if core_count:
+        parts.append(f"{core_count} implementation")
+    if test_count:
+        parts.append(f"{test_count} test")
+    lines.append(f"## Summary\n{', '.join(parts)}.\n")
 
     # Recommended Reading Order
     analysis = engine.file_analysis()
@@ -685,7 +700,7 @@ def _build_query_reading_order(
         if m.path in seen:
             continue
         if any(m.path.endswith(suffix) for suffix in ["index.ts", "index.tsx", "main.ts", "main.py"]):
-            order.append({"file": m.path, "reason": "入口点/索引"})
+            order.append({"file": m.path, "reason": "Entry point / index"})
             seen.add(m.path)
 
     # 高分数核心文件
@@ -695,9 +710,9 @@ def _build_query_reading_order(
         if m.score >= 60:
             file_data = analysis.get(m.path, {})
             neighbor_count = file_data.get("neighbor_count", 0)
-            reason = f"高分匹配 (score={m.score:.0f})"
+            reason = f"High-score match (score={m.score:.0f})"
             if neighbor_count >= 3:
-                reason += "，跨模块枢纽"
+                reason += ", cross-module hub"
             order.append({"file": m.path, "reason": reason})
             seen.add(m.path)
 
@@ -705,7 +720,7 @@ def _build_query_reading_order(
     for m in file_matches:
         if m.path in seen:
             continue
-        order.append({"file": m.path, "reason": f"相关匹配 (score={m.score:.0f})"})
+        order.append({"file": m.path, "reason": f"Related match (score={m.score:.0f})"})
         seen.add(m.path)
         if len(order) >= max_files:
             break
@@ -753,22 +768,19 @@ def render_impact_report(
 
     if key_symbols or read_next:
         lines.append("## Edit Plan\n")
-        lines.append("- Start with target files, then inspect high-confidence affected files and suggested tests.")
         if key_symbols:
-            lines.append("- Review key symbols before changing behavior or signatures.")
+            lines.append("- Review Key Symbols before changing behavior or signatures.")
+        if affected_files:
+            lines.append("- Inspect Likely Affected Files flagged below.")
         if lsp_hint and lsp_hint.get("available"):
             lines.append("- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters.")
         lines.append("")
-        # 编辑 checklist
+        # Edit checklist
         checklist: list[str] = []
-        checklist.append("□ 阅读目标文件及 Read Next 中的高优先级文件")
-        if key_symbols:
-            checklist.append("□ 检查 Key Symbols 的调用链（repomap call-chain）确认影响范围")
-        if affected_files:
-            checklist.append("□ 逐个检查 Likely Affected Files 是否需要同步修改")
+        checklist.append("- [ ] Review Key Symbols call chains and affected files")
         if tests:
-            checklist.append("□ 修改完成后运行 Suggested Tests 中的测试")
-        checklist.append("□ 编辑完成后运行 repomap verify 做最终证据检查")
+            checklist.append("- [ ] Run Suggested Tests after making changes")
+        checklist.append("- [ ] Run `repomap verify` for final evidence")
         if checklist:
             lines.append("### Edit Checklist\n")
             for item in checklist:
@@ -823,11 +835,11 @@ def render_impact_report(
     # Related Commands
     lines.append("## Related Commands\n")
     if target_files:
-        lines.append(f"- 查看目标文件详情: `repomap file-detail --project . --file-path {target_files[0]}`")
+        lines.append(f"- View target file details: `repomap file-detail --project . --file-path {target_files[0]}`")
     if affected_files:
         top_affected = affected_files[0][0]
-        lines.append(f"- 检查首要受影响文件: `repomap file-detail --project . --file-path {top_affected}`")
-    lines.append("- 验证变更: `repomap verify --project .`")
+        lines.append(f"- Inspect top affected file: `repomap file-detail --project . --file-path {top_affected}`")
+    lines.append("- Verify changes: `repomap verify --project .`")
     lines.append("")
 
     return _truncate_output("\n".join(lines), max_chars)
@@ -883,7 +895,7 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         for file_path in changed_files[:30]:
             lines.append(f"- `{file_path}` ({classify_file_role(file_path)})")
         if len(changed_files) > 30:
-            lines.append(f"- …还有 {len(changed_files) - 30} 个")
+            lines.append(f"- ... {len(changed_files) - 30} more")
     else:
         lines.append("- No changed files detected in the project.")
     lines.append("")
@@ -913,7 +925,7 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         lines.append("")
     else:
         lines.append("## Suggested Tests\n")
-        lines.append("- 未匹配到与变更文件相关的测试文件。")
+        lines.append("- No test files matched for changed files.")
         changed_files = result.get("changedFiles", [])
         if changed_files:
             # 给出通用测试命令建议
@@ -932,15 +944,15 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
                     test_hints.append("cargo test")
                     break
             if test_hints:
-                lines.append(f"- 建议手动运行: `{test_hints[0]}`")
+                lines.append(f"- Suggestion: run `{test_hints[0]}`")
             else:
-                lines.append("- 建议手动运行项目测试套件。")
+                lines.append("- Suggestion: run the project test suite.")
         lines.append("")
 
     untested = result.get("untestedSymbols", [])
     if untested:
         lines.append("## Test Coverage Gaps\n")
-        lines.append("> 以下符号缺少测试覆盖，修改时需格外谨慎。\n")
+        lines.append("> Symbols below lack test coverage. Review carefully before modifying.\n")
         lines.append("| Symbol | Kind | File | Callers | Risk |")
         lines.append("|--------|------|------|:------:|:----:|")
         for item in untested[:15]:
@@ -988,10 +1000,18 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
                 f"[{bc.get('risk', 'LOW')}]"
             )
             if bc.get("new_signature") and bc.get("old_signature") != bc.get("new_signature"):
-                lines.append(f"  - 旧: `{bc.get('old_signature', '')}`")
-                lines.append(f"  - 新: `{bc.get('new_signature', '')}`")
+                lines.append(f"  - Old: `{bc.get('old_signature', '')}`")
+                lines.append(f"  - New: `{bc.get('new_signature', '')}`")
             if bc.get("affected_caller_count", 0) > 0:
-                lines.append(f"  - {bc['affected_caller_count']} 个调用者受影响")
+                lines.append(f"  - {bc['affected_caller_count']} callers affected")
+        lines.append("")
+
+    contract_risks = result.get("contractRisks", [])
+    if contract_risks:
+        lines.append("## Contract Risk Warnings\n")
+        for cr in contract_risks:
+            level = cr.get("level", "MED")
+            lines.append(f"- {level}: {cr['message']}")
         lines.append("")
 
     lines.append("## Graph Diff\n")
@@ -1006,15 +1026,15 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     lines.append("")
 
     lines.append("## Final Evidence Checklist\n")
-    if status == "passed":
-        lines.append("- [x] Static diagnostics did not fail.")
-        lines.append("- [x] Risk gate did not find high-risk or missing-check blockers.")
-    else:
-        lines.append("- [ ] Review failed/warning sections before final handoff.")
+
+    if status != "passed":
+        lines.append("- [ ] Address failed/warning sections above.")
     if tests:
-        lines.append("- [ ] Run or explicitly account for the suggested tests above.")
+        lines.append("- [ ] Run suggested tests separately.")
     if lsp.get("status") == "skipped":
         lines.append("- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed.")
+    if graph_diff.get("status") == "skipped":
+        lines.append("- [ ] Graph diff was skipped; use `--with-diff` after `cache save` for contract change evidence.")
     return _truncate_output("\n".join(lines), max_chars)
 
 
@@ -1098,11 +1118,11 @@ def _suggest_manual_verification(changed_files: list[str], risk_level: str) -> l
     items: list[str] = []
     all_paths = " ".join(changed_files).lower()
     if any(kw in all_paths for kw in ["terminal", "cli", "tui", "input"]):
-        items.append("在终端中运行常用命令验证输入/输出正常")
+        items.append("Run common terminal commands to verify I/O correctness")
     if any(kw in all_paths for kw in ["auth", "login", "token", "session"]):
-        items.append("验证登录/登出流程正常")
+        items.append("Verify login/logout flow works correctly")
     if any(kw in all_paths for kw in ["ui", "component", "page", "view"]):
-        items.append("在浏览器中检查相关页面渲染和交互")
+        items.append("Check page rendering and interactions in browser")
     if risk_level == "high":
-        items.append("考虑在 staging 环境做一次完整的回归测试")
+        items.append("Consider a full regression test in staging environment")
     return items[:5]

@@ -177,7 +177,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
             data = json.load(f)
         # Schema version check - 不匹配时删除旧缓存，触发重建
         if data.get("_schema_version") != CACHE_SCHEMA_VERSION:
-            print(f"[repomap] Cache schema 版本不匹配 (缓存: v{data.get('_schema_version')}, 当前: v{CACHE_SCHEMA_VERSION})，自动清理旧缓存并重新扫描", file=sys.stderr)
+            print(f"[repomap] Cache schema schema version mismatch (缓存: v{data.get('_schema_version')}, 当前: v{CACHE_SCHEMA_VERSION})，Clearing old cache and re-scanning", file=sys.stderr)
             try:
                 os.unlink(cache_file)
             except OSError:
@@ -185,8 +185,8 @@ def load_cache(project_path: str) -> SymbolCache | None:
             return None
         return SymbolCache(**data)
     except json.JSONDecodeError:
-        # 缓存文件损坏
-        print(f"[repomap] 缓存文件损坏 ({cache_file})，自动清理并重新扫描", file=sys.stderr)
+        # Cache file corrupted
+        print(f"[repomap] Cache file corrupted ({cache_file}), clearing and re-scanning", file=sys.stderr)
         try:
             os.unlink(cache_file)
         except OSError:
@@ -362,7 +362,7 @@ def diff_project(project_path: str) -> dict:
     last = load_cache(project_path)
     
     if last is None:
-        return {"error": "没有缓存，请先运行 cache --save"}
+        return {"error": "No cache found. Run cache --save first."}
     comparison = compare_graph_snapshots(
         current_symbols=current_symbols,
         current_edges=current_edges,
@@ -491,7 +491,7 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
         }
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Git 操作超时'}
+        return {'error': 'Git operation timed out'}
     except Exception as e:
         return {'error': str(e)}
 
@@ -548,7 +548,7 @@ def analyze_refs(project_path: str, symbol_name: str | None = None) -> dict:
     """分析符号引用关系"""
     cache = load_cache(project_path)
     if not cache:
-        return {'error': '没有缓存，请先运行 cache --save'}
+        return {'error': 'No cache found. Run cache --save first.'}
     
     # 构建调用图
     symbol_ids = {s['id'] for s in cache.symbols}
@@ -575,7 +575,7 @@ def analyze_refs(project_path: str, symbol_name: str | None = None) -> dict:
         # 查找特定符号
         matches = [sid for sid in symbol_ids if symbol_name in sid]
         if not matches:
-            return {'error': f'未找到符号: {symbol_name}'}
+            return {'error': f'Symbol not found: {symbol_name}'}
         
         sid = matches[0]
         s = symbol_map[sid]

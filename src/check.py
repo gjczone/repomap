@@ -886,7 +886,7 @@ class RepoMapChecker:
                 "timestamp": self._get_timestamp(),
                 "project_root": str(self.project_root),
                 "status": "unknown",
-                "message": "未检测到支持的项目类型",
+                "message": "No supported project type detected",
                 "types": [],
                 "runs": [],
                 "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0},
@@ -1074,7 +1074,7 @@ class RepoMapChecker:
             if r.skip_reason:
                 run_data["skip_reason"] = r.skip_reason
             if not r.skipped and r.exit_code != 0 and not r.errors and not r.warnings:
-                run_data["tool_failure_reason"] = "工具退出码非 0，但未解析到结构化错误"
+                run_data["tool_failure_reason"] = "Tool exited non-zero but no structured errors parsed"
             if not r.skipped:
                 run_data["raw_excerpt"] = list(r.raw_excerpt[:10])
                 run_data["errors"] = [
@@ -1103,7 +1103,7 @@ class RepoMapChecker:
             status = "warning"
         elif tools_run == 0 and tools_skipped > 0:
             status = "unknown"
-            message = "检测到项目类型，但没有实际运行任何诊断工具"
+            message = "Project type detected but no diagnostic tools ran"
         else:
             status = "passed"
 

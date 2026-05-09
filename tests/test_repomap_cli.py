@@ -130,7 +130,7 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
             with patch("src.cli.cli.subprocess.run", side_effect=fake_run):
-                with patch("src.cli.cli.diff_project", return_value={"error": "没有缓存，请先运行 cache --save"}):
+                with patch("src.cli.cli.diff_project", return_value={"error": "No cache found; run cache --save first"}):
                     with patch.object(RepoMapChecker, "check", fake_check):
                         with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                             exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])
@@ -160,7 +160,7 @@ class RepoMapCliTests(unittest.TestCase):
                         "error_count": 0,
                         "warning_count": 0,
                         "truncated": False,
-                        "tool_failure_reason": "工具退出码非 0，但未解析到结构化错误",
+                        "tool_failure_reason": "Tool exited non-zero but no structured errors parsed",
                         "raw_excerpt": ["ESLint couldn't find an eslint.config file"],
                     }
                 ],
@@ -182,9 +182,9 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         output = stdout.getvalue()
-        self.assertIn("❌ 有错误", output)
-        self.assertIn("退出码: 2", output)
-        self.assertIn("未解析到结构化错误", output)
+        self.assertIn("❌ Errors", output)
+        self.assertIn("Exit code: 2", output)
+        self.assertIn("no structured errors parsed", output)
 
     def test_lsp_doctor_reports_missing_servers_without_failing(self) -> None:
         from src.cli import main
@@ -449,7 +449,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         output = stdout.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("未检测到 HTTP 路由定义", output)
+        self.assertIn("No HTTP routes detected.", output)
         self.assertNotIn("DESCRIBE", output)
         self.assertNotIn("LOG", output)
         self.assertNotIn("SOME", output)
@@ -567,7 +567,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(overview_code, 0)
             self.assertEqual(symbol_code, 0)
             self.assertEqual(chain_code, 0)
-            self.assertIn("# 项目地图", overview_stdout.getvalue())
+            self.assertIn("# Project Map", overview_stdout.getvalue())
             self.assertIn("helper", symbol_stdout.getvalue())
             self.assertIn("caller", chain_stdout.getvalue())
 
@@ -656,7 +656,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(cache_code, 0)
             self.assertEqual(diff_code, 0)
             self.assertIn("Graph baseline saved", cache_stdout.getvalue())
-            self.assertIn("新增符号: 1", diff_stdout.getvalue())
+            self.assertIn("Added symbols: 1", diff_stdout.getvalue())
 
     def test_build_binary_invokes_pyinstaller_onefile_for_repomap_binary(self) -> None:
         from src.cli import main
@@ -746,9 +746,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("## 精确匹配 `helper` (2)", text)
-            self.assertIn("## 模糊匹配 (1)", text)
-            self.assertIn("建议加 `--file-path`", text)
+            self.assertIn("## Exact matches `helper` (2)", text)
+            self.assertIn("## Fuzzy matches (1)", text)
+            self.assertIn("use `--file-path` to narrow", text)
             self.assertIn("helper_extra", text)
 
     def test_query_symbol_can_filter_by_file_path(self) -> None:
@@ -765,8 +765,8 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("已按文件过滤: `b.py`", text)
-            self.assertIn("## 精确匹配 `helper` (1)", text)
+            self.assertIn("Filtered by file: `b.py`", text)
+            self.assertIn("## Exact matches `helper` (1)", text)
             self.assertIn("`b.py:1`", text)
             self.assertNotIn("`a.py:1`", text)
 
@@ -779,7 +779,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             def fake_co_change_section(engine):
                 src.ai.get_co_change_neighbors(str(engine.project_root), "main.py")
-                return ["## 隐式耦合（Git 共变）\n"]
+                return ["## Implicit Coupling (Git Co-change)\n"]
 
             with patch.object(src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]) as co_change_mock:
                 with patch.object(src.ai, "_render_co_change_section", side_effect=fake_co_change_section):
@@ -843,7 +843,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("默认仅展开前 12 个符号", text)
+            self.assertIn("Showing first 12 of", text)
             self.assertIn("helper_11", text)
             self.assertNotIn("helper_12", text)
 
@@ -868,7 +868,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("已截断", text)
+            self.assertIn("[output truncated]", text)
             self.assertLessEqual(len(text), 260)
 
     def test_call_chain_json_returns_selected_symbol_and_edges(self) -> None:
@@ -1149,7 +1149,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("caller", stdout.getvalue())
-            self.assertIn("被引用次数: 1", stdout.getvalue())
+            self.assertIn("Referenced by:  1", stdout.getvalue())
 
     def test_git_history_requires_file_path_when_symbol_is_ambiguous(self) -> None:
         from src.cli import main
@@ -1189,7 +1189,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("b.py:1", stdout.getvalue())
-            self.assertIn("最近提交", stdout.getvalue())
+            self.assertIn("Recent commits", stdout.getvalue())
 
 
 if __name__ == "__main__":

@@ -51,7 +51,7 @@ NOISE_PATTERNS = [
     ".d.ts",
 ]
 
-# 复用 core 中的 SKIP_DIR_NAMES 作为额外参考
+# Reuse SKIP_DIR_NAMES from core as additional reference
 NOISE_PATH_SEGMENTS = {
     "monaco-editor",
     "vendor",
@@ -63,6 +63,69 @@ NOISE_PATH_SEGMENTS = {
     "build",
     ".cache",
 }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Synonym table for query expansion
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SYNONYM_TABLE: dict[str, set[str]] = {
+    "task": {"job", "process", "run", "execution"},
+    "cancel": {"stop", "abort", "interrupt"},
+    "progress": {"status", "poll"},
+    "reload": {"refresh", "revalidate"},
+    "import": {"ingest", "load", "etl"},
+    "history": {"log", "audit"},
+    "data": {"row", "table"},
+    "failure": {"error", "exception", "failed"},
+    "success": {"ok", "completed", "done"},
+    "auth": {"login", "session", "token", "credential"},
+    "config": {"setting", "option", "preference", "env"},
+    "delete": {"remove", "destroy", "drop", "purge"},
+    "create": {"add", "new", "insert", "build"},
+    "update": {"edit", "modify", "change", "patch"},
+    "api": {"endpoint", "route", "handler", "controller"},
+    "ui": {"frontend", "component", "page", "view", "render"},
+    "db": {"database", "sql", "migration", "schema"},
+    "file": {"io", "read", "write", "stream", "upload", "download"},
+    "queue": {"message", "event", "dispatch", "worker"},
+    "cache": {"redis", "memcache", "store", "invalidate"},
+}
+
+# Build reverse lookup: synonym -> originating keyword
+_SYNONYM_REVERSE: dict[str, str] = {}
+for _kw, _syns in SYNONYM_TABLE.items():
+    for _syn in _syns:
+        _SYNONYM_REVERSE[_syn] = _kw
+
+
+def expand_keywords(keywords: list[str]) -> list[tuple[str, str | None]]:
+    """Expand query keywords with synonyms.
+
+    Returns list of (keyword, source) tuples.
+    source is None for original keywords, or the originating keyword for synonyms.
+    """
+    expanded: list[tuple[str, str | None]] = []
+    seen: set[str] = set()
+    for kw in keywords:
+        if kw not in seen:
+            expanded.append((kw, None))
+            seen.add(kw)
+        for syn in SYNONYM_TABLE.get(kw, set()):
+            if syn not in seen:
+                expanded.append((syn, kw))
+                seen.add(syn)
+    # Also check reverse: if keyword is a synonym, expand to original
+    for kw in keywords:
+        source = _SYNONYM_REVERSE.get(kw)
+        if source:
+            if source not in seen:
+                expanded.append((source, kw))
+                seen.add(source)
+            for syn in SYNONYM_TABLE.get(source, set()):
+                if syn not in seen and syn != kw:
+                    expanded.append((syn, source))
+                    seen.add(syn)
+    return expanded
 
 
 def is_noise_file(file_path: str) -> bool:
@@ -98,30 +161,33 @@ def classify_file_role(file_path: str, graph: "RepoGraph | None" = None) -> str:
     if any(path.endswith(ext) for ext in [".config.ts", ".config.js", ".config.tsx", "package.json"]):
         return "config"
 
-    # 结合符号信息进行更精确的分类
+    # Use symbol information for more precise classification
     if graph is not None:
         symbol_ids = graph.file_symbols.get(file_path, [])
         if symbol_ids:
-            # 统计符号类型
             kind_counts: dict[str, int] = {}
             for sid in symbol_ids:
                 symbol = graph.symbols.get(sid)
                 if symbol:
                     kind_counts[symbol.kind] = kind_counts.get(symbol.kind, 0) + 1
 
-            # 如果文件包含大量导出符号，可能是核心模块
+            # Many exported symbols → core module
             exported_count = sum(1 for sid in symbol_ids
                                if graph.symbols.get(sid) and graph.symbols[sid].visibility == "exported")
             if exported_count >= 3:
                 return "core"
 
-            # 如果文件包含大量类/接口，可能是模型/类型定义
+            # Many classes/interfaces → model/type definitions
             if kind_counts.get("class", 0) >= 2 or kind_counts.get("interface", 0) >= 2:
                 return "model"
 
-            # 如果文件包含大量函数，可能是工具/服务
-            if kind_counts.get("function", 0) >= 3:
+            # Many functions → utility/service
+            if kind_counts.get("function", 0) >= 3 or kind_counts.get("method", 0) >= 3:
                 return "service"
+
+            # Dense file with many symbols → core
+            if len(symbol_ids) >= 10:
+                return "core"
 
     return "other"
 
@@ -134,13 +200,14 @@ _CAMEL_SPLIT_RE = re.compile(r'([A-Z][a-z0-9]+|[a-z0-9]+|[A-Z0-9]+(?=[A-Z]|$))')
 
 
 def split_identifier(name: str) -> list[str]:
-    """将 camelCase/PascalCase/snake_case 标识符拆分为词元列表。
+    """Split camelCase/PascalCase/snake_case/kebab-case identifiers into tokens.
 
     "VirtualKeyboard" -> ["virtual", "keyboard"]
     "queueInput"     -> ["queue", "input"]
     "terminal_store" -> ["terminal", "store"]
+    "foo::bar"       -> ["foo", "bar"]  (Rust module paths)
     """
-    name = name.replace("_", " ").replace("-", " ")
+    name = name.replace("_", " ").replace("-", " ").replace("::", " ")
     tokens: list[str] = []
     for part in name.split():
         part_tokens = [t.lower() for t in _CAMEL_SPLIT_RE.findall(part) if t]
@@ -160,43 +227,45 @@ def topic_score(
     graph: "RepoGraph",
     keyword_weights: dict[str, float] | None = None,
 ) -> float:
-    """对文件与查询关键词的相关性进行评分。
+    """Score a file against query keywords, with synonym expansion.
 
-    第一版用手写加权快速上线，后续可升级为 BM25。
-    keyword_weights 用于高频词惩罚：命中文件比例越高，权重越低。
+    Original keywords get full weight; synonyms get reduced weight.
+    keyword_weights provides IDF-style penalty for high-frequency keywords.
     """
     keywords = query.lower().split()
+    expanded = expand_keywords(keywords)
     score = 0.0
 
     path_lower = file_path.lower()
     file_name = PurePosixPath(file_path).stem.lower()
     file_name_tokens = split_identifier(PurePosixPath(file_path).stem)
 
-    for kw in keywords:
+    for kw, source in expanded:
+        is_synonym = source is not None
         kw_weight = keyword_weights.get(kw, 1.0) if keyword_weights else 1.0
 
-        # 1. 路径命中（权重 30，文件名命中翻倍）
+        # Path hit: 30 for original, 15 for synonym
         if kw in path_lower:
-            score += 30 * (2.0 if kw in file_name else 1.0) * kw_weight
+            score += (15 if is_synonym else 30) * (2.0 if kw in file_name else 1.0) * kw_weight
 
-        # 2. 文件名命中（权重 25），含 camelCase/snake_case 拆词
+        # Filename hit: 25/12, including tokenized match 15/8
         if kw in file_name:
-            score += 25 * kw_weight
+            score += (12 if is_synonym else 25) * kw_weight
         elif any(kw in t for t in file_name_tokens):
-            score += 15 * kw_weight
+            score += (8 if is_synonym else 15) * kw_weight
 
-        # 3. 符号名命中（权重 15）
+        # Symbol name hit: 15/8 per keyword per file
         for sid in graph.file_symbols.get(file_path, []):
             symbol = graph.symbols.get(sid)
             if symbol and kw in symbol.name.lower():
-                score += 15 * kw_weight
-                break  # 每个关键词每个文件只计一次
+                score += (8 if is_synonym else 15) * kw_weight
+                break
 
-    # 4. 噪音惩罚
+    # Noise penalty
     if is_noise_file(file_path):
         score *= 0.05
 
-    # 5. 测试文件降权（默认优先看实现，再看测试）
+    # Test file deprioritization
     if is_test_like_file(file_path):
         score *= 0.55
 
@@ -208,18 +277,19 @@ def compute_keyword_weights(
     candidate_files: list[str],
     graph: "RepoGraph",
 ) -> dict[str, float]:
-    """计算每个关键词的 IDF 风格权重。
+    """Compute IDF-style weights for keywords (including synonyms).
 
-    命中文件比例 > 80% → 权重 0.2
-    命中文件比例 > 50% → 权重 0.5
-    否则保持 1.0。
+    Match ratio > 80% → weight 0.2
+    Match ratio > 50% → weight 0.5
+    Otherwise weight 1.0.
     """
+    expanded = expand_keywords(keywords)
     total = len(candidate_files)
     if total == 0:
-        return {kw: 1.0 for kw in keywords}
+        return {kw: 1.0 for kw, _ in expanded}
 
     weights: dict[str, float] = {}
-    for kw in keywords:
+    for kw, _source in expanded:
         matched = 0
         kw_lower = kw.lower()
         for f in candidate_files:
@@ -229,7 +299,6 @@ def compute_keyword_weights(
             if kw_lower in path_lower or kw_lower in file_name or any(kw_lower in t for t in tokens):
                 matched += 1
                 continue
-            # 也检查符号名
             for sid in graph.file_symbols.get(f, []):
                 sym = graph.symbols.get(sid)
                 if sym and kw_lower in sym.name.lower():
@@ -313,7 +382,7 @@ def find_related_tests(
             if test_bare == target_bare:
                 results.append(TestMatch(
                     test_file, target, "high",
-                    "文件名精确匹配",
+                    "exact filename match",
                 ))
                 continue
 
@@ -321,7 +390,7 @@ def find_related_tests(
             if _share_test_dir(test_file, target):
                 results.append(TestMatch(
                     test_file, target, "medium",
-                    "同测试目录",
+                    "same test directory",
                 ))
                 continue
 
@@ -329,7 +398,7 @@ def find_related_tests(
             if _test_imports_target(test_file, target, graph):
                 results.append(TestMatch(
                     test_file, target, "high",
-                    "测试 import 了目标模块",
+                    "test imports target module",
                 ))
                 continue
 
@@ -343,7 +412,7 @@ def find_related_tests(
                         sym_name = target_sym.name if target_sym else "?"
                         results.append(TestMatch(
                             test_file, target, "medium",
-                            f"测试引用了 {sym_name}",
+                            f"test references {sym_name}",
                         ))
                         found = True
                         break
@@ -355,7 +424,7 @@ def find_related_tests(
                 if co_score >= 3:
                     results.append(TestMatch(
                         test_file, target, "medium",
-                        f"git 共变更 {co_score} 次",
+                        f"git co-changed {co_score} times",
                     ))
 
     return _dedupe_test_matches(results)
@@ -364,11 +433,11 @@ def find_related_tests(
 def _dedupe_test_matches(matches: list[TestMatch]) -> list[TestMatch]:
     confidence_rank = {"high": 3, "medium": 2, "low": 1}
     reason_rank = {
-        "文件名精确匹配": 5,
-        "测试 import 了目标模块": 4,
-        "测试引用了": 3,
-        "同测试目录": 2,
-        "git 共变更": 1,
+        "exact filename match": 5,
+        "test imports target module": 4,
+        "test references": 3,
+        "same test directory": 2,
+        "git co-changed": 1,
     }
 
     def score(match: TestMatch) -> tuple[int, int]:

@@ -117,7 +117,7 @@ class RepoMapToolkitTests(unittest.TestCase):
             matches = [item for item in tests if item.test_file == "src/bar-extra.test.ts" and item.target_file == "src/bar.ts"]
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].confidence, "medium")
-            self.assertEqual(matches[0].reason, "同测试目录")
+            self.assertEqual(matches[0].reason, "same test directory")
 
 
 if __name__ == "__main__":

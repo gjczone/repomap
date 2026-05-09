@@ -211,8 +211,8 @@ class RepoMapEngineTests(unittest.TestCase):
                 engine.scan()
 
             summary = "\n".join(engine._scan_summary_lines())
-            self.assertIn("- 过滤路径: 1", summary)
-            self.assertIn("- 过滤大文件: 1", summary)
+            self.assertIn("- Filtered paths: 1", summary)
+            self.assertIn("- Filtered large files: 1", summary)
 
     def test_cache_save_then_immediate_diff_is_stable(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -698,13 +698,13 @@ class RepoMapEngineTests(unittest.TestCase):
             engine.scan()
             overview = engine.render_overview()
 
-            self.assertIn("## 推荐阅读顺序", overview)
-            self.assertIn("## 支撑文件（非符号图）", overview)
+            self.assertIn("## Recommended Reading Order", overview)
+            self.assertIn("## Supporting Files (non-AST)", overview)
             self.assertIn("README.md", overview)
             self.assertIn("scripts/validate.sh", overview.replace("\\", "/"))
             self.assertNotIn(".env", overview)
-            self.assertIn("## 模块摘要", overview)
-            self.assertIn("## 关键实现符号", overview)
+            self.assertIn("## Module Summary", overview)
+            self.assertIn("## Key Implementation Symbols", overview)
             self.assertIn("main.py", overview)
 
     def test_summary_symbols_prefer_runtime_code_over_markup_noise(self) -> None:

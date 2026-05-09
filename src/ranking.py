@@ -416,7 +416,7 @@ class GraphAnalyzer:
             suggestions.append(
                 {
                     "file": entry,
-                    "reason": "入口点，适合先建立运行路径",
+                    "reason": "Entry point, good starting path for understanding",
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
                     "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
@@ -439,19 +439,19 @@ class GraphAnalyzer:
                 continue
             reason_parts: list[str] = []
             if file_data["neighbor_count"] >= 3:
-                reason_parts.append("跨模块枢纽")
+                reason_parts.append("cross-module hub")
             if file_data["exported_count"] >= 2:
-                reason_parts.append("导出面大")
+                reason_parts.append("large export surface")
             if file_data["semantic_symbol_count"] >= 5:
-                reason_parts.append("逻辑密集")
+                reason_parts.append("dense logic")
             if file_data["is_test_file"]:
-                reason_parts.append("测试验证入口")
+                reason_parts.append("test verification entry")
             if not reason_parts:
-                reason_parts.append("重要符号集中")
+                reason_parts.append("key symbols concentrated")
             suggestions.append(
                 {
                     "file": file_path,
-                    "reason": "，".join(reason_parts),
+                    "reason": ", ".join(reason_parts),
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
                     "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),

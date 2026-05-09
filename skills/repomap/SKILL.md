@@ -77,6 +77,61 @@ For most non-trivial coding tasks:
 12. If installed repomap may be stale or unhealthy: use `doctor`.
 13. If you are maintaining repomap itself and must rebuild it: use `build-binary`, then smoke-test before replacing PATH.
 
+## Command-specific guidance
+
+### `overview`
+Use `overview` for initial orientation only. Do not repeat its content as a summary. After `overview`, use `query` or `file-detail` on the top candidates before editing.
+
+### `query`
+Use `query` when the task description does not name a specific file or symbol. After `query`, read the top candidate files before editing. Do not treat `query` results as confirmed implementation locations; treat them as starting points.
+
+### `file-detail`
+Use `file-detail` to understand a known file's structure before reading its full content. For non-trivial edits, follow with `impact --with-symbols`.
+
+### `impact`
+Use `impact --with-symbols` before non-trivial edits to known files. Read the "Read Next" files before editing. Run the suggested related tests after editing. `impact` does not guarantee completeness; check `routes` and `refs` for cross-boundary relationships when the change touches API, state, or persistence.
+
+### `routes`
+Use `routes --json` when the task touches API endpoints, handlers, response shapes, or client code. When changing a route or handler, also check frontend/client consumers and related tests. `routes` filters test DSL noise; use `query` / `file-detail` for mock routes inside tests.
+
+### `verify`
+Use `verify` as the default post-edit evidence gate. `verify` does not run tests; run them separately. When `verify` reports contract risk warnings, address each one before final handoff. When `verify` shows "SKIPPED" for diagnostics or graph diff, state the limitation in the completion report. If `verify --quick` shows no changed files, it cannot provide risk assessment; use full `verify` after staging or committing changes.
+
+### `orphan`
+Use `orphan` to discover dead-code candidates, not to justify deletion. Always verify high-confidence candidates with `refs` or `query-symbol` before deletion. Check for dynamic references the graph cannot see: string-based dispatch, reflection, macro expansions, config-driven routing, test fixtures. Run the full test suite after any deletion. Never commit a deletion based solely on `orphan` output.
+
+### `refs` and `call-chain`
+Use `refs` and `call-chain` before changing a symbol's behavior or signature. When `refs` shows callers in multiple files, inspect each caller before changing the signature. When `call-chain` shows deep chains, focus on direct callers first.
+
+### `check` and `diagnostics`
+Use `check` or `diagnostics` when compiler/type/lint evidence is needed. When `check` reports `unknown`, it means no tool ran; do not treat it as passing. When `check` reports failure, investigate before claiming completion.
+
+## Before editing
+
+1. Use RepoMap to locate likely files and compute relationships.
+2. Read the relevant files before editing; do not edit based on RepoMap output alone.
+3. When the change touches API, state, or persistence, check `routes`, `refs`, and `call-chain` for cross-boundary relationships.
+
+## After editing
+
+1. Run `verify` as the default post-edit evidence gate.
+2. Address each contract risk warning before final handoff.
+3. Run tests separately; RepoMap does not run tests.
+4. If `verify` shows missing evidence (e.g., diagnostics skipped), state the limitation.
+
+## High-risk operations
+
+- `orphan` output is a candidate list, not a deletion license. Always verify with `refs` and check for dynamic references before deletion.
+- Never delete code, drop tables, force-push, or perform other destructive actions based solely on RepoMap output.
+
+## AI-native capability boundary
+
+- Use RepoMap for computed relationships, impact analysis, and risk warnings.
+- Use `ls` and file reads for obvious file discovery.
+- Use manifests for commands and project-specific verification.
+- Use tests/build/lint tools directly for evidence.
+- Do not use RepoMap to repeat information the agent can trivially obtain from the filesystem.
+
 ## Workflow patterns
 
 ### Unknown repository or unfamiliar feature

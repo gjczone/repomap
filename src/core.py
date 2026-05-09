@@ -201,8 +201,8 @@ class RepoMapEngine:
         self.scan_state = "invalid"
         if not self.ts.parsers:
             raise RuntimeError(
-                "未检测到任何 tree-sitter 语言绑定。\n"
-                "请安装：pip install tree-sitter tree-sitter-python tree-sitter-javascript ..."
+                "No tree-sitter language bindings detected.\n"
+                "Install with: pip install tree-sitter tree-sitter-python tree-sitter-javascript ..."
             )
 
         self.graph = RepoGraph()
@@ -242,7 +242,7 @@ class RepoMapEngine:
                 elapsed = time.time() - start_time
                 if elapsed > max_scan_time:
                     self.scan_stats.timeout_triggered = True
-                    logger.warning(f"扫描超时熔断：已运行 {elapsed:.1f}s，超过 {max_scan_time}s 限制")
+                    logger.warning(f"Scan timeout: ran for  {elapsed:.1f}s, limit {max_scan_time}s")
                     break
 
                 try:
@@ -506,27 +506,27 @@ class RepoMapEngine:
         depth = len(parts)
 
         if name in {"AGENTS.md", "CLAUDE.md"}:
-            return 0, "agent-context", "注入的项目结构、规则和工作流上下文"
+            return 0, "agent-context", "Injected project structure, rules, and workflow context"
         if name == "SKILL.md":
-            return 1, "skill-doc", "技能入口说明，通常是 skill 仓库核心"
+            return 1, "skill-doc", "Skill entrypoint, typically the skill repository core"
         if name == "README.md":
-            return 2, "readme", "用户/项目说明入口"
+            return 2, "readme", "User/project entrypoint"
         if name in {"package.json", "pyproject.toml", "Cargo.toml", "go.mod", "requirements.txt"}:
-            return 3, "manifest", "依赖、脚本或包元数据"
+            return 3, "manifest", "Dependencies, scripts, or package metadata"
         if name.startswith("tsconfig") and suffix == ".json":
-            return 4, "tooling-config", "TypeScript 编译配置"
+            return 4, "tooling-config", "TypeScript compilation config"
         if name_lower.startswith(("vite.config", "vitest.config", "eslint.config")):
-            return 4, "tooling-config", "构建、测试或 lint 配置"
+            return 4, "tooling-config", "Build, test, or lint configuration"
         if name in {"Makefile", "Dockerfile", "docker-compose.yml", "compose.yml"}:
-            return 5, "automation", "构建、容器或自动化入口"
+            return 5, "automation", "Build, container, or automation entrypoint"
         if suffix == ".service":
-            return 5, "service", "服务部署/启动配置"
+            return 5, "service", "Service deployment/startup configuration"
         if suffix == ".sh" and (depth <= 2 or (parts and parts[0] in {"scripts", "bin"})):
-            return 6, "script", "启动、验证或维护脚本"
+            return 6, "script", "Startup, verification, or maintenance script"
         if suffix == ".md" and (depth <= 2 or (parts and parts[0] in {"docs", "references"})):
-            return 7, "docs", "补充文档或参考资料"
+            return 7, "docs", "Supplementary documentation or reference"
         if name in SUPPORTING_FILE_NAMES:
-            return 8, "supporting", "项目支撑文件"
+            return 8, "supporting", "Project supporting file"
         return None
 
     def _should_skip_path(self, file: str) -> bool:
@@ -676,20 +676,20 @@ class RepoMapEngine:
 
     def _scan_summary_lines(self) -> list[str]:
         lines = [
-            f"- 文件数: {self.scan_stats.processed_files}",
-            f"- 符号数: {len(self.graph.symbols)}",
-            f"- 依赖边: {sum(len(v) for v in self.graph.outgoing.values())}",
-            f"- 过滤路径: {self.scan_stats.filtered_path_files}",
-            f"- 过滤大文件: {self.scan_stats.filtered_large_files}",
+            f"- Files: {self.scan_stats.processed_files}",
+            f"- Symbols: {len(self.graph.symbols)}",
+            f"- Edges: {sum(len(v) for v in self.graph.outgoing.values())}",
+            f"- Filtered paths: {self.scan_stats.filtered_path_files}",
+            f"- Filtered large files: {self.scan_stats.filtered_large_files}",
         ]
         if self._resolver and self._resolver.import_configs:
-            lines.append(f"- 解析配置: {len(self._resolver.import_configs)}")
+            lines.append(f"- Import configs: {len(self._resolver.import_configs)}")
         # 超时熔断提示
         if self.scan_stats.timeout_triggered:
-            lines.append(f"- ⚠️ 扫描超时熔断: 部分文件未处理，结果不完整")
+            lines.append(f"- ⚠️ Scan timeout triggered: some files were not processed, results incomplete")
         # 失败文件提示（最多显示 3 个）
         if self.scan_stats.failed_files:
-            lines.append(f"- 处理失败: {len(self.scan_stats.failed_files)} 个文件")
+            lines.append(f"- Failed files: {len(self.scan_stats.failed_files)}")
             for ff in self.scan_stats.failed_files[:3]:
                 lines.append(f"  - {ff}")
         return lines
