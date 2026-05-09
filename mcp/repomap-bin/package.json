@@ -1,7 +1,7 @@
 {
   "name": "repomap-bin",
-  "version": "2.0.0",
-  "description": "Standalone repomap binary — tree-sitter AST code intelligence CLI",
+  "version": "2.1.0",
+  "description": "Standalone repomap binary \u2014 tree-sitter AST code intelligence CLI",
   "type": "module",
   "bin": {
     "repomap": "./run.js"
@@ -11,9 +11,9 @@
     "index.js"
   ],
   "optionalDependencies": {
-    "repomap-bin-linux-x64": "1.0.0",
-    "repomap-bin-darwin-arm64": "1.0.0",
-    "repomap-bin-windows-x64": "1.0.0"
+    "repomap-bin-linux-x64": "2.1.0",
+    "repomap-bin-darwin-arm64": "2.1.0",
+    "repomap-bin-windows-x64": "2.1.0"
   },
   "engines": {
     "node": ">=18"

@@ -590,4 +590,65 @@ export function registerTools(server: McpServer): void {
       }
     },
   );
+
+  server.registerTool(
+    "repomap_routes_consumers",
+    {
+      title: "API Route Consumer Mapping",
+      description:
+        "Map backend API routes to frontend/test consumers. " +
+        "Returns each route with its consumers (fetch/axios/requests callers), " +
+        "confidence levels (high/medium/low), and match types. " +
+        "Use before changing route handlers or response shapes.",
+      inputSchema: {
+        project: ProjectPathSchema,
+        max_files: MaxFilesSchema,
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ project, max_files }) => {
+      try {
+        const output = await runRepomap("routes", { project, max_files, with_consumers: true }, true);
+        return jsonResult(output);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    "repomap_state_map",
+    {
+      title: "State Definition Map",
+      description:
+        "Find enum/const state definitions: values, writers, and readers. " +
+        "Supports Python Enum, TypeScript enum/string unions, Rust enum, Go const blocks. " +
+        "Use before changing state/lifecycle logic. Provide --symbol for exact match or --query for keyword search.",
+      inputSchema: {
+        project: ProjectPathSchema,
+        max_files: MaxFilesSchema,
+        symbol: z.string().optional().describe("Exact symbol name (e.g. TaskStatus)"),
+        query: z.string().optional().describe("Keywords to find relevant state definitions (e.g. 'task status')"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ project, max_files, symbol, query }) => {
+      try {
+        const output = await runRepomap("state-map", { project, max_files, symbol, query }, true);
+        return jsonResult(output);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
 }
