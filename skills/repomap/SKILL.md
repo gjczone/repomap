@@ -109,18 +109,22 @@ Use `refs` and `call-chain` before changing a symbol's behavior or signature. Wh
 ### `check` and `diagnostics`
 Use `check` or `diagnostics` when compiler/type/lint evidence is needed. When `check` reports `unknown`, it means no tool ran; do not treat it as passing. When `check` reports failure, investigate before claiming completion.
 
+### `lsp doctor` and LSP evidence
+Use `lsp doctor` early — before your first edit in a project — to confirm which language servers are available. When LSP is available, add `--with-lsp` to `query-symbol`, `refs`, `verify`, or `check` for compiler-grade precision on definitions, references, and diagnostics. LSP evidence is especially valuable before refactoring, signature changes, or deleting code. Do not treat LSP as optional when a language server is detected — it is the highest-precision signal repomap can provide.
+
 ## Before editing
 
 1. Use RepoMap to locate likely files and compute relationships.
-2. Read the relevant files before editing; do not edit based on RepoMap output alone.
-3. When the change touches API, state, or persistence, check `routes`, `refs`, and `call-chain` for cross-boundary relationships.
+2. Run `lsp doctor` to confirm which language servers are available; use `--with-lsp` on `query-symbol` and `refs` when available.
+3. Read the relevant files before editing; do not edit based on RepoMap output alone.
+4. When the change touches API, state, or persistence, check `routes --with-consumers` (for API consumers), `state-map --symbol <name>` (for state/lifecycle changes), `refs`, and `call-chain` for cross-boundary relationships.
 
 ## After editing
 
-1. Run `verify` as the default post-edit evidence gate.
+1. Run `verify --with-lsp` as the default post-edit evidence gate. The `--with-lsp` flag adds compiler-grade diagnostics for changed files — use it whenever LSP is available (check with `lsp doctor` first).
 2. Address each contract risk warning before final handoff.
 3. Run tests separately; RepoMap does not run tests.
-4. If `verify` shows missing evidence (e.g., diagnostics skipped), state the limitation.
+4. If `verify` shows missing evidence (e.g., diagnostics skipped), state the limitation in your completion report.
 
 ## High-risk operations
 
@@ -163,6 +167,21 @@ Use `check` or `diagnostics` when compiler/type/lint evidence is needed. When `c
 3. `git-history --project <project> --symbol <name>` only if recent change context matters and the project is a git repo.
 4. Use `check --project <project>` or `verify --project <project>` after a fix.
 
+### API / endpoint change
+
+1. `routes --project <project> --json` for full route inventory.
+2. `routes --project <project> --with-consumers` to map every changed route to its frontend/test callers.
+3. `impact --project <project> --files <route-file...> --with-symbols` before editing route handlers.
+4. `refs --project <project> --symbol <handler-name>` to find all references to the handler.
+5. After editing: `verify --project <project> --with-lsp` and review contract risk warnings.
+
+### State / lifecycle change
+
+1. `state-map --project <project> --query <keywords>` or `--symbol <EnumName>` to see all state values, writers, and readers.
+2. `refs --project <project> --symbol <EnumName>` for all references across the codebase.
+3. After adding/removing a state value: re-run `state-map` to confirm writers and readers are complete.
+4. Run tests that cover all state transitions.
+
 ### Dead-code investigation
 
 1. `orphan --project <project>` for candidate discovery with confidence tiers.
@@ -173,10 +192,11 @@ Use `check` or `diagnostics` when compiler/type/lint evidence is needed. When `c
 
 ### Post-edit validation
 
-1. `verify --project <project>` as the default final evidence gate.
-2. Add `--with-lsp` when focused local LSP diagnostics are useful.
+1. `lsp doctor --project <project>` to confirm LSP availability.
+2. `verify --project <project> --with-lsp` as the default final evidence gate (adds compiler-grade diagnostics when LSP is available).
 3. Add `--with-diff` when a pre-edit `cache save` baseline exists and graph-change evidence matters.
-4. Use `verify --project <project> --quick`, `check --project <project>`, `diagnostics --project <project> --source lsp --files <file...>`, or `diff --project <project>` directly when you need specific evidence instead of the aggregated gate.
+4. Review contract risk warnings in verify output; address each one before claiming completion.
+5. Use `verify --project <project> --quick`, `check --project <project>`, `diagnostics --project <project> --source lsp --files <file...>`, or `diff --project <project>` directly when you need specific evidence instead of the aggregated gate.
 
 ## LSP
 
