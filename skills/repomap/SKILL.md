@@ -46,17 +46,19 @@ For most non-trivial coding tasks:
 | Edit planning | `repomap impact --project <project> --files <file...> --with-symbols` | Best default before non-trivial known-file edits: key symbols, read-next order, affected files, tests, risk, LSP hint. |
 | Compact file impact | `repomap impact --project <project> --files <file...>` | Need affected files/tests/risk without edit-planning sections. |
 | Current change risk only | `repomap verify --project <project> --quick` | Only need Git changed files, affected files, risk, and suggested tests (skips compiler/LSP checks); requires a Git repository; use full `verify` for final evidence. |
-| Final post-edit evidence | `repomap verify --project <project>` | Default after edits; aggregates changed files, risk, suggested tests, `check`, optional LSP and graph diff; requires a Git repository. |
+| Final post-edit evidence | `repomap verify --project <project>` | Default after edits; aggregates changed files, risk, suggested tests, contract risk warnings, `check`, optional LSP and graph diff; requires a Git repository. |
 | Optional verify LSP | `repomap verify --project <project> --with-lsp` | Need focused local LSP diagnostics for changed files; requires a Git repository. |
 | Optional verify graph diff | `repomap verify --project <project> --with-diff` | A `cache save` baseline exists and graph-change evidence matters; requires a Git repository. |
 | Diagnostics only | `repomap check --project <project>` | Need compiler/static-analysis evidence without risk aggregation; supports `--with-lsp` for LSP diagnostics; when all tools are skipped, status is `unknown` (not `passed`). |
 | Incremental diagnostics | `repomap check --project <project> --modified-file <file>` or `--since-commit <rev>` | Need narrower diagnostics; add `--with-lsp` only for explicit files. |
 | Focused LSP diagnostics | `repomap diagnostics --project <project> --source lsp --files <file...>` | Need diagnostics for explicit files without full `verify`; local LSP only, no install/daemon. |
 | LSP availability | `repomap lsp doctor --project <project>` | Need to know which local LSP servers can be used; does not install anything. |
-| API route inventory | `repomap routes --project <project> --json` | Need direct HTTP/API route inventory; use `--json` for machine-readable output; prefer over generic `overview` for endpoint-listing tasks. |
+| API route inventory | `repomap routes --project <project> --json` | Need direct HTTP/API route inventory; use `--json` for machine-readable output; add `--with-consumers` to find frontend/client consumers of each route. |
+| API consumer mapping | `repomap routes --project <project> --with-consumers` | Need to know which frontend/test files call each API route before changing handlers or response shapes. |
 | Hot files | `repomap hotspots --project <project>` | Need dense/complex files first; use sparingly after overview/query. |
 | Symbol history | `repomap git-history --project <project> --symbol <name>` | Need commit context for a symbol; add `--file-path` when ambiguous. |
 | Orphan candidates | `repomap orphan --project <project>` | Need dead-code candidates with confidence tiers; use `--min-confidence 70` for high-confidence only, `--json` for structured output; verify before deleting. |
+| State definition map | `repomap state-map --project <project> --symbol <name>` or `--query <keywords>` | Need state/enum values, writers, and readers before changing lifecycle logic; supports Python/TS/Rust/Go. |
 | Graph baseline | `repomap cache save --project <project>` | Low-level preparation before target edits when later `diff`/`verify --with-diff` graph evidence is valuable. |
 | Graph diff only | `repomap diff --project <project>` | Advanced graph-only comparison against a pre-edit baseline; prefer `verify --with-diff` for final evidence. |
 | Build repomap itself | `repomap build-binary --output <dir>` | Only when maintaining repomap; run source tests and `doctor` before trusting/replacing binary. |
@@ -74,8 +76,9 @@ For most non-trivial coding tasks:
 9. If exact LSP evidence is explicitly useful: use `--with-lsp` on `check` or `verify`; use `lsp doctor` to check LSP availability; keep LSP opt-in.
 10. If you need recent history for a symbol: use `git-history`.
 11. If you need dead-code candidates: use `orphan`; review high (≥70) and medium (40-69) confidence tiers; use `--min-confidence 70` to filter noise; verify each candidate with `refs` before deletion.
-12. If installed repomap may be stale or unhealthy: use `doctor`.
-13. If you are maintaining repomap itself and must rebuild it: use `build-binary`, then smoke-test before replacing PATH.
+12. If you need to understand enum/state lifecycle before changing it: use `state-map --symbol <name>` or `state-map --query <keywords>`.
+13. If installed repomap may be stale or unhealthy: use `doctor`.
+14. If you are maintaining repomap itself and must rebuild it: use `build-binary`, then smoke-test before replacing PATH.
 
 ## Command-specific guidance
 
