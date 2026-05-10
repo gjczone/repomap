@@ -75,14 +75,17 @@ jobs:
           # Package version is read from mcp/repomap-bin/platforms/<pkg>/package.json
           echo "Packaged $PKG_DIR/${{ matrix.bin-name }}"
 
+      - name: Configure npm auth
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
       - name: Publish platform package to npm
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
         working-directory: mcp/repomap-bin/platforms/repomap-bin-${{ matrix.platform }}
         run: |
           npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish MCP server to npm
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
@@ -92,5 +95,3 @@ jobs:
           npm install
           npm run build
           npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
