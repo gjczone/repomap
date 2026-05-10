@@ -184,11 +184,13 @@ repomap overview --project .
 #    - Changed distribution method → update availability description
 
 # 7. Rebuild MCP if TypeScript changed
-cd mcp && npm run build
+cd mcp && npm run build && cd ..
 
 # 8. Bump version in all 8 locations (see Distribution Policies)
 # 9. Commit + push → CI auto-publishes platform packages
 # 10. Publish repomap-bin + repomap-mcp-server locally if needed
+#     ⚠️  npm publish changes cwd into the package directory; after publishing,
+#     cd back to /home/guojiancheng/.A1/repomap before running cp or repomap commands.
 # 11. Sync skill to ~/.agents/skills/repomap/ + append Optimization Feedback
 # 12. Create GitHub Release (text-only changelog)
 ```
