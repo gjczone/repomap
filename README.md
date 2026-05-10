@@ -2,7 +2,7 @@
 
 > **A CLI tool + skill + MCP server that gives AI agents a "project map" — where to start reading, what a change affects, and what to verify — before and after editing code.**
 >
-> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone).
+> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone) &middot; AI-powered by [DeepSeek](https://chat.deepseek.com/).
 
 [中文 README](README.zh-CN.md)
 

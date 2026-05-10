@@ -2,7 +2,7 @@
 
 > **一个 CLI 工具 + skill + MCP 服务器，为 AI 代理（Claude Code、Codex、OpenCode）提供"项目地图"——在编辑代码之前知道该读什么、改什么会影响什么，编辑之后知道该验证什么。**
 >
-> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) 构建。
+> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) 构建 &middot; AI 能力由 [DeepSeek](https://chat.deepseek.com/) 提供。
 
 [English README](README.md)
 

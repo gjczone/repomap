@@ -2,7 +2,7 @@
 
 `repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent *when* to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
-**Distribution**: users install via MCP (npx), npm, or skill + prebuilt binary. See [README.md](./README.md) for the user-facing description.
+**Distribution**: npm is the sole distribution channel. All 5 packages (`repomap-mcp-server`, `repomap-bin`, and 3 platform binaries) are published to npm. No PyPI, no GitHub Release binaries, no manual downloads. See [README.md](./README.md) for the user-facing install instructions.
 
 ## Project Snapshot
 
@@ -227,6 +227,18 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
 - Bump `mcp/repomap-bin/package.json` version to match
 - Rebuild MCP: `cd mcp && npm run build`
 - No GitHub Release needed — npm publishes directly
+
+## Distribution Policies
+
+- **npm only**: All distribution is via npm. No PyPI, no GitHub Release binaries, no manual binary downloads.
+- **No binaries in git**: `dist/repomap` and `mcp/repomap-bin/platforms/*/repomap` are gitignored. Build artifacts stay local.
+- **GitHub Releases**: Text-only changelogs. No binary attachments. Created via `gh release create` with `--notes`.
+- **Version bump**: When bumping version, update ALL of these files in one commit:
+  - `pyproject.toml`
+  - `mcp/package.json` + `mcp/repomap-bin/package.json`
+  - `mcp/repomap-bin/platforms/*/package.json` (all 3)
+  - `mcp/src/index.ts` (hardcoded version string)
+- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes to npm if version doesn't already exist. `repomap-bin` wrapper and `repomap-mcp-server` may be published locally after CI succeeds.
 
 ## Skill Sync Rules
 

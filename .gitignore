@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .venv/
 dist/.pyinstaller/
+dist/repomap
+dist/repomap.exe
 .pytest_cache/
 mcp/node_modules/
 mcp/dist/
