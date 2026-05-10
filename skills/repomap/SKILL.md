@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: Use when entering any codebase, before reading any file, before editing any file, and after editing any file. repomap scans the project with tree-sitter and returns a structural map — entry points, key symbols ranked by PageRank, call chains, impact analysis, and post-edit verification. Gives you more signal per token than raw file reads. In any coding task, repomap must be your first tool call — before grep, before read_file, before anything. Skip only for trivial single-line typos or purely non-coding conversations.
+description: Use throughout every coding task — before reading files, before editing files, before modifying APIs/state/signatures, after editing, and before committing. repomap scans with tree-sitter and returns a structural map: entry points, key symbols (PageRank), call chains, impact analysis, route-to-consumer mapping, state definitions, dead-code candidates, and post-edit verification with contract risk warnings. Gives more signal per token than raw file reads. Must be called at each stage of coding work, not just at the start. Skip only for trivial single-line typos or purely non-coding conversations.
 ---
 
 # repomap
