@@ -319,7 +319,7 @@ class RepoMapEngine:
         """返回 (modified_files, deleted_files)，相对于项目根目录。"""
         modified, deleted = [], []
         try:
-            # unstaged + staged modifications
+            # unstaged + staged modifications + untracked files
             for status_cmd in (["git", "diff", "--name-only", "HEAD"],):
                 result = subprocess.run(
                     status_cmd, cwd=self.project_root, capture_output=True, text=True, timeout=10,
@@ -328,6 +328,15 @@ class RepoMapEngine:
                     for line in result.stdout.strip().split("\n"):
                         if line:
                             modified.append(line)
+            # untracked files (new files never git add-ed)
+            result = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                cwd=self.project_root, capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        modified.append(line)
             # deleted files
             result = subprocess.run(
                 ["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],

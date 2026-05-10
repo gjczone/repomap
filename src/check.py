@@ -750,7 +750,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Go files",
                 )
-            cmd = ["go", "vet", "--"] + target_files
+            cmd = ["go", "vet", "./..."]
         else:
             cmd = ["go", "vet", "./..."]
 

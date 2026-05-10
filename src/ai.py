@@ -204,7 +204,7 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
         for file, file_routes in list(by_file.items())[:6]:
             methods = Counter(r.method for r in file_routes)
             method_str = " ".join(f"{m}x{methods[m]}" for m in ("GET", "POST", "PUT", "DELETE", "PATCH") if methods[m])
-            lines.append(f"- `{file}` — {len(file_routes)} routes（{method_str}）")
+            lines.append(f"- `{file}` — {len(file_routes)} routes ({method_str})")
         if len(by_file) > 6:
             lines.append(f"- ... {len(by_file) - 6} more files with routes")
     else:

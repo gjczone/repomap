@@ -177,7 +177,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
             data = json.load(f)
         # Schema version check - 不匹配时删除旧缓存，触发重建
         if data.get("_schema_version") != CACHE_SCHEMA_VERSION:
-            print(f"[repomap] Cache schema schema version mismatch (缓存: v{data.get('_schema_version')}, 当前: v{CACHE_SCHEMA_VERSION})，Clearing old cache and re-scanning", file=sys.stderr)
+            print(f"[repomap] Cache schema version mismatch (cached: v{data.get('_schema_version')}, current: v{CACHE_SCHEMA_VERSION}), clearing old cache and re-scanning", file=sys.stderr)
             try:
                 os.unlink(cache_file)
             except OSError:
@@ -651,7 +651,7 @@ def _is_public_entry(symbol: dict) -> bool:
     # 只保留有真实静态证据的入口豁免，避免用命名猜测掩盖死代码
     if name in {'main', '__main__'}:
         return True
-    if kind == 'handler' or visibility == 'exported':
+    if visibility == 'exported':
         return True
     return False
 
@@ -790,9 +790,9 @@ def main():
                 print(f"❌ {result['error']}")
                 return
             
-            print(f"\n📍 符号位置: {result['file']}:{result['line']}")
-            print(f"👤 当前版本: {result['current_commit']}")
-            print(f"\n📝 相关作者: {', '.join(result['authors'])}")
+            print(f"\n  Symbol location: {result['file']}:{result['line']}")
+            print(f"  Current commit: {result['current_commit']}")
+            print(f"\n  Authors: {', '.join(result['authors'])}")
             print(f"\n📅 最近提交:")
             for c in result['recent_commits'][:5]:
                 print(f"   [{c['hash']}] {c['date'][:10]} by {c['author']}")

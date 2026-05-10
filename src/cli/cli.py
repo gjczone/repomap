@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
@@ -73,7 +74,7 @@ PYINSTALLER_BINDINGS = [
 
 _SCAN_CACHE: dict[tuple[str, int, int, str, bool], tuple[str, RepoMapEngine]] = {}
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
-SESSION_CACHE_VERSION = 5
+SESSION_CACHE_VERSION = 6
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
 DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
 DEFAULT_CALL_CHAIN_MAX_CHARS = 4000
@@ -108,8 +109,6 @@ def build_parser() -> argparse.ArgumentParser:
     overview_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     overview_parser.add_argument("--with-heat", action="store_true", default=False,
                                 help="Mark files changed in the last 30 days with [HOT].")
-    overview_parser.add_argument("--with-co-change", action="store_true", default=True,
-                                help="Include Git co-change coupling section (enabled by default; use --no-co-change to skip).")
     overview_parser.add_argument("--no-co-change", action="store_true", default=False,
                                 help="Skip Git co-change coupling section.")
     overview_parser.add_argument("--granularity", choices=["full", "medium", "compact", "auto"],
@@ -310,7 +309,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "overview":
         return run_overview(args.project, args.max_files, args.max_chars, args.json,
                            with_heat=getattr(args, "with_heat", False),
-                           with_co_change=getattr(args, "with_co_change", True) and not getattr(args, "no_co_change", False),
+                           with_co_change=not getattr(args, "no_co_change", False),
                            granularity=getattr(args, "granularity", "auto"))
     if command == "call-chain":
         return run_call_chain(
@@ -559,6 +558,23 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             file_path: list(imports)
             for file_path, imports in engine.graph.file_imports.items()
         },
+        "file_calls": {
+            file_path: [[c[0], c[1], c[2]] if len(c) >= 3 else [c[0], c[1], "direct"]
+                        for c in calls]
+            for file_path, calls in engine.graph.file_calls.items()
+        },
+        "file_import_bindings": {
+            file_path: [{"local_name": b.local_name, "imported_name": b.imported_name,
+                         "module": b.module, "line": b.line, "kind": b.kind}
+                        for b in bindings]
+            for file_path, bindings in engine.graph.file_import_bindings.items()
+        },
+        "file_exports": {
+            file_path: [{"exported_name": b.exported_name, "source_name": b.source_name,
+                         "module": b.module, "line": b.line, "kind": b.kind}
+                        for b in exports]
+            for file_path, exports in engine.graph.file_exports.items()
+        },
         "routes": [
             _route_payload(r)
             for r in engine.routes
@@ -608,6 +624,21 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
 
     for file_path, imports in payload.get("file_imports", {}).items():
         graph.file_imports[file_path].extend(imports)
+
+    for file_path, calls in payload.get("file_calls", {}).items():
+        graph.file_calls[file_path] = [tuple(c) for c in calls]
+
+    for file_path, bindings in payload.get("file_import_bindings", {}).items():
+        from .. import JSImportBinding
+        graph.file_import_bindings[file_path] = [
+            JSImportBinding(**b) for b in bindings
+        ]
+
+    for file_path, exports in payload.get("file_exports", {}).items():
+        from .. import JSExportBinding
+        graph.file_exports[file_path] = [
+            JSExportBinding(**e) for e in exports
+        ]
 
     stats_row = payload.get("scan_stats", {})
     engine.graph = graph
@@ -1164,6 +1195,9 @@ def run_query(
                 reasons = _build_match_reasons(query, file_path, engine.graph, engine.list_routes())
                 matches.append(FileMatch(path=file_path, role=role, score=score, reasons=reasons))
 
+        # 调用邻居传播：高分文件的调用者/被调用者文件获得传播分数
+        matches = _propagate_call_neighbor_scores(matches, candidate_files, engine.graph)
+
         matches.sort(key=lambda m: (-m.score, m.path))
         top_matches = matches[:max_result_files]
 
@@ -1207,6 +1241,87 @@ def run_query(
     except Exception as exc:
         print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
         return 1
+
+
+def _propagate_call_neighbor_scores(
+    matches: list[FileMatch],
+    candidate_files: list[str],
+    graph: RepoGraph,
+    decay: float = 0.25,
+    min_source_score: float = 20.0,
+) -> list[FileMatch]:
+    """Propagate scores from high-scoring files to their call-neighbor files.
+
+    File-level one-hop propagation (direct callers/callees).
+    Only propagates from files with score >= min_source_score.
+    """
+    match_by_path = {m.path: m for m in matches}
+    candidate_set = set(candidate_files)
+
+    # Build file-level call-neighbor maps from symbol-level call edges
+    file_callees: dict[str, set[str]] = defaultdict(set)
+    file_callers: dict[str, set[str]] = defaultdict(set)
+
+    for sid, edges in graph.outgoing.items():
+        sym = graph.symbols.get(sid)
+        if not sym or not sym.file:
+            continue
+        for edge in edges:
+            if edge.kind != "call":
+                continue
+            target_sym = graph.symbols.get(edge.target)
+            if not target_sym or not target_sym.file:
+                continue
+            if sym.file != target_sym.file:
+                file_callees[sym.file].add(target_sym.file)
+                file_callers[target_sym.file].add(sym.file)
+
+    # Get the first representative symbol name for a file
+    def _first_sym_name(file_path: str) -> str | None:
+        for sid in graph.file_symbols.get(file_path, []):
+            sym = graph.symbols.get(sid)
+            if sym and sym.name:
+                return sym.name
+        return None
+
+    # Add a reason tag to a FileMatch if not already present
+    def _add_tag(fm: FileMatch, tag: str) -> None:
+        if tag not in fm.reasons:
+            fm.reasons.append(tag)
+
+    new_or_updated: dict[str, FileMatch] = {}
+    for m in matches:
+        if m.score < min_source_score:
+            continue
+
+        sym_name = _first_sym_name(m.path)
+        tag = f"call-neighbor hit: {sym_name}" if sym_name else "call-neighbor hit"
+
+        neighbors = file_callers.get(m.path, set()) | file_callees.get(m.path, set())
+        for neighbor_file in neighbors:
+            if neighbor_file not in candidate_set:
+                continue
+
+            propagated = m.score * decay
+
+            if neighbor_file in match_by_path:
+                _add_tag(match_by_path[neighbor_file], tag)
+                match_by_path[neighbor_file].score += propagated
+            elif neighbor_file in new_or_updated:
+                new_or_updated[neighbor_file].score += propagated
+            else:
+                new_or_updated[neighbor_file] = FileMatch(
+                    path=neighbor_file,
+                    role=classify_file_role(neighbor_file, graph),
+                    score=propagated,
+                    reasons=[tag],
+                )
+
+    result = list(matches)
+    for path, fm in new_or_updated.items():
+        if path not in match_by_path:
+            result.append(fm)
+    return result
 
 
 def _build_match_reasons(query: str, file_path: str, graph: RepoGraph, routes: list | None = None) -> list[str]:
