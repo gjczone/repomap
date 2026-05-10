@@ -663,7 +663,7 @@ def detect_file_clusters(graph: "RepoGraph", max_iterations: int = 20) -> dict[s
                 neighbors[f][imported] = neighbors[f].get(imported, 0) + 1.0
                 neighbors[imported][f] = neighbors[imported].get(f, 0) + 1.0
         # Call edges
-        for called, _ in graph.file_calls.get(f, []):
+        for called, *_ in graph.file_calls.get(f, []):
             if called in neighbors:
                 neighbors[f][called] = neighbors[f].get(called, 0) + 0.5
                 neighbors[called][f] = neighbors[called].get(f, 0) + 0.5

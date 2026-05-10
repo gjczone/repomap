@@ -152,7 +152,7 @@ class RepoGraph:
     incoming: dict[str, list[Edge]] = field(default_factory=lambda: defaultdict(list))
     file_symbols: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     file_imports: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
-    file_calls: dict[str, list[tuple[str, int]]] = field(default_factory=lambda: defaultdict(list))
+    file_calls: dict[str, list[tuple]] = field(default_factory=lambda: defaultdict(list))
     file_import_bindings: dict[str, list[JSImportBinding]] = field(default_factory=lambda: defaultdict(list))
     file_exports: dict[str, list[JSExportBinding]] = field(default_factory=lambda: defaultdict(list))
 
