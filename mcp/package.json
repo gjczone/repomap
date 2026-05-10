@@ -42,11 +42,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gjczone/repomap-mcp-server.git"
+    "url": "git+https://github.com/gjczone/repomap.git"
   },
-  "homepage": "https://github.com/gjczone/repomap-mcp-server",
+  "homepage": "https://github.com/gjczone/repomap",
   "bugs": {
-    "url": "https://github.com/gjczone/repomap-mcp-server/issues"
+    "url": "https://github.com/gjczone/repomap/issues"
   },
   "license": "MIT"
 }

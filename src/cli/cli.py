@@ -55,7 +55,7 @@ CLI_NAME = "repomap"
 
 # 统一 exit code 语义
 EXIT_SUCCESS = 0       # 成功，有有效输出
-EXIT_ERROR = 1         # 命令执line失败
+EXIT_ERROR = 1         # Command execution failed
 EXIT_INVALID_ARGS = 2  # 参数错误
 EXIT_NO_RESULTS = 3    # 无结果（query 无匹配、routes 为空）
 PYINSTALLER_BINDINGS = [

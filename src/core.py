@@ -202,7 +202,7 @@ class RepoMapEngine:
         if not self.ts.parsers:
             raise RuntimeError(
                 "No tree-sitter language bindings detected.\n"
-                "Install with: pip install tree-sitter tree-sitter-python tree-sitter-javascript ..."
+                "Install with: uv sync"
             )
 
         self.graph = RepoGraph()

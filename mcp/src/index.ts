@@ -7,7 +7,7 @@ import { ensureRepomapInstalled } from "./repomap.js";
 
 const server = new McpServer({
   name: "repomap-mcp-server",
-  version: "1.1.0",
+  version: "2.1.0",
 });
 
 registerTools(server);

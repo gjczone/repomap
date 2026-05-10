@@ -722,26 +722,26 @@ def main():
     
     if args.command == 'cache':
         if args.save:
-            print(f"📦 正在扫描项目: {project_path}")
+            print(f"Scanning project: {project_path}")
             symbols, edges = scan_project(project_path)
             cache_path = save_cache(project_path, symbols, edges)
-            print(f"✅ 缓存已保存: {cache_path}")
-            print(f"   符号数: {len(symbols)}, 依赖边: {len(edges)}")
+            print(f"Cache saved: {cache_path}")
+            print(f"   Symbols: {len(symbols)}, edges: {len(edges)}")
         elif args.load:
             cache = load_cache(project_path)
             if cache:
-                print(f"📂 缓存信息:")
-                print(f"   扫描时间: {cache.scan_time}")
-                print(f"   文件数: {cache.file_count}")
-                print(f"   符号数: {cache.symbol_count}")
-                print(f"   依赖边: {cache.edge_count}")
+                print(f"Cache info:")
+                print(f"   Scan time: {cache.scan_time}")
+                print(f"   Files: {cache.file_count}")
+                print(f"   Symbols: {cache.symbol_count}")
+                print(f"   Edges: {cache.edge_count}")
             else:
-                print("❌ 没有找到缓存")
+                print("No cache found")
         else:
             cache_parser.print_help()
-    
+
     elif args.command == 'diff':
-        print(f"🔍 正在对比变更: {project_path}")
+        print(f"Comparing changes: {project_path}")
         result = diff_project(project_path)
         
         if 'error' in result:

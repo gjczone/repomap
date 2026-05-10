@@ -8,3 +8,4 @@ mcp/dist/
 mcp/package-lock.json
 mcp/repomap-bin/platforms/*/repomap
 mcp/repomap-bin/platforms/*/repomap.exe
+docs/

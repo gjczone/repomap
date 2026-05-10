@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const localRequire = createRequire(import.meta.url);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,11 +24,27 @@ function getNpmBinPath(): string | null {
   const info = PLATFORM_PACKAGES[key];
   if (!info) return null;
 
-  const candidate = join(__dirname, "..", info.pkg, info.bin);
-  if (existsSync(candidate)) return candidate;
+  // 1. Node module resolution (handles hoisted, workspaces, npx, yarn, pnpm)
+  try {
+    const pkgJson = localRequire.resolve(`${info.pkg}/package.json`);
+    const bin = join(dirname(pkgJson), info.bin);
+    if (existsSync(bin)) return bin;
+  } catch { /* not resolvable at top level */ }
 
-  const nested = join(__dirname, "..", "repomap-bin", "node_modules", info.pkg, info.bin);
-  if (existsSync(nested)) return nested;
+  // 2. repomap-bin's nested node_modules (non-hoisted layout)
+  try {
+    const binPkg = localRequire.resolve("repomap-bin/package.json");
+    const nested = join(dirname(binPkg), "node_modules", info.pkg, info.bin);
+    if (existsSync(nested)) return nested;
+  } catch { /* repomap-bin not resolvable */ }
+
+  // 3. Sibling to MCP server dist/ (fallback for edge-case layouts)
+  const sibling = join(__dirname, "..", info.pkg, info.bin);
+  if (existsSync(sibling)) return sibling;
+
+  // 4. Local repo development: mcp/repomap-bin/platforms/<pkg>/<bin>
+  const devPath = join(__dirname, "..", "repomap-bin", "platforms", info.pkg, info.bin);
+  if (existsSync(devPath)) return devPath;
 
   return null;
 }
@@ -120,7 +138,7 @@ export async function runRepomap(
     if (error.code === "ENOENT") {
       throw new Error(
         `repomap binary not found at "${bin}". ` +
-        "It should be auto-installed on first run. If not, run: pip install repomap-cli " +
+        "Run: npm install -g repomap-bin " +
         "or set the REPOMAP_BIN environment variable.",
       );
     }
@@ -150,35 +168,6 @@ async function canRun(bin: string, args: string[] = ["--help"]): Promise<boolean
   }
 }
 
-async function findPythonCommand(): Promise<string | null> {
-  const candidates = ["python3", "python"];
-  for (const cmd of candidates) {
-    if (await canRun(cmd, ["--version"])) return cmd;
-  }
-  return null;
-}
-
-async function pipInstall(pythonCmd: string): Promise<void> {
-  const pipArgs = ["-m", "pip", "install", "repomap-cli"];
-
-  await execFileAsync(pythonCmd, pipArgs, {
-    timeout: 120000,
-    maxBuffer: 10 * 1024 * 1024,
-    encoding: "utf-8",
-  }).catch(async (err) => {
-    const stderr: string = err.stderr || "";
-    if (stderr.includes("externally-managed-environment") || stderr.includes("--break-system-packages")) {
-      const retryArgs = ["-m", "pip", "install", "--break-system-packages", "repomap-cli"];
-      return execFileAsync(pythonCmd, retryArgs, {
-        timeout: 120000,
-        maxBuffer: 10 * 1024 * 1024,
-        encoding: "utf-8",
-      });
-    }
-    throw err;
-  });
-}
-
 export async function ensureRepomapInstalled(): Promise<void> {
   const npmBin = getNpmBinPath();
   if (npmBin && await canRun(npmBin, ["--help"])) {
@@ -191,24 +180,12 @@ export async function ensureRepomapInstalled(): Promise<void> {
     return;
   }
 
-  const pythonCmd = await findPythonCommand();
-  if (pythonCmd) {
-    await pipInstall(pythonCmd);
-
-    if (await canRun(REPOMAP_BIN, ["--help"])) {
-      resolvedBinPath = REPOMAP_BIN;
-      return;
-    }
-  }
-
   throw new Error(
     "repomap binary not found. Tried:\n" +
     "  1. npm platform package (repomap-bin-*) — not available for this platform or not installed\n" +
-    "  2. 'repomap' in PATH — not found\n" +
-    "  3. pip install repomap-cli — " + (pythonCmd ? "installed but not on PATH" : "no Python found") + "\n\n" +
-    "Please install repomap manually:\n" +
+    "  2. 'repomap' in PATH — not found\n\n" +
+    "Please install repomap:\n" +
     "  npm install -g repomap-bin\n" +
-    "  pip install repomap-cli\n" +
     "Or set the REPOMAP_BIN environment variable to the full path of the repomap binary.",
   );
 }

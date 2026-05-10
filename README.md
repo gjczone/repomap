@@ -35,7 +35,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 
 Or via CLI: `claude mcp add --transport stdio repomap -- npx --force-refresh -y repomap-mcp-server`
 
-Zero setup — the binary auto-installs on first run. All 21 commands exposed as MCP tools.
+Zero setup — the binary auto-installs on first run. All 18 commands exposed as MCP tools.
 
 ### Option B: npm (binary only)
 
@@ -49,7 +49,7 @@ repomap doctor
 **LLM agent: read the code block matching the user's OS. Execute every step in order.**
 
 <details>
-<summary>Linux (x86_64)</summary>
+<summary>Linux / macOS / Windows</summary>
 
 ```
 Install repomap for me:
@@ -60,56 +60,11 @@ Install repomap for me:
    cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
    rm -rf /tmp/repomap-install
 
-2. Download binary:
-   mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-linux
-   chmod +x ~/.local/bin/repomap
+2. Install binary (handles platform automatically):
+   npm install -g repomap-bin
 
 3. Verify:
    repomap doctor
-```
-</details>
-
-<details>
-<summary>macOS (arm64)</summary>
-
-```
-Install repomap for me:
-
-1. Clone the skill:
-   mkdir -p ~/.claude/skills
-   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
-   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
-   rm -rf /tmp/repomap-install
-
-2. Download binary:
-   mkdir -p ~/.local/bin
-   curl -L -o ~/.local/bin/repomap https://github.com/gjczone/repomap/releases/latest/download/repomap-macos
-   chmod +x ~/.local/bin/repomap
-
-3. Verify:
-   repomap doctor
-```
-</details>
-
-<details>
-<summary>Windows (x86_64)</summary>
-
-```
-Install repomap for me:
-
-1. Clone the skill:
-   mkdir -p ~/.claude/skills
-   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
-   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
-   rm -rf /tmp/repomap-install
-
-2. Download binary:
-   mkdir -p ~/AppData/Local/Microsoft/WindowsApps
-   curl -L -o ~/AppData/Local/Microsoft/WindowsApps/repomap.exe https://github.com/gjczone/repomap/releases/latest/download/repomap.exe
-
-3. Verify:
-   repomap.exe doctor
 ```
 </details>
 
@@ -133,6 +88,7 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 | Command | What it does |
 |---------|-------------|
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order, module clusters |
+| `scan` | Initial scan summary: file/symbol/edge counts, entry points, scan health |
 | `query --query <keywords>` | Topic search with synonym expansion across paths, filenames, symbols, and routes |
 | `file-detail --file-path <f>` | All symbols in a file: signatures, visibility, PageRank, callers |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk level, suggested tests |
@@ -145,10 +101,13 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 | `verify` | Post-edit gate: git changes, risk, contract risk warnings, suggested tests, diagnostics, LSP, graph diff |
 | `verify --quick` | Post-edit risk-only (skips compiler/LSP, faster) |
 | `check` | Language diagnostics: tsc, cargo check, ruff, mypy, go vet |
+| `diagnostics --source lsp --files <f...>` | Focused LSP diagnostics for specific files |
 | `orphan` | Dead-code candidates with confidence tiers and pre-deletion checklist |
 | `hotspots` | High-density files ranked by complexity and change frequency |
+| `cache save` | Save current graph as baseline for later `diff` or `verify --with-diff` |
 | `git-history --symbol <name>` | Commit history for a specific symbol |
 | `diff` | Graph comparison against a pre-edit `cache save` baseline |
+| `doctor` | Binary health check: parsers, runtime, LSP availability |
 | `lsp doctor` | Check locally installed LSP servers (pyright, tsc, rust-analyzer, gopls) |
 
 ---
