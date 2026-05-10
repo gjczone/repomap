@@ -154,21 +154,44 @@ The open-source skill (`skills/repomap/SKILL.md`) is distributed to users and mu
 
 The local skill (`~/.agents/skills/repomap/SKILL.md`) includes the full `## Optimization Feedback` section for continuous improvement based on real-world usage.
 
-## Binary Build Workflow
+## Post-Change Checklist
 
-After any code change to `src/`, rebuild the binary and verify PATH is fresh:
+After any code change to `src/` or `mcp/`, work through these steps:
 
 ```bash
-# 1. Build binary
+# 1. Run tests
+uv run python -m unittest discover -s tests -v
+
+# 2. Rebuild binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
 
-# 2. Verify the new binary is in PATH and works
-which repomap
+# 3. Copy to platform package + update PATH
+cp dist/repomap mcp/repomap-bin/platforms/repomap-bin-linux-x64/repomap
+# Binary at ~/.local/bin/repomap must be symlinked to dist/repomap
+
+# 4. Smoke test
 repomap doctor
 repomap overview --project .
-```
 
-The built binary at `dist/repomap` must be the one in PATH (symlinked or copied to `~/.local/bin/repomap`). After rebuild, run `repomap doctor` then `repomap overview --project .` to smoke-test.
+# 5. Evaluate: does SKILL.md need updating?
+#    - New commands or changed options → update Command selection table
+#    - Changed behavior → update Boundaries section
+#    - New limitations discovered → update Boundaries section
+#    See skills/repomap/SKILL.md
+
+# 6. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
+#    - New repomap commands → update Section 8.1 command lists
+#    - Changed distribution method → update availability description
+
+# 7. Rebuild MCP if TypeScript changed
+cd mcp && npm run build
+
+# 8. Bump version in all 8 locations (see Distribution Policies)
+# 9. Commit + push → CI auto-publishes platform packages
+# 10. Publish repomap-bin + repomap-mcp-server locally if needed
+# 11. Sync skill to ~/.agents/skills/repomap/ + append Optimization Feedback
+# 12. Create GitHub Release (text-only changelog)
+```
 
 ## MCP Server
 
