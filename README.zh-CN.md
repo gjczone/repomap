@@ -4,7 +4,7 @@
 >
 > 专为 **Claude Code**、**Cursor**、**Codex**、**OpenCode** 等 agent harness 构建。两种集成模式：**MCP 服务器**（工具出现在代理的工具列表中）或 **Skill + CLI**（skill 文件指导代理何时调用 CLI）。
 >
-> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) 构建 &middot; AI 能力由 [DeepSeek](https://chat.deepseek.com/) 提供。
+> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) vibe coding with [DeepSeek](https://chat.deepseek.com/) 构建。
 
 [English README](README.md)
 

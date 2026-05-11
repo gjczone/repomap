@@ -4,7 +4,7 @@
 >
 > Built for agent harnesses like **Claude Code**, **Cursor**, **Codex**, and **OpenCode**. Two integration modes: **MCP Server** (tools appear in the agent's tool list) or **Skill + CLI** (a skill file guides the agent to call the CLI directly).
 >
-> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone) &middot; AI-powered by [DeepSeek](https://chat.deepseek.com/).
+> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone) vibe coding with [DeepSeek](https://chat.deepseek.com/).
 
 [中文 README](README.zh-CN.md)
 
