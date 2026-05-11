@@ -30,6 +30,7 @@ from .ai import (
     render_file_detail_report,
     render_overview_report,
 )
+from .gitignore import GitignoreParser
 from .parser import EXT_TO_LANG, TreeSitterAdapter
 from .ranking import EdgeBuilder, GraphAnalyzer
 from .resolver import ImportResolver
@@ -172,6 +173,8 @@ class RepoMapEngine:
         self._analyzer = GraphAnalyzer(self.graph)
         # 路由提取结果
         self.routes: list = []
+        # gitignore 解析器（延迟初始化）
+        self._gitignore: GitignoreParser | None = None
 
     @staticmethod
     def _read_max_file_bytes() -> int:
@@ -539,12 +542,9 @@ class RepoMapEngine:
         return None
 
     def _should_skip_path(self, file: str) -> bool:
-        path = Path(file)
-        if path.name.endswith(".min.js"):
-            return True
-        if path.name in SKIP_FILE_NAMES:
-            return True
-        return any(part in SKIP_DIR_NAMES for part in path.parts)
+        if self._gitignore is None:
+            self._gitignore = GitignoreParser(self.project_root)
+        return self._gitignore.is_ignored(file)
 
     def _should_skip_large_file(self, path: Path) -> bool:
         if os.getenv("REPOMAP_SCAN_LARGE_FILES", "0") == "1":
@@ -722,8 +722,10 @@ class RepoMapEngine:
     def render_call_chain(self, symbol_name: str, max_depth: int = 3) -> str:
         return render_call_chain_report(self, symbol_name, max_depth)
 
-    def render_file_detail(self, file_path: str, max_symbols: int = 12, max_chars: int = 6000) -> str:
-        return render_file_detail_report(self, file_path, max_symbols=max_symbols, max_chars=max_chars)
+    def render_file_detail(self, file_path: str, max_symbols: int = 12, max_chars: int = 6000,
+                           lsp_symbol_tree: list[Any] | None = None) -> str:
+        return render_file_detail_report(self, file_path, max_symbols=max_symbols, max_chars=max_chars,
+                                         lsp_symbol_tree=lsp_symbol_tree)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

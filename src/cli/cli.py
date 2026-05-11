@@ -23,7 +23,8 @@ from ..ai import (
     render_verify_report,
 )
 from ..check import RepoMapChecker
-from ..core import RepoMapEngine, SKIP_DIR_NAMES, SKIP_FILE_NAMES
+from ..core import RepoMapEngine
+from ..gitignore import GitignoreParser
 from ..parser import EXT_TO_LANG
 from .. import (
     Edge,
@@ -152,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     topic_query_parser.add_argument("--json", action="store_true")
     topic_query_parser.add_argument("--paths", help="Limit search to comma-separated directories.")
     topic_query_parser.add_argument("--exclude", help="Exclude comma-separated directories.")
+    topic_query_parser.add_argument("--context-lines", type=int, default=2, help="Context lines around matched text (default 2).")
 
     # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
     impact_parser = subparsers.add_parser("impact", help="Analyze file-level change impact.")
@@ -190,6 +192,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FILE_DETAIL_MAX_CHARS,
         help="Maximum text output size.",
     )
+    file_parser.add_argument("--with-lsp", action="store_true", help="Include LSP symbol tree in file detail output.")
+    file_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     hotspots_parser = subparsers.add_parser("hotspots", help="Scan a repository and print hotspot files.")
     _add_project_args(hotspots_parser)
@@ -251,6 +255,10 @@ def build_parser() -> argparse.ArgumentParser:
     lsp_doctor_parser = lsp_subparsers.add_parser("doctor", help="Detect local LSP servers without starting analysis.")
     lsp_doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     lsp_doctor_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
+    lsp_setup_parser = lsp_subparsers.add_parser("setup", help="Auto-install recommended LSP servers for detected project languages.")
+    lsp_setup_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    lsp_setup_parser.add_argument("--languages", nargs="*", default=None, help="Languages to install servers for (default: auto-detect).")
+    lsp_setup_parser.add_argument("--dry-run", action="store_true", help="Show what would be installed without doing it.")
 
     routes_parser = subparsers.add_parser("routes", help="Extract direct HTTP/API route inventory.")
     _add_project_args(routes_parser)
@@ -329,6 +337,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.project, 8000, args.query,
             getattr(args, "max_files", 20), getattr(args, "max_symbols", 40),
             args.no_tests, args.json, args.paths, args.exclude,
+            getattr(args, "context_lines", 2),
         )
     if command == "impact":
         return run_impact(
@@ -352,7 +361,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             incremental=not getattr(args, "no_incremental", False),
         )
     if command == "file-detail":
-        return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars)
+        return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars,
+                              getattr(args, "with_lsp", False), getattr(args, "lsp_timeout", 8.0))
     if command == "hotspots":
         return run_hotspots(args.project, args.max_files, args.limit)
     if command == "cache":
@@ -382,6 +392,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "lsp":
         if args.lsp_command == "doctor":
             return run_lsp_doctor(args.project, args.json)
+        if args.lsp_command == "setup":
+            return run_lsp_setup(args.project, args.languages, args.dry_run)
         parser.error(f"unknown lsp command: {args.lsp_command}")
         return 2
     if command == "routes":
@@ -452,18 +464,17 @@ def _read_max_file_bytes() -> int:
 
 
 def _iter_source_files(project_root: Path) -> list[str]:
+    gitignore = GitignoreParser(project_root)
     files: list[str] = []
     for root, dir_names, file_names in os.walk(project_root):
-        dir_names[:] = [name for name in dir_names if name not in SKIP_DIR_NAMES]
         rel_root = Path(root).relative_to(project_root)
+        dir_names[:] = [n for n in dir_names if not gitignore.is_ignored(rel_root / n if str(rel_root) != "." else Path(n))]
         for file_name in file_names:
             suffix = Path(file_name).suffix.lower()
             if suffix not in EXT_TO_LANG:
                 continue
-            if file_name in SKIP_FILE_NAMES or file_name.endswith(".min.js"):
-                continue
             rel_path = (rel_root / file_name).as_posix() if str(rel_root) != "." else file_name
-            if any(part in SKIP_DIR_NAMES for part in Path(rel_path).parts):
+            if gitignore.is_ignored(rel_path):
                 continue
             files.append(rel_path)
     return sorted(files)
@@ -952,7 +963,7 @@ def run_call_chain(
 
 
 def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout: float) -> dict[str, Any]:
-    from ..lsp import collect_lsp_symbol_evidence, run_result_to_dict
+    from ..lsp import collect_lsp_symbol_evidence, collect_lsp_hover, run_result_to_dict
 
     run = collect_lsp_symbol_evidence(
         engine.project_root,
@@ -961,7 +972,13 @@ def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout
         symbol.name,
         timeout=timeout,
     )
-    return run_result_to_dict(run)
+    result = run_result_to_dict(run)
+    # 附加 hover 信息
+    if run.status == "ok":
+        hover = collect_lsp_hover(engine.project_root, symbol.file, symbol.line, symbol.name, timeout=timeout)
+        if hover:
+            result["hover"] = {"file": hover.file, "line": hover.line, "col": hover.col, "contents": hover.contents}
+    return result
 
 
 def _format_lsp_evidence(evidence: dict[str, Any]) -> list[str]:
@@ -971,6 +988,12 @@ def _format_lsp_evidence(evidence: dict[str, Any]) -> list[str]:
         lines.append(f"- Server: {evidence['server']}")
     if evidence.get("reason"):
         lines.append(f"- Reason: {evidence['reason']}")
+    # hover 信息
+    hover = evidence.get("hover")
+    if hover and hover.get("contents"):
+        contents = hover["contents"].strip()
+        if contents:
+            lines.append(f"- Hover: {contents[:300]}")
     definitions = evidence.get("definitions", [])
     references = evidence.get("references", [])
     lines.append(f"- Definitions: {len(definitions)}")
@@ -1035,20 +1058,26 @@ def run_query_symbol(
         return 1
 
 
-def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: int, max_chars: int) -> int:
+def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: int, max_chars: int,
+                    with_lsp: bool = False, lsp_timeout: float = 8.0) -> int:
     try:
         engine = _scan_engine(project, max_files)
         normalized_file_path = _normalize_project_relative_path(engine.project_root, file_path, must_exist=True)
 
-        # 动态调整 max_symbols：如果用户未指定（使用默认值），根据文件符号数量自动调整
         if max_symbols == DEFAULT_FILE_DETAIL_MAX_SYMBOLS:
             file_symbol_count = len(engine.graph.file_symbols.get(normalized_file_path, []))
             if file_symbol_count > 50:
-                max_symbols = min(file_symbol_count, 50)  # 大文件最多显示 50 symbols
+                max_symbols = min(file_symbol_count, 50)
             elif file_symbol_count > 20:
-                max_symbols = file_symbol_count  # 中等文件显示所有符号
+                max_symbols = file_symbol_count
 
-        print(engine.render_file_detail(normalized_file_path, max_symbols=max_symbols, max_chars=max_chars))
+        lsp_tree = None
+        if with_lsp:
+            from ..lsp import collect_lsp_symbol_tree
+            lsp_tree = collect_lsp_symbol_tree(engine.project_root, normalized_file_path, timeout=lsp_timeout)
+
+        print(engine.render_file_detail(normalized_file_path, max_symbols=max_symbols, max_chars=max_chars,
+                                        lsp_symbol_tree=lsp_tree))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] file-detail failed: {exc}", file=sys.stderr)
@@ -1166,6 +1195,7 @@ def run_query(
     as_json: bool,
     paths: str | None,
     exclude: str | None,
+    context_lines: int = 2,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -1236,7 +1266,8 @@ def run_query(
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
-        print(render_query_report(engine, query, top_matches, tests, max_result_files, max_result_symbols))
+        print(render_query_report(engine, query, top_matches, tests, max_result_files, max_result_symbols,
+                                  context_lines=context_lines))
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
@@ -2512,6 +2543,72 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] lsp doctor failed: {exc}", file=sys.stderr)
+        return 1
+
+
+_LSP_INSTALL_STRATEGIES: dict[str, dict[str, str]] = {
+    "python": {"tool": "uv", "cmd": "uv pip install pyright", "detect": ".venv"},
+    "typescript": {"tool": "npm", "cmd": "npm install -g typescript-language-server typescript", "detect": "package.json"},
+    "rust": {"tool": "rustup", "cmd": "rustup component add rust-analyzer", "detect": "Cargo.toml"},
+    "go": {"tool": "go", "cmd": "go install golang.org/x/tools/gopls@latest", "detect": "go.mod"},
+    "cpp": {"tool": "apt/brew", "cmd": "clangd (system package: apt install clangd-12 / brew install llvm)", "detect": "compile_commands.json"},
+    "csharp": {"tool": "dotnet", "cmd": "dotnet tool install --global csharp-ls", "detect": "*.csproj"},
+    "java": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall jdtls", "detect": "pom.xml"},
+    "lua": {"tool": "npm", "cmd": "npm install -g lua-language-server", "detect": ".luarc.json"},
+    "php": {"tool": "npm", "cmd": "npm install -g intelephense", "detect": "composer.json"},
+    "ruby": {"tool": "gem", "cmd": "gem install ruby-lsp", "detect": "Gemfile"},
+    "swift": {"tool": "xcode", "cmd": "sourcekit-lsp (included with Xcode on macOS / Swift toolchain on Linux)", "detect": "Package.swift"},
+    "kotlin": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall kotlin-language-server", "detect": "build.gradle"},
+}
+
+
+def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: bool) -> int:
+    try:
+        project_root = _resolve_project(project)
+        from ..lsp import detect_lsp_server, detect_lsp_servers, detection_to_dict
+
+        if languages:
+            detections = [detect_lsp_server(project_root, lang) for lang in languages]
+        else:
+            detections = detect_lsp_servers(project_root)
+
+        missing = [d for d in detections if d.status != "available"]
+        available = [d for d in detections if d.status == "available"]
+
+        print(f"Project: {project_root}")
+        print(f"Detected languages: {len(detections)}")
+        print()
+
+        if available:
+            print("Already available:")
+            for d in available:
+                print(f"  {d.language}: {d.server_name} ({d.source})")
+
+        if not missing:
+            print("\nAll LSP servers are already available.")
+            return 0
+
+        print(f"\n{'Would install' if dry_run else 'Installing'} {len(missing)} server(s):")
+        print()
+        for d in missing:
+            strategy = _LSP_INSTALL_STRATEGIES.get(d.language, {})
+            tool = strategy.get("tool", "unknown")
+            cmd = strategy.get("cmd", "manual install")
+            print(f"  [{d.language}] {d.server_name}")
+            print(f"    Tool: {tool}")
+            print(f"    Command: {cmd}")
+            print()
+
+        if dry_run:
+            print("Dry run — no changes made. Remove --dry-run to execute.")
+            return 0
+
+        print("Installation not yet automated. Run the commands above manually.")
+        print("Tip: repomap cannot auto-install LSP servers without your consent.")
+        print("      Use the commands listed above, then re-run `repomap lsp doctor`.")
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] lsp setup failed: {exc}", file=sys.stderr)
         return 1
 
 

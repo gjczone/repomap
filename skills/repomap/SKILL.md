@@ -38,8 +38,8 @@ For most non-trivial coding tasks:
 | Installed runtime sanity | `repomap doctor` | Suspect stale binary, parser/runtime issue, or PATH mismatch. |
 | Project scan summary | `repomap scan --project <project>` | Need counts, entrypoints, and scan health; usually secondary to `overview`. |
 | First repository overview | `repomap overview --project <project>` | Need modules, entrypoints, reading order, hotspots, and lightweight non-AST supporting files; add `--with-heat`/`--with-co-change` only when needed. |
-| Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact file/symbol names; supports `--paths`, `--exclude`, `--no-tests`, `--json`. |
-| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading or editing one file; tune `--max-symbols`/`--max-chars` if output is large. |
+| Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact file/symbol names; supports `--paths`, `--exclude`, `--no-tests`, `--json`, `--context-lines <N>`. |
+| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading or editing one file; tune `--max-symbols`/`--max-chars` if output is large; add `--with-lsp` for hierarchical LSP symbol tree. |
 | Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous, `--with-lsp` for local definition/reference evidence. |
 | Call flow | `repomap call-chain --project <project> --symbol <name>` | Need callers/callees before behavior change; supports `--direction`, `--depth`, `--file-path`, `--json`. |
 | References | `repomap refs --project <project> --symbol <name>` | Need reference edges/callers; add `--file-path` if ambiguous, `--with-lsp` for local LSP evidence. |
@@ -53,6 +53,7 @@ For most non-trivial coding tasks:
 | Incremental diagnostics | `repomap check --project <project> --modified-file <file>` or `--since-commit <rev>` | Need narrower diagnostics; add `--with-lsp` only for explicit files. |
 | Focused LSP diagnostics | `repomap diagnostics --project <project> --source lsp --files <file...>` | Need diagnostics for explicit files without full `verify`; local LSP only, no install/daemon. |
 | LSP availability | `repomap lsp doctor --project <project>` | Need to know which local LSP servers can be used; does not install anything. |
+| LSP auto-install | `repomap lsp setup --project <project>` | Missing LSP servers detected; supports `--languages`, `--dry-run` to preview install plan first. |
 | API route inventory | `repomap routes --project <project> --json` | Need direct HTTP/API route inventory; use `--json` for machine-readable output; add `--with-consumers` to find frontend/client consumers of each route. |
 | API consumer mapping | `repomap routes --project <project> --with-consumers` | Need to know which frontend/test files call each API route before changing handlers or response shapes. |
 | Hot files | `repomap hotspots --project <project>` | Need dense/complex files first; use sparingly after overview/query. |
@@ -73,7 +74,7 @@ For most non-trivial coding tasks:
 6. If you changed code, are preparing a handoff, or need final evidence: use `verify`.
 7. If you only need changed-file risk without compiler/LSP checks: use `verify --quick`.
 8. If you only need toolchain diagnostics: use `check`; for focused LSP diagnostics on explicit files use `diagnostics --source lsp --files ...`.
-9. Always run `lsp doctor` early in a project. When a language server is detected, `--with-lsp` is NOT optional — add it to `query-symbol`, `refs`, `verify`, and `check` for compiler-grade precision. LSP is the highest-precision signal repomap provides.
+9. Always run `lsp doctor` early in a project. When a language server is detected, `--with-lsp` is NOT optional — add it to `query-symbol`, `refs`, `file-detail`, `verify`, and `check` for compiler-grade precision. When servers are missing, run `lsp setup --dry-run` to see install plans, then `lsp setup` to install them. LSP is the highest-precision signal repomap provides.
 10. If you need recent history for a symbol: use `git-history`.
 11. If you need dead-code candidates: use `orphan`; review high (≥70) and medium (40-69) confidence tiers; use `--min-confidence 70` to filter noise; verify each candidate with `refs` before deletion.
 12. If you need to understand enum/state lifecycle before changing it: use `state-map --symbol <name>` or `state-map --query <keywords>`.
@@ -89,7 +90,7 @@ Use `overview` for initial orientation only. Do not repeat its content as a summ
 Use `query` when the task description does not name a specific file or symbol. After `query`, read the top candidate files before editing. Do not treat `query` results as confirmed implementation locations; treat them as starting points.
 
 ### `file-detail`
-Use `file-detail` to understand a known file's structure before reading its full content. For non-trivial edits, follow with `impact --with-symbols`.
+Use `file-detail` to understand a known file's structure before reading its full content. Add `--with-lsp` to see the hierarchical LSP symbol tree with nested scoping. For non-trivial edits, follow with `impact --with-symbols`.
 
 ### `impact`
 Use `impact --with-symbols` before non-trivial edits to known files. Read the "Read Next" files before editing. Run the suggested related tests after editing. `impact` does not guarantee completeness; check `routes` and `refs` for cross-boundary relationships when the change touches API, state, or persistence.

@@ -80,14 +80,14 @@ repomap doctor   # 验证安装
 
 ### LSP 设置（可选，代理自动处理）
 
-代理会运行 `repomap lsp doctor` 检查语言服务器。如有缺失：
+代理会运行 `repomap lsp doctor` 检查语言服务器，然后通过 `repomap lsp setup` 自动安装缺失的服务器：
 
-| 语言 | 安装命令 |
-|------|----------|
-| TypeScript | `npm install -g typescript-language-server` |
-| Python | `npm install -g pyright` |
-| Rust | `rustup component add rust-analyzer` |
-| Go | `go install golang.org/x/tools/gopls@latest` |
+```
+repomap lsp setup --dry-run   # 预览安装计划
+repomap lsp setup             # 安装缺失的服务器
+```
+
+支持的 LSP 服务器（13 种语言）：`pyright`/`pylsp`（Python）、`typescript-language-server`（TS/JS）、`rust-analyzer`（Rust）、`gopls`（Go）、`clangd`（C/C++）、`csharp-ls`（C#）、`jdtls`（Java）、`lua-language-server`（Lua）、`intelephense`（PHP）、`ruby-lsp`（Ruby）、`sourcekit-lsp`（Swift）、`kotlin-language-server`（Kotlin）。
 
 无 LSP 时所有命令仍可正常工作——LSP 仅为符号级查找提供编译器级别精度。
 
@@ -99,8 +99,8 @@ repomap doctor   # 验证安装
 |------|------|
 | `overview` | 项目地图：入口点、热点、关键符号（PageRank）、推荐阅读顺序、模块聚类 |
 | `scan` | 初始扫描摘要：文件/符号/边计数、入口点、扫描健康状态 |
-| `query --query <关键词>` | 主题搜索（含同义词扩展），覆盖路径、文件名、符号名和路由 |
-| `file-detail --file-path <文件>` | 文件内所有符号：签名、可见性、PageRank、调用者 |
+| `query --query <关键词>` | 主题搜索（含同义词扩展）；支持 `--context-lines <N>` 显示匹配代码行 |
+| `file-detail --file-path <文件>` | 文件内所有符号；添加 `--with-lsp` 查看 LSP 分级符号树 |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险等级、建议测试 |
 | `call-chain --symbol <名称>` | 符号的调用者和被调用者，支持配置深度 |
 | `query-symbol --symbol <名称>` | 精确或模糊符号查找；添加 `--with-lsp` 获得编译器级精度 |
@@ -118,7 +118,8 @@ repomap doctor   # 验证安装
 | `git-history --symbol <名称>` | 特定符号的提交历史 |
 | `diff` | 与编辑前 `cache save` 基线的图对比 |
 | `doctor` | 二进制健康检查：解析器、运行时、LSP 可用性 |
-| `lsp doctor` | 检查本地已安装的 LSP 服务器 |
+| `lsp doctor` | 检查已安装的 LSP 服务器（覆盖 13 种语言） |
+| `lsp setup` | 自动检测并安装缺失的 LSP 服务器；先用 `--dry-run` 预览 |
 
 ---
 

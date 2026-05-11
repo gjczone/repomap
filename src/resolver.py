@@ -21,6 +21,7 @@ from collections import defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .gitignore import GitignoreParser
 from .parser import EXT_TO_LANG
 from . import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph
 
@@ -38,37 +39,6 @@ BUNDLER_CONFIGS = {
     "turbopack": [],  # Next.js 13+, uses next.config.js
 }
 
-SKIP_DIR_NAMES = {
-    ".cache",
-    ".git",
-    ".hg",
-    ".idea",
-    ".mypy_cache",
-    ".next",
-    ".nox",
-    ".nuxt",
-    ".parcel-cache",
-    ".pnpm-store",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".svelte-kit",
-    ".tox",
-    ".turbo",
-    ".venv",
-    ".vscode",
-    ".yarn",
-    "__pypackages__",
-    "__pycache__",
-    "build",
-    "coverage",
-    "dist",
-    "env",
-    "ENV",
-    "node_modules",
-    "site-packages",
-    "target",
-    "venv",
-}
 
 
 class PackageJsonExports:
@@ -187,6 +157,7 @@ class ImportResolver:
         self.import_configs: list[ProjectImportConfig] = []
         self.bundler_aliases = BundlerAliasConfig(project_root)
         self.package_exports: dict[str, PackageJsonExports] = {}  # package name -> exports
+        self._gitignore = GitignoreParser(project_root)
         self.package_export_roots: dict[str, PurePosixPath] = {}  # package name -> project-relative package root
         self._package_imports: dict[str, str] = {}  # #pattern -> resolved target
 
@@ -267,7 +238,7 @@ class ImportResolver:
 
         # 解析子包的 package.json（monorepo 场景），跳过依赖和构建目录，避免读取海量无关 package。
         for root, dir_names, file_names in os.walk(self.project_root):
-            dir_names[:] = [name for name in dir_names if name not in SKIP_DIR_NAMES]
+            dir_names[:] = [n for n in dir_names if not self._gitignore.is_ignored(Path(root).relative_to(self.project_root) / n)]
             if "package.json" not in file_names:
                 continue
             sub_package_path = Path(root) / "package.json"
@@ -786,7 +757,7 @@ class ImportResolver:
     def _discover_import_config_paths(self) -> list[Path]:
         found: list[Path] = []
         for root, dir_names, file_names in os.walk(self.project_root):
-            dir_names[:] = [name for name in dir_names if name not in SKIP_DIR_NAMES]
+            dir_names[:] = [n for n in dir_names if not self._gitignore.is_ignored(Path(root).relative_to(self.project_root) / n)]
             for filename in ("tsconfig.json", "jsconfig.json"):
                 if filename in file_names:
                     found.append(Path(root) / filename)

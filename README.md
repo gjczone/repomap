@@ -82,14 +82,14 @@ Install repomap for me:
 
 ### LSP setup (optional, the agent handles this)
 
-The agent runs `repomap lsp doctor` to check language servers. If missing:
+The agent runs `repomap lsp doctor` to check language servers, then `repomap lsp setup` to install missing ones automatically:
 
-| Language | Install |
-|----------|---------|
-| TypeScript | `npm install -g typescript-language-server` |
-| Python | `npm install -g pyright` |
-| Rust | `rustup component add rust-analyzer` |
-| Go | `go install golang.org/x/tools/gopls@latest` |
+```
+repomap lsp setup --dry-run   # preview install plan
+repomap lsp setup             # install missing servers
+```
+
+Supported LSP servers (13 languages): `pyright`/`pylsp` (Python), `typescript-language-server` (TS/JS), `rust-analyzer` (Rust), `gopls` (Go), `clangd` (C/C++), `csharp-ls` (C#), `jdtls` (Java), `lua-language-server` (Lua), `intelephense` (PHP), `ruby-lsp` (Ruby), `sourcekit-lsp` (Swift), `kotlin-language-server` (Kotlin).
 
 Without LSP, all commands still work — LSP adds compiler-grade precision for symbol-level lookups.
 
@@ -101,8 +101,8 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 |---------|-------------|
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order, module clusters |
 | `scan` | Initial scan summary: file/symbol/edge counts, entry points, scan health |
-| `query --query <keywords>` | Topic search with synonym expansion across paths, filenames, symbols, and routes |
-| `file-detail --file-path <f>` | All symbols in a file: signatures, visibility, PageRank, callers |
+| `query --query <keywords>` | Topic search with synonym expansion; supports `--context-lines <N>` for matched code display |
+| `file-detail --file-path <f>` | All symbols in a file; add `--with-lsp` for hierarchical LSP symbol tree |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk level, suggested tests |
 | `call-chain --symbol <name>` | Callers and callees of a symbol with configurable depth |
 | `query-symbol --symbol <name>` | Exact or fuzzy symbol lookup; add `--with-lsp` for compiler-grade precision |
@@ -120,7 +120,8 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 | `git-history --symbol <name>` | Commit history for a specific symbol |
 | `diff` | Graph comparison against a pre-edit `cache save` baseline |
 | `doctor` | Binary health check: parsers, runtime, LSP availability |
-| `lsp doctor` | Check locally installed LSP servers (pyright, tsc, rust-analyzer, gopls) |
+| `lsp doctor` | Check installed LSP servers for 13 languages |
+| `lsp setup` | Auto-detect and install missing LSP servers; use `--dry-run` first |
 
 ---
 

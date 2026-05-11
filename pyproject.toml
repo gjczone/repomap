@@ -1,6 +1,6 @@
 [project]
 name = "repomap-cli"
-version = "2.2.0"
+version = "2.3.0"
 description = "Standalone RepoMap CLI with tree-sitter AST parsing"
 requires-python = ">=3.10"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
     "tree-sitter-html>=0.23.0",
     "tree-sitter-css>=0.23.0",
     "tree-sitter-json>=0.23.0",
+    "pathspec>=0.12.0",
 ]
 
 [project.optional-dependencies]

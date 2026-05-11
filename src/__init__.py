@@ -157,6 +157,30 @@ class RepoGraph:
     file_exports: dict[str, list[JSExportBinding]] = field(default_factory=lambda: defaultdict(list))
 
 
+@dataclass(frozen=True)
+class NamePath:
+    """符号分级路径，如 ClassName/method_name。"""
+    parts: tuple[str, ...]
+
+    @classmethod
+    def from_parts(cls, *parts: str) -> "NamePath":
+        return cls(parts=tuple(parts))
+
+    @property
+    def qualified_name(self) -> str:
+        return "/".join(self.parts)
+
+    @property
+    def short_name(self) -> str:
+        return self.parts[-1] if self.parts else ""
+
+    @property
+    def parent_path(self) -> "NamePath | None":
+        if len(self.parts) <= 1:
+            return None
+        return NamePath(parts=self.parts[:-1])
+
+
 def call_reference_parts(call_ref: Any) -> tuple[str, int, str]:
     if isinstance(call_ref, (list, tuple)):
         if len(call_ref) >= 3:

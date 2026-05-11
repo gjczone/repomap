@@ -70,6 +70,30 @@ class LspRunResult:
     duration_ms: int = 0
 
 
+@dataclass
+class LspSymbolInfo:
+    """LSP documentSymbol 返回的符号树节点。"""
+    name: str
+    kind: int           # LSP SymbolKind 整数
+    kind_name: str      # 可读名称："class", "function", "method", ...
+    file: str
+    line: int
+    end_line: int = 0
+    col: int = 0
+    end_col: int = 0
+    detail: str = ""
+    children: list["LspSymbolInfo"] = field(default_factory=list)
+
+
+@dataclass
+class LspHoverInfo:
+    """LSP hover 返回的符号类型/文档信息。"""
+    file: str
+    line: int
+    col: int
+    contents: str = ""       # 纯文本格式的 hover 内容
+
+
 LSP_SPECS: tuple[LspServerSpec, ...] = (
     LspServerSpec(
         language="typescript",
@@ -111,6 +135,63 @@ LSP_SPECS: tuple[LspServerSpec, ...] = (
         file_suffixes=(".go",),
         root_markers=("go.mod", "go.work"),
     ),
+    LspServerSpec(
+        language="cpp",
+        server_name="clangd",
+        command_names=("clangd",),
+        file_suffixes=(".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"),
+        root_markers=("compile_commands.json", "CMakeLists.txt", ".clangd"),
+    ),
+    LspServerSpec(
+        language="csharp",
+        server_name="csharp-ls",
+        command_names=("csharp-ls",),
+        file_suffixes=(".cs",),
+        root_markers=("*.sln", "*.csproj"),
+    ),
+    LspServerSpec(
+        language="java",
+        server_name="jdtls",
+        command_names=("jdtls", "java-language-server"),
+        file_suffixes=(".java",),
+        root_markers=("pom.xml", "build.gradle", ".project", "settings.gradle"),
+    ),
+    LspServerSpec(
+        language="lua",
+        server_name="lua-language-server",
+        command_names=("lua-language-server", "luals"),
+        file_suffixes=(".lua",),
+        root_markers=(".luarc.json", ".luacheckrc"),
+    ),
+    LspServerSpec(
+        language="php",
+        server_name="intelephense",
+        command_names=("intelephense",),
+        args=("--stdio",),
+        file_suffixes=(".php",),
+        root_markers=("composer.json",),
+    ),
+    LspServerSpec(
+        language="ruby",
+        server_name="ruby-lsp",
+        command_names=("ruby-lsp",),
+        file_suffixes=(".rb",),
+        root_markers=("Gemfile", "gems.rb"),
+    ),
+    LspServerSpec(
+        language="swift",
+        server_name="sourcekit-lsp",
+        command_names=("sourcekit-lsp",),
+        file_suffixes=(".swift",),
+        root_markers=("Package.swift",),
+    ),
+    LspServerSpec(
+        language="kotlin",
+        server_name="kotlin-language-server",
+        command_names=("kotlin-language-server",),
+        file_suffixes=(".kt", ".kts"),
+        root_markers=("build.gradle", "build.gradle.kts", "settings.gradle.kts"),
+    ),
 )
 
 
@@ -124,6 +205,22 @@ def language_for_file(file_path: str | Path) -> str | None:
         return "rust"
     if suffix == ".go":
         return "go"
+    if suffix in {".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"}:
+        return "cpp"
+    if suffix == ".cs":
+        return "csharp"
+    if suffix == ".java":
+        return "java"
+    if suffix == ".lua":
+        return "lua"
+    if suffix == ".php":
+        return "php"
+    if suffix == ".rb":
+        return "ruby"
+    if suffix == ".swift":
+        return "swift"
+    if suffix in {".kt", ".kts"}:
+        return "kotlin"
     return None
 
 
@@ -424,6 +521,10 @@ class StdioLspClient:
                         "synchronization": {},
                         "definition": {},
                         "references": {},
+                        "hover": {},
+                        "documentSymbol": {
+                            "hierarchicalDocumentSymbolSupport": True,
+                        },
                     }
                 },
             },
@@ -459,6 +560,20 @@ class StdioLspClient:
         params = self._position_params(file_path, line, character)
         params["context"] = {"includeDeclaration": True}
         response = self.request("textDocument/references", params)
+        if "error" in response:
+            raise RuntimeError(str(response["error"]))
+        return response.get("result")
+
+    def hover(self, file_path: Path, line: int, character: int) -> Any:
+        response = self.request("textDocument/hover", self._position_params(file_path, line, character))
+        if "error" in response:
+            raise RuntimeError(str(response["error"]))
+        return response.get("result")
+
+    def document_symbols(self, file_path: Path) -> Any:
+        response = self.request("textDocument/documentSymbol", {
+            "textDocument": {"uri": _path_to_uri(file_path)}
+        })
         if "error" in response:
             raise RuntimeError(str(response["error"]))
         return response.get("result")
@@ -742,6 +857,177 @@ def collect_lsp_symbol_evidence(
             reason=str(exc),
             duration_ms=int((time.time() - start) * 1000),
         )
+
+
+# ── LSP SymbolKind 整数 → 可读名称 ───────────────────────────────────────────
+_LSP_SYMBOL_KIND_NAMES: dict[int, str] = {
+    1: "file", 2: "module", 3: "namespace", 4: "package", 5: "class",
+    6: "method", 7: "property", 8: "field", 9: "constructor", 10: "enum",
+    11: "interface", 12: "function", 13: "variable", 14: "constant",
+    15: "string", 16: "number", 17: "boolean", 18: "array", 19: "object",
+    20: "key", 21: "null", 22: "enum member", 23: "struct", 24: "event",
+    25: "operator", 26: "type parameter",
+}
+
+
+def _parse_lsp_symbol_tree(project_root: Path, raw: Any) -> list[LspSymbolInfo]:
+    """递归解析 LSP documentSymbol 返回的嵌套符号结构。"""
+    if not isinstance(raw, list):
+        return []
+    result: list[LspSymbolInfo] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        # 处理 DocumentSymbol 和 SymbolInformation 两种格式
+        name = item.get("name", "")
+        kind = item.get("kind", 0)
+        location = item
+        range_item = item.get("range", item.get("location", {}).get("range", {}))
+        # 如果是 SymbolInformation（leaf格式），location 在顶层
+        loc = item.get("location", item)
+        _range = loc.get("range", {})
+        if not _range:
+            _range = range_item
+        start = _range.get("start", {})
+        end = _range.get("end", {})
+        children = _parse_lsp_symbol_tree(project_root, item.get("children", []))
+        line = int(start.get("line", 0)) + 1
+        end_line = int(end.get("line", start.get("line", 0))) + 1
+        result.append(LspSymbolInfo(
+            name=name,
+            kind=kind,
+            kind_name=_LSP_SYMBOL_KIND_NAMES.get(kind, f"kind{kind}"),
+            file="",
+            line=line,
+            end_line=end_line,
+            col=int(start.get("character", 0)) + 1,
+            end_col=int(end.get("character", start.get("character", 0))) + 1,
+            detail=item.get("detail", ""),
+            children=children,
+        ))
+    return result
+
+
+def _parse_hover_response(raw: Any) -> str:
+    """将 LSP hover 返回值转为纯文本。"""
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, dict):
+        # MarkupContent: {"kind": "markdown", "value": "..."}
+        value = raw.get("value", "")
+        if isinstance(value, str):
+            return value
+        # contents 可能是 MarkedString 或 MarkedString[]
+        contents = raw.get("contents", raw)
+        if isinstance(contents, str):
+            return contents
+        if isinstance(contents, dict):
+            return contents.get("value", str(contents))
+        if isinstance(contents, list):
+            parts = []
+            for item in contents:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    parts.append(item.get("value", str(item)))
+            return "\n".join(parts)
+    if isinstance(raw, list):
+        parts = []
+        for item in raw:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(item.get("value", str(item)))
+        return "\n".join(parts)
+    return str(raw)
+
+
+def collect_lsp_symbol_tree(
+    project_root: str | Path,
+    file_path: str,
+    timeout: float = 8.0,
+) -> list[LspSymbolInfo]:
+    root = Path(project_root).resolve()
+    language = language_for_file(file_path)
+    if not language:
+        return []
+    abs_file = (root / file_path).resolve()
+    if not abs_file.exists() or not abs_file.is_file():
+        return []
+    detection = detect_lsp_server(root, language, abs_file)
+    if detection.status != "available":
+        return []
+    try:
+        workspace_root = Path(detection.workspace_root)
+        with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+            client.initialize()
+            client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
+            raw = client.document_symbols(abs_file)
+        tree = _parse_lsp_symbol_tree(root, raw)
+        # 回填 file 字段
+        for node in _walk_symbol_tree(tree):
+            node.file = file_path
+        return tree
+    except Exception:
+        return []
+
+
+def _walk_symbol_tree(nodes: list[LspSymbolInfo]) -> "list[LspSymbolInfo]":
+    """展开符号树为扁平列表（DFS）。"""
+    result: list[LspSymbolInfo] = []
+    for node in nodes:
+        result.append(node)
+        result.extend(_walk_symbol_tree(node.children))
+    return result
+
+
+def collect_lsp_hover(
+    project_root: str | Path,
+    file_path: str,
+    line: int,
+    symbol_name: str,
+    timeout: float = 8.0,
+) -> LspHoverInfo | None:
+    root = Path(project_root).resolve()
+    language = language_for_file(file_path)
+    if not language:
+        return None
+    abs_file, line_index, character = _symbol_position(root, file_path, line, symbol_name)
+    if not abs_file.exists() or not abs_file.is_file():
+        return None
+    detection = detect_lsp_server(root, language, abs_file)
+    if detection.status != "available":
+        return None
+    try:
+        workspace_root = Path(detection.workspace_root)
+        with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+            client.initialize()
+            client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
+            raw = client.hover(abs_file, line_index, character)
+        return LspHoverInfo(
+            file=file_path,
+            line=line,
+            col=character + 1,
+            contents=_parse_hover_response(raw),
+        )
+    except Exception:
+        return None
+
+
+def compute_name_paths(
+    symbol_tree: list[LspSymbolInfo],
+    parent: tuple[str, ...] = (),
+) -> dict[tuple[str, ...], LspSymbolInfo]:
+    """将 LSP 符号树扁平化为 NamePath → LspSymbolInfo 映射。"""
+    result: dict[tuple[str, ...], LspSymbolInfo] = {}
+    for node in symbol_tree:
+        path = parent + (node.name,)
+        result[path] = node
+        if node.children:
+            result.update(compute_name_paths(node.children, path))
+    return result
 
 
 def detection_to_dict(detection: LspServerDetection) -> dict[str, Any]:

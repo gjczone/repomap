@@ -540,6 +540,7 @@ def render_file_detail_report(
     file_path: str,
     max_symbols: int = 12,
     max_chars: int = 6000,
+    lsp_symbol_tree: list[Any] | None = None,
 ) -> str:
     symbol_ids = engine.graph.file_symbols.get(file_path, [])
     if not symbol_ids:
@@ -587,7 +588,29 @@ def render_file_detail_report(
         if callers:
             lines.append(f"  - called by: {', '.join(callers)}")
         lines.append("")
+
+    # LSP 符号树
+    if lsp_symbol_tree:
+        lines.append("## LSP Symbol Tree\n")
+        lines.append("> From language server; nested structure reflects lexical scoping.\n")
+        _append_lsp_symbol_outline(lines, lsp_symbol_tree, indent=0)
+
     return _truncate_output("\n".join(lines), max_chars)
+
+
+def _append_lsp_symbol_outline(lines: list[str], nodes: list[Any], indent: int) -> None:
+    prefix = "  " * indent
+    for node in nodes:
+        name = node.name if hasattr(node, "name") else node.get("name", "?")
+        kind = node.kind_name if hasattr(node, "kind_name") else node.get("kind_name", "")
+        line_num = node.line if hasattr(node, "line") else node.get("line", 0)
+        end_line = node.end_line if hasattr(node, "end_line") else node.get("end_line", 0)
+        sig = node.detail if hasattr(node, "detail") else node.get("detail", "")
+        sig_str = f" — {sig}" if sig else ""
+        lines.append(f"{prefix}- `{name}` ({kind}{sig_str}) L{line_num}-L{end_line}")
+        children = node.children if hasattr(node, "children") else node.get("children", [])
+        if children:
+            _append_lsp_symbol_outline(lines, children, indent + 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -603,6 +626,7 @@ def render_query_report(
     max_files: int,
     max_symbols: int,
     max_chars: int = 12000,
+    context_lines: int = 2,
 ) -> str:
     lines: list[str] = []
     lines.append(f"# Topic Map — {query}\n")
@@ -681,6 +705,20 @@ def render_query_report(
             lines.append(f"| `{sym['name']}` | `{m.path}` | {sym['line']} | {role_hint} |")
             symbols_shown += 1
     lines.append("")
+
+    # 匹配代码行（含上下文）
+    if file_matches and context_lines > 0:
+        lines.append("## Matched Lines\n")
+        for m in file_matches[:min(len(file_matches), 3)]:
+            blocks = _build_matched_blocks(engine, m.path, query, context_lines)
+            if blocks:
+                if len(file_matches[:3]) > 1:
+                    lines.append(f"### `{m.path}`\n")
+                for block in blocks[:5]:
+                    lines.append(_format_matched_block(block))
+                    lines.append("")
+                if len(blocks) > 5:
+                    lines.append(f"... {len(blocks) - 5} more match(es) in `{m.path}`\n")
 
     # Related Commands
     if file_matches:
@@ -1134,3 +1172,66 @@ def _suggest_manual_verification(changed_files: list[str], risk_level: str) -> l
     if risk_level == "high":
         items.append("Consider a full regression test in staging environment")
     return items[:5]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 文本匹配格式化（Serena 风格）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _build_matched_blocks(engine: Any, file_path: str, query: str,
+                          context: int = 2) -> list[dict[str, Any]]:
+    """在文件中搜索关键词，返回带上下文的匹配块。"""
+    try:
+        abs_path = engine.project_root / file_path
+        content = abs_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = content.splitlines()
+    matched_indices: list[int] = []
+    query_lower = query.lower()
+    for i, line in enumerate(lines):
+        if query_lower in line.lower():
+            matched_indices.append(i)
+    if not matched_indices:
+        return []
+    # 合并相邻匹配
+    blocks: list[dict[str, Any]] = []
+    current_block: dict[str, Any] | None = None
+    for idx in matched_indices:
+        if current_block is None or idx > current_block["end"] + context + 1:
+            if current_block:
+                blocks.append(current_block)
+            start = max(0, idx - context)
+            end = min(len(lines) - 1, idx + context)
+            current_block = {"start": start, "end": end, "matches": [idx]}
+        else:
+            end = min(len(lines) - 1, idx + context)
+            current_block["end"] = end
+            current_block["matches"].append(idx)
+    if current_block:
+        blocks.append(current_block)
+    # 转换为格式化块
+    result: list[dict[str, Any]] = []
+    for block in blocks:
+        block_lines: list[dict[str, Any]] = []
+        for i in range(block["start"], block["end"] + 1):
+            block_lines.append({
+                "num": i + 1,
+                "text": lines[i],
+                "match": i in block["matches"],
+            })
+        result.append({"first_line": block["start"] + 1, "lines": block_lines})
+    return result
+
+
+def _format_matched_block(block: dict[str, Any]) -> str:
+    """将匹配块格式化为 Serena 风格文本。"""
+    out: list[str] = []
+    for ln in block["lines"]:
+        if ln["match"]:
+            prefix = f"  > {ln['num']:4d}"
+        else:
+            prefix = f" ... {ln['num']:4d}"
+        out.append(f"{prefix} | {ln['text']}")
+    return "\n".join(out)
