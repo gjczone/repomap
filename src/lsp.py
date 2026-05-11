@@ -387,6 +387,24 @@ class StdioLspClient:
             if "id" not in message:
                 continue
             time.sleep(0.01)
+        # 超时后检查进程是否已退出，给出更精确的诊断
+        if self.process is not None:
+            exit_code = self.process.poll()
+            if exit_code is not None:
+                stderr_tail = ""
+                try:
+                    if self.process.stderr is not None:
+                        remaining = self.process.stderr.read()
+                        if remaining:
+                            stderr_tail = remaining.decode("utf-8", errors="replace").strip()[-200:]
+                except Exception:
+                    pass
+                detail = f"exit code {exit_code}"
+                if stderr_tail:
+                    detail += f", stderr: {stderr_tail}"
+                raise RuntimeError(
+                    f"LSP server {self.command[0]!r} exited during request ({detail})"
+                )
         raise TimeoutError(f"LSP request timed out: {method}")
 
     def _send(self, payload: dict[str, Any]) -> None:
