@@ -31,9 +31,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "Scan Repository",
       description:
-        "Scan a repository with tree-sitter AST parsing and return scan summary. " +
-        "This is the first step before using other analysis tools — it builds the symbol graph and caches it for subsequent calls. " +
-        "Returns: file count, symbol count, entry points, and top hotspot files.",
+        "Build the symbol graph via tree-sitter AST parsing. " +
+        "MANDATORY first step — this caches the repository structure that ALL other repomap tools depend on. " +
+        "Run this before overview, query, or impact when you haven't scanned yet. " +
+        "Skip only if you just ran it and haven't changed branches.",
       inputSchema: {
         project: ProjectPathSchema,
         max_files: MaxFilesSchema,
@@ -60,9 +61,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "Project Overview",
       description:
-        "Generate a comprehensive project overview report including module structure, reading order, " +
-        "hotspot files, entry points, and key symbols. This is the primary tool for understanding a codebase. " +
-        "Returns: structured JSON with scanStats, entry_points, hotspots, reading_order, modules, summary_symbols, supporting_files.",
+        "Complete project map: entry points, module clusters, hotspots, key symbols (PageRank), reading order. " +
+        "MANDATORY for any new or unfamiliar repository — run this BEFORE your first grep or file read. " +
+        "Also use when returning to a project after time away. " +
+        "Do NOT repeat its output as a summary to the user — use it to plan your next action, then move on to query or file_detail on the top candidates.",
       inputSchema: {
         project: ProjectPathSchema,
         max_files: MaxFilesSchema,
@@ -100,9 +102,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Symbol Call Chain",
       description:
-        "Analyze the call chain for a specific symbol — who calls it (callers) and what it calls (callees). " +
-        "Essential for understanding how a function/class fits into the broader codebase. " +
-        "Returns: symbol info, callers list, and callees list with file locations.",
+        "Callers and callees of a symbol with configurable depth. " +
+        "MANDATORY before changing any function/class/method signature, return type, or behavior. " +
+        "Shows every caller you might break and every dependency you rely on. " +
+        "When the chain is deep, focus on DIRECT callers first — they're the ones that will break immediately. " +
+        "Use AFTER query_symbol to confirm you found the right definition.",
       inputSchema: {
         project: ProjectPathSchema,
         symbol: z.string().describe("Symbol name to analyze (e.g. function or class name)"),
@@ -140,9 +144,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Query Symbol",
       description:
-        "Search for symbols by name in the repository. Supports exact and fuzzy matching. " +
-        "Use this to find where a function, class, or variable is defined. " +
-        "Returns: list of matching symbols with kind, file location, signature, and PageRank score.",
+        "Find where a symbol (function, class, method, variable) is defined. Supports exact and fuzzy matching. " +
+        "MANDATORY before editing, renaming, or changing the signature of ANY named symbol. " +
+        "Use this to confirm you have the right definition before acting on it. " +
+        "Add file_path when the same name exists in multiple files. " +
+        "After finding the symbol, follow up with call_chain or refs before making changes.",
       inputSchema: {
         project: ProjectPathSchema,
         symbol: z.string().describe("Symbol name to search for"),
@@ -176,10 +182,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Topic Keyword Search",
       description:
-        "Search the repository by topic keyword to find relevant files and symbols. " +
-        "Unlike query-symbol which searches by exact name, this uses topic scoring to find " +
-        "files related to a concept (e.g. 'authentication', 'payment processing'). " +
-        "Returns: matched files with roles and scores, related tests, and key symbols.",
+        "Search by business topic or concept keyword to find relevant files and symbols. " +
+        "MANDATORY when the task describes a FEATURE or CONCEPT but no specific file or symbol name. " +
+        "Use this INSTEAD OF grep — it understands domain synonyms and scores results by relevance, not just string matching. " +
+        "Examples: 'authentication', 'payment processing', 'websocket handler', 'rate limiting'. " +
+        "After query, read the top candidate files before editing — query results are starting points, not confirmed locations.",
       inputSchema: {
         project: ProjectPathSchema,
         query: z.string().describe("Topic keyword or phrase to search for"),
@@ -220,9 +227,12 @@ export function registerTools(server: McpServer): void {
     {
       title: "Change Impact Analysis",
       description:
-        "Analyze the impact of changes to specific files. Identifies which other files are affected, " +
-        "related tests, and assesses risk level. Critical for safe code modifications. " +
-        "Returns: affected files with confidence levels, related tests, risk assessment, key symbols, and reading order.",
+        "Pre-edit blast radius analysis — the cheapest way to prevent broken builds. " +
+        "MANDATORY before EVERY non-trivial file edit. Shows: affected files with confidence levels, " +
+        "related tests, risk assessment (low/medium/high), key symbols, and recommended reading order. " +
+        "ALWAYS use with_symbols: true for full context — it adds key symbols, reading order, and LSP hints. " +
+        "Read the 'Read Next' files BEFORE editing. Run the suggested related tests AFTER editing. " +
+        "Note: impact does not guarantee completeness — use refs and routes for cross-boundary checks when touching API, state, or persistence.",
       inputSchema: {
         project: ProjectPathSchema,
         files: z.array(z.string()).min(1)
@@ -259,9 +269,14 @@ export function registerTools(server: McpServer): void {
     {
       title: "Post-Edit Verification",
       description:
-        "Aggregate post-edit evidence before final handoff. Combines risk assessment, compiler checks, " +
-        "LSP diagnostics, and graph diff to verify code changes are safe. " +
-        "Returns: status (passed/warning/failed), changed files, risk level, affected files, test coverage, and diagnostics.",
+        "Post-edit evidence gate — your FINAL CHECK before claiming a task is complete. " +
+        "MANDATORY after every non-trivial code change. Aggregates: git changes, risk assessment, " +
+        "contract risk warnings, suggested tests, compiler/LSP diagnostics, and optional graph diff. " +
+        "Address EVERY contract risk warning before final handoff. " +
+        "IMPORTANT: verify does NOT run tests — you must run them separately. " +
+        "When diagnostics or graph diff show SKIPPED, state the limitation in your completion report. " +
+        "Use quick: true for risk-only mode (skips compiler/LSP, faster). " +
+        "Use with_lsp: true when a language server is available for compiler-grade diagnostics on changed files.",
       inputSchema: {
         project: ProjectPathSchema,
         types: z.array(z.enum(["typescript", "rust", "python", "go", "javascript"])).optional()
@@ -300,9 +315,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "File Detail",
       description:
-        "Get detailed information about a specific source file including its symbols, " +
-        "imports, exports, and call relationships. Useful for understanding a file before editing it. " +
-        "Returns: file symbols with signatures, PageRank scores, and cross-references.",
+        "All symbols in a single file: signatures, visibility, PageRank scores, and cross-references. " +
+        "MANDATORY before reading or editing any non-trivial file — use this to understand structure BEFORE raw reading. " +
+        "For edits, always follow file_detail with impact (with_symbols: true) to get the blast radius. " +
+        "Tune max_symbols/max_chars when output is too large for the file size.",
       inputSchema: {
         project: ProjectPathSchema,
         file_path: z.string().describe("Relative file path to inspect"),
@@ -336,9 +352,9 @@ export function registerTools(server: McpServer): void {
     {
       title: "Hotspot Files",
       description:
-        "List the highest-density files ranked by symbol count and risk level. " +
-        "These are the files most likely to need attention during code review or refactoring. " +
-        "Returns: ranked list of files with symbol counts and risk indicators.",
+        "Highest-density files ranked by symbol count and complexity. " +
+        "Use SPARINGLY — only after overview or query when you need to identify the most complex files in an area. " +
+        "Hotspots are where bugs and refactoring effort concentrate — pay attention to high-risk files.",
       inputSchema: {
         project: ProjectPathSchema,
         limit: z.number().int().min(1).max(100).optional()
@@ -367,9 +383,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "Save Graph Baseline",
       description:
-        "Save the current symbol graph as a baseline for future comparison. " +
-        "Call this BEFORE making code edits so that subsequent diff/verify can detect changes. " +
-        "Returns: cache path, symbol count, and edge count.",
+        "Save the current symbol graph as a baseline for future diff comparison. " +
+        "MANDATORY to run BEFORE making target edits when you plan to verify with graph diff evidence. " +
+        "Call this, make your edits, then use verify with with_diff: true for the final comparison. " +
+        "Without this baseline, graph diff is unavailable.",
       inputSchema: {
         project: ProjectPathSchema,
       },
@@ -395,10 +412,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "Graph Diff",
       description:
-        "Compare the current repository state against a previously saved graph baseline. " +
-        "Detects added/removed/modified symbols and changed call relationships. " +
-        "You must run repomap_cache_save before edits for this to work. " +
-        "Returns: summary of changes, added/removed/modified symbols, and call chain changes.",
+        "Compare current repository graph against a cache_save baseline. " +
+        "Shows added/removed/modified symbols and changed call relationships. " +
+        "Requires a prior cache_save baseline — run cache_save BEFORE edits, then diff after. " +
+        "Prefer verify with with_diff: true for final evidence — use this directly only for raw graph change data.",
       inputSchema: {
         project: ProjectPathSchema,
       },
@@ -424,9 +441,9 @@ export function registerTools(server: McpServer): void {
     {
       title: "Symbol Git History",
       description:
-        "Show the Git history for a specific symbol — when it was last modified, by whom, " +
-        "and recent commits affecting its file. Useful for understanding ownership and change patterns. " +
-        "Returns: current commit, recent commits with authors and dates.",
+        "Commit history for a specific symbol — when modified, by whom, and recent changes. " +
+        "Use for bug investigations, ownership questions, or understanding change patterns. " +
+        "Add file_path when the symbol name is ambiguous across files.",
       inputSchema: {
         project: ProjectPathSchema,
         symbol: z.string().describe("Symbol name to inspect"),
@@ -458,10 +475,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Reference Analysis",
       description:
-        "Analyze symbol references — who calls a symbol and what it calls. " +
-        "Without a specific symbol, returns global analysis: entry points, orphaned symbols, " +
-        "and most-referenced symbols. With a symbol, returns detailed caller/callee breakdown. " +
-        "Returns: reference counts, caller/callee lists, entry/leaf/orphan classification.",
+        "All references to a symbol across the entire codebase — who imports it, who calls it, who references it. " +
+        "MANDATORY before deleting, renaming, or changing the signature of any symbol. " +
+        "When refs shows callers in multiple files, inspect EACH caller before changing the contract. " +
+        "Without a symbol, returns global analysis: entry points, orphaned symbols, most-referenced symbols. " +
+        "Use AFTER query_symbol to confirm you found all usage sites.",
       inputSchema: {
         project: ProjectPathSchema,
         symbol: z.string().optional()
@@ -494,9 +512,13 @@ export function registerTools(server: McpServer): void {
     {
       title: "Dead Code Detection",
       description:
-        "Find orphaned (potentially dead) code — symbols that are neither called by nor call any other symbol. " +
-        "Results are classified by confidence level (high/medium/low) based on heuristics. " +
-        "Returns: candidates grouped by confidence tier with file locations and reasoning.",
+        "Find orphaned (potentially dead) code candidates with confidence tiers (high/medium/low). " +
+        "MANDATORY after deleting features or large refactors to find leftover code. " +
+        "WARNING: output is CANDIDATES only, NOT a deletion license. " +
+        "ALWAYS verify each high-confidence candidate with repomap_refs before actual deletion. " +
+        "Check for dynamic references the graph cannot see: string-based dispatch, reflection, macros, config-driven routing, test fixtures. " +
+        "Run the full test suite after any deletion. NEVER delete based solely on orphan output. " +
+        "Use min_confidence: 70 to filter out noise and focus on likely dead code.",
       inputSchema: {
         project: ProjectPathSchema,
         limit: z.number().int().min(1).max(100).optional()
@@ -529,9 +551,12 @@ export function registerTools(server: McpServer): void {
     {
       title: "Compiler/Static Analysis Diagnostics",
       description:
-        "Run compiler and static analysis tools (tsc, cargo check, ruff, etc.) on the project. " +
-        "Detects type errors, lint issues, and other problems. Optionally resolves issues to code symbols. " +
-        "Returns: diagnostic status, errors/warnings by file, and tool execution details.",
+        "Run compiler and static analysis tools (tsc, cargo check, ruff, mypy, go vet) on the project. " +
+        "MANDATORY after any edit that changes types, interfaces, or function signatures. " +
+        "Use when you need type/lint evidence without the full verify gate. " +
+        "CRITICAL: when status is 'unknown', it means NO diagnostic tool ran — do NOT treat this as 'passed'. " +
+        "When check reports failure, investigate and fix BEFORE claiming completion. " +
+        "Use modified_files to narrow diagnostics to specific changed files.",
       inputSchema: {
         project: ProjectPathSchema,
         types: z.array(z.enum(["typescript", "rust", "python", "go", "javascript"])).optional()
@@ -567,9 +592,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "HTTP Route Inventory",
       description:
-        "Extract and list all HTTP/API route definitions from the codebase. " +
-        "Supports FastAPI, Flask, Express, and Axum frameworks. " +
-        "Returns: list of routes with method, path, handler, file location, and framework.",
+        "Extract all HTTP/API route definitions from the codebase (method, path, handler, file, framework). " +
+        "Supports FastAPI, Flask, Express, Axum, Spring Boot. " +
+        "MANDATORY when any task touches API endpoints, handlers, response shapes, or client-server contracts. " +
+        "For full context BEFORE changing routes, use repomap_routes_consumers instead — it maps each route to its frontend/test consumers.",
       inputSchema: {
         project: ProjectPathSchema,
         max_files: MaxFilesSchema,
@@ -596,10 +622,10 @@ export function registerTools(server: McpServer): void {
     {
       title: "API Route Consumer Mapping",
       description:
-        "Map backend API routes to frontend/test consumers. " +
-        "Returns each route with its consumers (fetch/axios/requests callers), " +
-        "confidence levels (high/medium/low), and match types. " +
-        "Use before changing route handlers or response shapes.",
+        "Map every backend API route to its frontend/test consumers with confidence levels (high/medium/low). " +
+        "MANDATORY before changing ANY API handler, response shape, or route signature. " +
+        "Shows exactly which frontend components and test files call each route — so you know what will break. " +
+        "Use this BEFORE touching routes, not after. Each consumer includes match type (fetch/axios/requests) and confidence.",
       inputSchema: {
         project: ProjectPathSchema,
         max_files: MaxFilesSchema,
@@ -626,9 +652,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "State Definition Map",
       description:
-        "Find enum/const state definitions: values, writers, and readers. " +
+        "Find enum/const state definitions with all values, writers, and readers across the codebase. " +
+        "MANDATORY before adding, removing, or changing ANY state value, enum member, or lifecycle logic. " +
         "Supports Python Enum, TypeScript enum/string unions, Rust enum, Go const blocks. " +
-        "Use before changing state/lifecycle logic. Provide --symbol for exact match or --query for keyword search.",
+        "Shows every place that reads or writes each state value — missing one can cause production bugs. " +
+        "Use symbol for exact enum name, or query for keyword-based discovery of state definitions.",
       inputSchema: {
         project: ProjectPathSchema,
         max_files: MaxFilesSchema,

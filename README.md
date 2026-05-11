@@ -1,6 +1,8 @@
 # RepoMap — Repository Intelligence for AI Agents
 
-> **A CLI tool + skill + MCP server that gives AI agents a "project map" — where to start reading, what a change affects, and what to verify — before and after editing code.**
+> **A CLI tool that gives AI agents a "project map" — where to start reading, what a change affects, and what to verify — before and after editing code.**
+>
+> Two integration modes: **MCP Server** (tools appear in agent's tool list) or **Skill + CLI** (skill file guides agent to call CLI directly).
 >
 > Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone) &middot; AI-powered by [DeepSeek](https://chat.deepseek.com/).
 
@@ -12,13 +14,26 @@ AI agents use repomap to get structured repository context instead of guessing v
 - **Prevention**: what will break if I edit this — `impact`, `call-chain`, `refs`, `state-map`
 - **Gap detection**: what did I miss after editing — `verify` (with contract risk warnings), `check`, `orphan`
 
-It comes in three forms — pick the one that fits your workflow.
-
 ---
 
 ## Quick Install
 
-### Option A: MCP Server (Claude Code, Cursor, VS Code)
+### Step 1: Install the binary (required for both modes)
+
+```bash
+npm install -g repomap-bin
+repomap doctor   # verify it works
+```
+
+### Step 2: Choose your integration mode
+
+| | MCP Server | Skill + CLI |
+|---|---|---|
+| **How it works** | Tools appear in the agent's tool list. The server injects aggressive workflow instructions — the model decides when to call each tool. | A skill file (`SKILL.md`) tells the agent *when* and *how* to call each CLI command. The agent runs `repomap ...` directly. |
+| **Best for** | Claude Code, Cursor, VS Code, or any MCP-compatible client | Any AI coding agent that supports custom skills (Claude Code, Codex, OpenCode, etc.) |
+| **Setup** | Add 5 lines of JSON config | Clone skill + install binary |
+
+#### Option 1: MCP Server
 
 Add to Claude Code settings (`~/.claude/settings.json`):
 
@@ -35,16 +50,9 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 
 Or via CLI: `claude mcp add --transport stdio repomap -- npx --force-refresh -y repomap-mcp-server`
 
-Zero setup — the binary auto-installs on first run. All 18 commands exposed as MCP tools.
+**What happens**: 18 MCP tools appear in your agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
 
-### Option B: npm (binary only)
-
-```bash
-npm install -g repomap-bin
-repomap doctor
-```
-
-### Option C: skill + binary (manual)
+#### Option 2: Skill + CLI
 
 **LLM agent: read the code block matching the user's OS. Execute every step in order.**
 
@@ -67,6 +75,10 @@ Install repomap for me:
    repomap doctor
 ```
 </details>
+
+**What happens**: The skill file at `~/.claude/skills/repomap/SKILL.md` tells the agent exactly when to run each `repomap` CLI command. The skill includes decision rules ("if X then use Y"), workflow patterns, and mandatory usage rules.
+
+---
 
 ### LSP setup (optional, agent handles this)
 
@@ -114,7 +126,7 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 
 ## How AI Agents Use Repomap
 
-You don't type these commands yourself. The AI agent calls them during its work, guided by the skill file at `skills/repomap/SKILL.md`.
+You don't type these commands yourself. The AI agent calls them during its work, guided by either the MCP server instructions or the skill file at `skills/repomap/SKILL.md`.
 
 ### Before editing
 
@@ -148,7 +160,7 @@ repomap orphan --project . --min-confidence 70        # Dead code check after de
 
 ## MCP Tools
 
-When using the MCP server (`repomap-mcp-server`), the following tools are available to the AI agent:
+When using the MCP server (`repomap-mcp-server`), the following tools are available to the AI agent. The server injects aggressive workflow instructions telling the agent when each tool is MANDATORY.
 
 `repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_git_history` · `repomap_scan`
 
