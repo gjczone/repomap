@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: "MUST invoke this skill whenever you are about to read, edit, investigate, or delete code in any repository — before every grep, before every file read, before every edit, and after every edit. This is not optional; skipping repomap on a coding task produces incomplete work. repomap gives you a structural map of the codebase using tree-sitter — entry points, PageRank-ranked key symbols, call graphs, impact analysis, route-to-consumer mapping, state definitions, dead-code detection, and post-edit verification with contract risk warnings. It delivers more signal per token than raw file reads. The only tasks that do NOT need repomap are single-character typo fixes and purely non-coding conversations."
+description: "MUST invoke this skill whenever you are about to read, edit, investigate, or delete code in any repository — before every grep, before every file read, before every edit, and after every edit. This is not optional; skipping repomap on a coding task produces incomplete work. repomap gives you a structural map of the codebase using tree-sitter — entry points, PageRank-ranked key symbols, call graphs, impact analysis, route-to-consumer mapping, state definitions, dead-code detection, and post-edit verification with contract risk warnings — plus opt-in LSP integration for compiler-grade definitions, references, and diagnostics. Run `lsp doctor` early; when a language server is detected, always add `--with-lsp` to query-symbol, refs, verify, and check. It delivers more signal per token than raw file reads. The only tasks that do NOT need repomap are single-character typo fixes and purely non-coding conversations."
 ---
 
 # repomap
@@ -28,7 +28,7 @@ For most non-trivial coding tasks:
 1. Unknown area: `repomap query --project <project> --query <topic>` or `repomap overview --project <project>`.
 2. Known file: `repomap file-detail --project <project> --file-path <file>`.
 3. Before editing known files: `repomap impact --project <project> --files <file...> --with-symbols`.
-4. Before changing a known function/class/method: `repomap query-symbol --project <project> --symbol <name>`, then `repomap call-chain --project <project> --symbol <name>` and/or `repomap refs --project <project> --symbol <name>`.
+4. Before changing a known function/class/method: `repomap query-symbol --project <project> --symbol <name>`, then `repomap call-chain --project <project> --symbol <name>` and/or `repomap refs --project <project> --symbol <name>`. Run `lsp doctor` early; when LSP is available, always add `--with-lsp`.
 5. After editing: `repomap verify --project <project>`; add `--with-lsp` for focused local LSP evidence and `--with-diff` when a cache baseline exists.
 
 ## Command selection
@@ -73,7 +73,7 @@ For most non-trivial coding tasks:
 6. If you changed code, are preparing a handoff, or need final evidence: use `verify`.
 7. If you only need changed-file risk without compiler/LSP checks: use `verify --quick`.
 8. If you only need toolchain diagnostics: use `check`; for focused LSP diagnostics on explicit files use `diagnostics --source lsp --files ...`.
-9. If exact LSP evidence is explicitly useful: use `--with-lsp` on `check` or `verify`; use `lsp doctor` to check LSP availability; keep LSP opt-in.
+9. Always run `lsp doctor` early in a project. When a language server is detected, `--with-lsp` is NOT optional — add it to `query-symbol`, `refs`, `verify`, and `check` for compiler-grade precision. LSP is the highest-precision signal repomap provides.
 10. If you need recent history for a symbol: use `git-history`.
 11. If you need dead-code candidates: use `orphan`; review high (≥70) and medium (40-69) confidence tiers; use `--min-confidence 70` to filter noise; verify each candidate with `refs` before deletion.
 12. If you need to understand enum/state lifecycle before changing it: use `state-map --symbol <name>` or `state-map --query <keywords>`.
@@ -152,13 +152,13 @@ Use `lsp doctor` early — before your first edit in a project — to confirm wh
 
 1. `file-detail --project <project> --file-path <file>` to understand local structure.
 2. `impact --project <project> --files <file...> --with-symbols` before non-trivial changes.
-3. After editing, run `verify --project <project>`; add `--with-lsp` or `--with-diff` when useful.
+3. After editing, run `verify --project <project> --with-lsp`; add `--with-diff` when a cache baseline exists.
 
 ### Known symbol edit
 
 1. `query-symbol --project <project> --symbol <name>`; add `--file-path` if ambiguous.
 2. `call-chain --project <project> --symbol <name>` and/or `refs --project <project> --symbol <name>` before changing behavior.
-3. Add `--with-lsp` only when exact local definition/reference evidence is worth the startup cost.
+3. Add `--with-lsp` whenever LSP is available — it adds compiler-grade definition and reference evidence.
 
 ### Bug or regression investigation
 
