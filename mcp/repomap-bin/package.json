@@ -1,6 +1,6 @@
 {
   "name": "repomap-bin",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Standalone repomap binary \u2014 tree-sitter AST code intelligence CLI",
   "type": "module",
   "bin": {
