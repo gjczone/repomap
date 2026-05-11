@@ -1,16 +1,6 @@
 ---
 name: repomap
-description: >-
-  [Before acting] entering new codebase or unfamiliar feature: overview, query.
-  [Before reading] about to read a known file: file-detail first.
-  [Before editing] about to modify any file: impact --with-symbols.
-  [Before API change] touching routes/handlers: routes --with-consumers + impact.
-  [Before state change] modifying enums/constants: state-map + refs.
-  [Before signature change] renaming functions/methods: refs + call-chain.
-  [Before deleting] removing code: orphan, then refs to verify.
-  [After editing] every edit complete: verify (post-edit evidence gate with contract risk warnings).
-  [Investigating] bugs/regressions: query, query-symbol, call-chain, refs.
-  Tree-sitter structural map with PageRank-ranked symbols, call graphs, HTTP route inventory, state definitions, dead-code detection. More signal per token than raw file reads. Skip only trivial typo fixes or non-coding conversations.
+description: "MUST invoke this skill whenever you are about to read, edit, investigate, or delete code in any repository — before every grep, before every file read, before every edit, and after every edit. This is not optional; skipping repomap on a coding task produces incomplete work. repomap gives you a structural map of the codebase using tree-sitter — entry points, PageRank-ranked key symbols, call graphs, impact analysis, route-to-consumer mapping, state definitions, dead-code detection, and post-edit verification with contract risk warnings. It delivers more signal per token than raw file reads. The only tasks that do NOT need repomap are single-character typo fixes and purely non-coding conversations."
 ---
 
 # repomap
