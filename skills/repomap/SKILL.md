@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: "MUST invoke this skill before reading, editing, investigating, or deleting code — before grep, before file reads, before every edit, after every edit. No exceptions beyond single-character typo fixes. repomap scans with tree-sitter and returns entry points, PageRank-ranked symbols, call graphs, impact analysis, route consumers, state definitions, dead-code candidates, post-edit verification with contract risk warnings, and LSP integration for compiler-grade precision. Run `lsp doctor` early; always add `--with-lsp` when a language server is detected. More signal per token than raw file reads."
+description: "MUST invoke this skill before reading, editing, investigating, or deleting code — before every grep, every file read, every edit, and after every edit. The only exceptions are single-character typo fixes and purely non-coding conversations."
 ---
 
 # repomap
