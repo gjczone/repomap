@@ -156,7 +156,7 @@ The local skill (`~/.agents/skills/repomap/SKILL.md`) includes the full `## Opti
 
 ## Post-Change Checklist
 
-After any code change to `src/` or `mcp/`, work through these steps:
+After any code change to `src/` or `mcp/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
 
 ```bash
 # 1. Run tests
@@ -186,13 +186,28 @@ repomap overview --project .
 # 7. Rebuild MCP if TypeScript changed
 cd mcp && npm run build && cd ..
 
-# 8. Bump version in all 8 locations (see Distribution Policies)
+# 8. Bump version in all 7 locations (see Distribution Policies)
+
 # 9. Commit + push → CI auto-publishes platform packages
-# 10. Publish repomap-bin + repomap-mcp-server locally if needed
+#    Commit message format: [release]: vX.Y.Z — 简短中文描述
+
+# 10. Wait for CI to complete, then publish repomap-bin + repomap-mcp-server locally
+#     - Poll CI status: gh run list --repo gjczone/repomap --branch main --limit 1 --json status,conclusion
+#     - Wait up to 10 minutes; CI typically takes 3-6 minutes
+#     - When CI succeeds: cd mcp/repomap-bin && npm publish && cd /home/guojiancheng/.A1/repomap
+#     - Then: cd mcp && npm publish && cd /home/guojiancheng/.A1/repomap (only if MCP source changed)
+#     - Verify all 5 packages: for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do npm view "$pkg" version; done
 #     ⚠️  npm publish changes cwd into the package directory; after publishing,
 #     cd back to /home/guojiancheng/.A1/repomap before running cp or repomap commands.
+
 # 11. Sync skill to ~/.agents/skills/repomap/ + append Optimization Feedback
-# 12. Create GitHub Release (text-only changelog)
+cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
+cp -r skills/repomap/scripts/* ~/.agents/skills/repomap/scripts/
+cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
+# Manually append ## Optimization Feedback to local copy
+diff -r skills/repomap/references/ ~/.agents/skills/repomap/references/
+
+# 12. Create GitHub Release (bilingual CN+EN changelog, text-only, no binaries)
 ```
 
 ## MCP Server
@@ -257,13 +272,59 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
 
 - **npm only**: All distribution is via npm. No PyPI, no GitHub Release binaries, no manual binary downloads.
 - **No binaries in git**: `dist/repomap` and `mcp/repomap-bin/platforms/*/repomap` are gitignored. Build artifacts stay local.
-- **GitHub Releases**: Text-only changelogs. No binary attachments. Created via `gh release create` with `--notes`.
-- **Version bump**: When bumping version, update ALL of these files in one commit:
+- **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
+- **Version bump**: When bumping version, update ALL 7 locations in one commit:
   - `pyproject.toml`
   - `mcp/package.json` + `mcp/repomap-bin/package.json`
-  - `mcp/repomap-bin/platforms/*/package.json` (all 3)
-  - `mcp/src/index.ts` (hardcoded version string)
-- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes to npm if version doesn't already exist. `repomap-bin` wrapper and `repomap-mcp-server` may be published locally after CI succeeds.
+  - `mcp/repomap-bin/platforms/repomap-bin-linux-x64/package.json`
+  - `mcp/repomap-bin/platforms/repomap-bin-darwin-arm64/package.json`
+  - `mcp/repomap-bin/platforms/repomap-bin-windows-x64/package.json`
+  - `mcp/src/index.ts` (hardcoded version string in `McpServer` constructor)
+- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes to npm if version doesn't already exist. `repomap-bin` wrapper and `repomap-mcp-server` must be published locally after CI succeeds.
+  - Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before publishing locally.
+  - After local publish, verify all 5 packages match the new version via `npm view <pkg> version`.
+
+## Release Automation Rules
+
+When the user asks to release a new version, follow this automated flow. **No manual checkpoints — every step completes before the next begins. If a step requires waiting (CI), poll automatically and report progress.**
+
+### Version Decision
+- **docs/README changes only**: patch bump (x.y.Z)
+- **New feature or behavior enhancement**: minor bump (x.Y.z)
+- **Breaking changes or major rework**: major bump (X.y.z)
+- When in doubt, ask the user; default to minor for feature work.
+
+### Commit Message
+- Format: `[release]: vX.Y.Z — 简短中文描述`
+- The description should capture the primary change in 5-8 Chinese characters.
+
+### GitHub Release Format
+- **Bilingual (CN+EN)**: Every section must have both Chinese and English text, separated by ` / `.
+- **Text-only**: No binary attachments. The release notes are the changelog.
+- **Structure**: `## What's New / 更新内容` with sub-headers for each feature group, then `## Changes / 变更文件` listing affected files.
+
+### CI Wait Protocol
+1. After `git push`, immediately poll CI status.
+2. If CI is `in_progress` or `queued`: wait 60s, poll again. Report "CI 运行中…" to the user.
+3. If CI completes but `conclusion=failure`: report the failure, do NOT publish locally.
+4. If CI completes and `conclusion=success`: proceed to local npm publish.
+
+### npm Publish Verification
+After local publish, run this verification command:
+```bash
+for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do
+  ver=$(npm view "$pkg" version 2>/dev/null || echo "N/A")
+  echo "$pkg: $ver"
+done
+```
+All 5 packages MUST show the same new version. Report any mismatch.
+
+### Completion Report
+After release is fully done, report:
+- Git tag and commit hash
+- GitHub Release URL
+- All 5 npm package versions
+- CI run URL
 
 ## Skill Sync Rules
 
