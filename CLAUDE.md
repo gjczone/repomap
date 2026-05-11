@@ -207,7 +207,7 @@ cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
 # Manually append ## Optimization Feedback to local copy
 diff -r skills/repomap/references/ ~/.agents/skills/repomap/references/
 
-# 12. Create GitHub Release (bilingual CN+EN changelog, text-only, no binaries)
+# 12. Create GitHub Release — bilingual: English section first, Chinese section second, separated by ---
 ```
 
 ## MCP Server
@@ -299,9 +299,37 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - The description should capture the primary change in 5-8 Chinese characters.
 
 ### GitHub Release Format
-- **Bilingual (CN+EN)**: Every section must have both Chinese and English text, separated by ` / `.
+- **Bilingual, independent sections**: English first, then Chinese. Two complete, independent sections separated by `---`. Do NOT interleave languages within sections.
 - **Text-only**: No binary attachments. The release notes are the changelog.
-- **Structure**: `## What's New / 更新内容` with sub-headers for each feature group, then `## Changes / 变更文件` listing affected files.
+- **Structure**:
+  ```
+  ## What's New
+  (English content — complete paragraphs, no Chinese)
+
+  ### Feature Group 1
+  (English description)
+
+  ### Feature Group 2
+  (English description)
+
+  ## Changes
+  (English file list)
+
+  ---
+
+  ## 更新内容
+  (中文内容 — 完整段落，无英文)
+
+  ### 功能分组 1
+  (中文描述)
+
+  ### 功能分组 2
+  (中文描述)
+
+  ## 变更文件
+  (中文文件列表)
+  ```
+- **Never use inline bilingual format** like `## What's New / 更新内容` or `English text / 中文文本`. Each language section stands alone.
 
 ### CI Wait Protocol
 1. After `git push`, immediately poll CI status.

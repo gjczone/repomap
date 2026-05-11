@@ -1,14 +1,14 @@
-# RepoMap — AI 代理的仓库智能工具
+# RepoMap — 编程代理的代码库感知工具
 
-> **一个 CLI 工具，为 AI 代理提供"项目地图"——在编辑代码之前知道该读什么、改什么会影响什么，编辑之后知道该验证什么。**
+> **一个 CLI 工具，为编程代理提供结构化代码库感知能力——在编辑代码之前知道该从哪读起、改什么会影响什么，编辑之后知道该验证什么。**
 >
-> 两种集成模式：**MCP 服务器**（工具出现在代理的工具列表中）或 **Skill + CLI**（skill 文件指导代理何时调用 CLI）。
+> 专为 **Claude Code**、**Cursor**、**Codex**、**OpenCode** 等 agent harness 构建。两种集成模式：**MCP 服务器**（工具出现在代理的工具列表中）或 **Skill + CLI**（skill 文件指导代理何时调用 CLI）。
 >
 > 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) 构建 &middot; AI 能力由 [DeepSeek](https://chat.deepseek.com/) 提供。
 
 [English README](README.md)
 
-AI 代理使用 repomap 获取结构化仓库上下文，替代 `grep` + 逐文件阅读的猜测：
+编程代理使用 repomap 获取结构化仓库上下文，替代 `grep` + 逐文件阅读的猜测：
 
 - **预定位**：任务该从哪里开始 — `overview`、`query`（含同义词扩展）、`routes --with-consumers`
 - **预防**：改这个文件会影响什么 — `impact`、`call-chain`、`refs`、`state-map`
@@ -29,8 +29,8 @@ repomap doctor   # 验证安装
 
 | | MCP 服务器 | Skill + CLI |
 |---|---|---|
-| **工作原理** | 工具出现在代理的工具列表中。服务器注入激进的工作流指令——模型自行决定何时调用每个工具。 | Skill 文件（`SKILL.md`）告诉代理*何时*和*如何*调用 CLI 命令。代理直接运行 `repomap ...`。 |
-| **最适合** | Claude Code、Cursor、VS Code 或任何支持 MCP 的客户端 | 任何支持自定义 skill 的 AI 编码代理（Claude Code、Codex、OpenCode 等） |
+| **工作原理** | 工具出现在代理的工具列表中。服务器将工作流指令注入系统提示——代理自行决定何时调用每个工具。 | Skill 文件（`SKILL.md`）告诉代理*何时*和*如何*调用 CLI 命令。代理直接运行 `repomap ...`。 |
+| **最适合** | Claude Code、Cursor、VS Code 或任何支持 MCP 的 harness | 任何支持自定义 skill 的编程代理（Claude Code、Codex、OpenCode 等） |
 | **配置** | 添加 5 行 JSON 配置 | 克隆 skill + 安装二进制 |
 
 #### 方式一：MCP 服务器
@@ -78,7 +78,7 @@ repomap doctor   # 验证安装
 
 ---
 
-### LSP 设置（可选，AI 代理自动处理）
+### LSP 设置（可选，代理自动处理）
 
 代理会运行 `repomap lsp doctor` 检查语言服务器。如有缺失：
 
@@ -122,9 +122,9 @@ repomap doctor   # 验证安装
 
 ---
 
-## AI 代理如何使用 RepoMap
+## 编程代理如何使用 RepoMap
 
-你不需要自己输入这些命令。AI 代理根据 MCP 服务器指令或 `skills/repomap/SKILL.md` 中的 skill 定义自动调用。
+你不需要自己输入这些命令。编程代理根据 MCP 服务器指令或 `skills/repomap/SKILL.md` 中的 skill 定义自动调用。
 
 ### 编辑前
 
@@ -158,7 +158,7 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 ## MCP 工具
 
-使用 MCP 服务器（`repomap-mcp-server`）时，以下工具对 AI 代理可用。服务器会注入激进的工作流指令，告诉代理每个工具何时是**必须使用**的。
+使用 MCP 服务器（`repomap-mcp-server`）时，以下工具对编程代理可用。服务器会注入工作流指令，告诉代理每个工具何时**必须使用**。
 
 `repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_git_history` · `repomap_scan`
 
@@ -166,7 +166,7 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 ## 起源
 
-`repomap` 的名称和核心思想来自 **[aider](https://github.com/Aider-AI/aider)**。aider 的作者 Paul Gauthier 首创了"仓库映射"——使用 tree-sitter + PageRank 为 AI 代理提供代码库感知能力。他证明了一个违反直觉的洞见：紧凑的结构化地图在代理理解方面往往优于大量原始代码。
+`repomap` 的名称和核心思想来自 **[aider](https://github.com/Aider-AI/aider)**。aider 的作者 Paul Gauthier 首创了"仓库映射"——使用 tree-sitter + PageRank 为编程代理提供代码库感知能力。他证明了一个违反直觉的洞见：紧凑的结构化地图在代理理解方面往往优于大量原始代码。
 
 `repomap` 扩展了这一概念：15 种语言、增量扫描、查询同义词扩展、路由消费者映射、合约风险检测、状态映射、社区检测以及可选的 LSP 集成。
 
@@ -174,7 +174,7 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 ## 相关项目
 
-- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。repomap 的核心思想（tree-sitter + PageRank 为 AI 代理提供代码库感知）源自 aider。
+- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。repomap 的核心思想（tree-sitter + PageRank 为编程代理提供代码库感知）源自 aider。
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们通过 [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
 
 ---

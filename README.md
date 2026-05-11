@@ -1,14 +1,14 @@
-# RepoMap — Repository Intelligence for AI Agents
+# RepoMap — Codebase Awareness for Coding Agents
 
-> **A CLI tool that gives AI agents a "project map" — where to start reading, what a change affects, and what to verify — before and after editing code.**
+> **A CLI tool that gives coding agents structured codebase awareness — where to start reading, what a change breaks, and what to verify — before and after editing code.**
 >
-> Two integration modes: **MCP Server** (tools appear in agent's tool list) or **Skill + CLI** (skill file guides agent to call CLI directly).
+> Built for agent harnesses like **Claude Code**, **Cursor**, **Codex**, and **OpenCode**. Two integration modes: **MCP Server** (tools appear in the agent's tool list) or **Skill + CLI** (a skill file guides the agent to call the CLI directly).
 >
 > Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map concept. Built by [@gjczone](https://github.com/gjczone) &middot; AI-powered by [DeepSeek](https://chat.deepseek.com/).
 
 [中文 README](README.zh-CN.md)
 
-AI agents use repomap to get structured repository context instead of guessing via `grep` + raw file reads:
+Coding agents use repomap to get structured repository context instead of guessing via `grep` + raw file reads:
 
 - **Pre-positioning**: where to start for a task — `overview`, `query` (with synonym expansion), `routes --with-consumers`
 - **Prevention**: what will break if I edit this — `impact`, `call-chain`, `refs`, `state-map`
@@ -29,8 +29,8 @@ repomap doctor   # verify it works
 
 | | MCP Server | Skill + CLI |
 |---|---|---|
-| **How it works** | Tools appear in the agent's tool list. The server injects aggressive workflow instructions — the model decides when to call each tool. | A skill file (`SKILL.md`) tells the agent *when* and *how* to call each CLI command. The agent runs `repomap ...` directly. |
-| **Best for** | Claude Code, Cursor, VS Code, or any MCP-compatible client | Any AI coding agent that supports custom skills (Claude Code, Codex, OpenCode, etc.) |
+| **How it works** | Tools appear in the agent's tool list. The server injects workflow instructions into the system prompt — the agent decides when to call each tool. | A skill file (`SKILL.md`) tells the agent *when* and *how* to call each CLI command. The agent runs `repomap ...` directly. |
+| **Best for** | Claude Code, Cursor, VS Code, or any MCP-compatible harness | Any coding agent that supports custom skills (Claude Code, Codex, OpenCode, etc.) |
 | **Setup** | Add 5 lines of JSON config | Clone skill + install binary |
 
 #### Option 1: MCP Server
@@ -50,7 +50,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 
 Or via CLI: `claude mcp add --transport stdio repomap -- npx --force-refresh -y repomap-mcp-server`
 
-**What happens**: 18 MCP tools appear in your agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
+**What happens**: 18 MCP tools appear in the agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
 
 #### Option 2: Skill + CLI
 
@@ -80,7 +80,7 @@ Install repomap for me:
 
 ---
 
-### LSP setup (optional, agent handles this)
+### LSP setup (optional, the agent handles this)
 
 The agent runs `repomap lsp doctor` to check language servers. If missing:
 
@@ -124,9 +124,9 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 
 ---
 
-## How AI Agents Use Repomap
+## How Coding Agents Use Repomap
 
-You don't type these commands yourself. The AI agent calls them during its work, guided by either the MCP server instructions or the skill file at `skills/repomap/SKILL.md`.
+You don't type these commands yourself. The coding agent calls them during its work, guided by either the MCP server instructions or the skill file at `skills/repomap/SKILL.md`.
 
 ### Before editing
 
@@ -160,7 +160,7 @@ repomap orphan --project . --min-confidence 70        # Dead code check after de
 
 ## MCP Tools
 
-When using the MCP server (`repomap-mcp-server`), the following tools are available to the AI agent. The server injects aggressive workflow instructions telling the agent when each tool is MANDATORY.
+When using the MCP server (`repomap-mcp-server`), the following tools are available to the coding agent. The server injects workflow instructions telling the agent when each tool is MANDATORY.
 
 `repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_git_history` · `repomap_scan`
 
@@ -168,15 +168,15 @@ When using the MCP server (`repomap-mcp-server`), the following tools are availa
 
 ## Origin
 
-`repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — tree-sitter + PageRank for AI-agent codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding.
+`repomap`'s name and core idea come from **[aider](https://github.com/Aider-AI/aider)**. aider's author Paul Gauthier pioneered "repo mapping" — tree-sitter + PageRank for coding-agent codebase awareness. He proved a counterintuitive insight: a compact structural map often outperforms large amounts of raw code for agent understanding.
 
-`repomap` extends the concept: 15 languages, incremental scanning, query synonym expansion, route-to-consumer mapping, contract risk detection, state-map, community detection, and optional LSP integration.
+`repomap` extends the concept: 15 languages, incremental scanning, query synonym expansion, route-to-consumer mapping, contract risk detection, state mapping, community detection, and optional LSP integration.
 
 ---
 
 ## Related Projects
 
-- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer. repomap's core idea (tree-sitter + PageRank for agent codebase awareness) comes from aider.
+- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer. repomap's core idea (tree-sitter + PageRank for coding-agent codebase awareness) comes from aider.
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — we contributed `deepmap`, a Rust port of repomap's engine, via [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap).
 
 ---
