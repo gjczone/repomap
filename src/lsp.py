@@ -464,6 +464,7 @@ class StdioLspClient:
             # 请求期间可能收到 diagnostics 等通知；这里丢弃非目标消息，
             # 避免同一通知被反复放回队列导致请求超时。
             if "id" not in message:
+                time.sleep(0.01)
                 continue
             time.sleep(0.01)
         # 超时后检查进程是否已退出，给出更精确的诊断
