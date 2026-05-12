@@ -2,7 +2,7 @@
 
 > Tree-sitter project maps, 13-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
 >
-> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with [DeepSeek](https://chat.deepseek.com/).
+> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with deepseek-v4-pro.
 
 [中文 README](README.zh-CN.md)
 
@@ -55,7 +55,7 @@ Add to `~/.claude/settings.json`:
 
 Or via CLI: `claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
 
-**Result**: 19 MCP tools (`repomap_overview`, `repomap_query`, `repomap_impact`, ...) with mandatory workflow rules injected into the system prompt.
+**Result**: 19 MCP tools with mandatory workflow rules injected into the system prompt.
 
 > **Skill vs MCP**: Skill mode gives the agent a decision procedure (when to call what). MCP mode gives it tools with descriptions. Both work — choose based on your harness. Skill mode works with any agent that reads markdown files; MCP mode needs MCP protocol support.
 
@@ -71,7 +71,20 @@ repomap lsp setup --dry-run          # preview install plan
 repomap lsp setup                    # install missing servers
 ```
 
-**Default servers** (auto-detected per language): `pyright` (Python), `typescript-language-server` (TS/JS), `rust-analyzer` (Rust), `gopls` (Go), `clangd` (C/C++), `csharp-ls` (C#), `jdtls` (Java), `lua-language-server` (Lua), `intelephense` (PHP), `ruby-lsp` (Ruby), `sourcekit-lsp` (Swift), `kotlin-language-server` (Kotlin).
+| Language | Server | Install |
+|----------|--------|---------|
+| Python | `pyright` | `npm install -g pyright` |
+| TypeScript / JS | `typescript-language-server` | `npm install -g typescript-language-server typescript` |
+| Rust | `rust-analyzer` | `rustup component add rust-analyzer` |
+| Go | `gopls` | `go install golang.org/x/tools/gopls@latest` |
+| C / C++ | `clangd` | `apt install clangd` / `brew install llvm` |
+| C# | `csharp-ls` | `dotnet tool install -g csharp-ls` |
+| Java | `jdtls` | mason or manual |
+| Lua | `lua-language-server` | `npm install -g lua-language-server` |
+| PHP | `intelephense` | `npm install -g intelephense` |
+| Ruby | `ruby-lsp` | `gem install ruby-lsp` |
+| Swift | `sourcekit-lsp` | bundled with Xcode / Swift toolchain |
+| Kotlin | `kotlin-language-server` | mason or manual |
 
 All commands work without LSP — it's an opt-in precision layer.
 
@@ -120,34 +133,35 @@ repomap orphan --project . --min-confidence 70        # dead code check
 
 ---
 
-## Supported Languages
-
-**8 built-in** (zero config): Python, JavaScript, TypeScript (TSX), Go, Rust, HTML, CSS, JSON
-
-**7 extended** (`npm install -g repomap-bin` includes all): Java, Kotlin, Swift, C/C++, C#, PHP, Ruby
-
----
-
 ## MCP Tools
 
 Available when using the MCP server:
 
-`repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_doctor` · `repomap_lsp_setup` · `repomap_scan`
+| Tool | Maps to |
+|------|---------|
+| `repomap_overview` | `overview` |
+| `repomap_query` | `query` |
+| `repomap_file_detail` | `file-detail` |
+| `repomap_impact` | `impact` |
+| `repomap_call_chain` | `call-chain` |
+| `repomap_query_symbol` | `query-symbol` |
+| `repomap_refs` | `refs` |
+| `repomap_routes` / `repomap_routes_consumers` | `routes` |
+| `repomap_state_map` | `state-map` |
+| `repomap_verify` | `verify` |
+| `repomap_check` | `check` |
+| `repomap_orphan` | `orphan` |
+| `repomap_hotspots` | `hotspots` |
+| `repomap_diff` / `repomap_cache_save` | `diff` / `cache save` |
+| `repomap_doctor` | `doctor` |
+| `repomap_lsp_setup` | `lsp setup` |
+| `repomap_scan` | `scan` |
 
 ---
 
 ## Origin
 
-`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)**. Paul Gauthier pioneered repo mapping — tree-sitter + PageRank for coding-agent codebase awareness — proving that a compact structural map often outperforms raw code for agent understanding.
-
-`repomap` extends the concept: 15 languages, incremental scanning, query synonym expansion, route-to-consumer mapping, contract risk detection, state mapping, and optional LSP integration.
-
----
-
-## Related Projects
-
-- **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer.
-- **[serena](https://github.com/oraios/serena)** — full-featured MCP coding toolkit with deep LSP (solidlsp). repomap v2.3 adopted serena's LSP detection patterns, `TextLine`/`MatchedConsecutiveLines` search formatting, and `NamePath`-style hierarchical symbol indexing.
+`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)** — tree-sitter + PageRank for coding-agent codebase awareness. v2.3 incorporated LSP patterns from **[serena](https://github.com/oraios/serena)**, including auto-detection, search result formatting, and hierarchical symbol indexing.
 
 ---
 
