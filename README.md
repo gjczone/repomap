@@ -50,7 +50,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 
 Or via CLI: `claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
 
-**What happens**: 18 MCP tools appear in the agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
+**What happens**: 19 MCP tools appear in the agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
 
 #### Option 2: Skill + CLI
 
@@ -82,7 +82,7 @@ Install repomap for me:
 
 ### LSP setup (optional, the agent handles this)
 
-The agent runs `repomap lsp doctor` to check language servers, then `repomap lsp setup` to install missing ones automatically:
+The agent runs `repomap doctor --lsp` to check language servers, then `repomap lsp setup` to install missing ones automatically:
 
 ```
 repomap lsp setup --dry-run   # preview install plan
@@ -160,7 +160,7 @@ repomap orphan --project . --min-confidence 70        # Dead code check after de
 
 When using the MCP server (`repomap-mcp-server`), the following tools are available to the coding agent. The server injects workflow instructions telling the agent when each tool is MANDATORY.
 
-`repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_git_history` · `repomap_scan`
+`repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_doctor` · `repomap_lsp_setup` · `repomap_scan`
 
 ---
 

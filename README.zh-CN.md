@@ -50,7 +50,7 @@ repomap doctor   # 验证安装
 
 或命令行：`claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
 
-**效果**：18 个 MCP 工具出现在代理的工具列表中（`repomap_overview`、`repomap_query`、`repomap_impact` 等）。MCP 服务器注入强制性工作流指令——代理被要求在 grep 之前、读文件之前、编辑之前和编辑之后使用这些工具。每个工具描述都包含何时"必须用"和"可选"的决策规则。
+**效果**：19 个 MCP 工具出现在代理的工具列表中（`repomap_overview`、`repomap_query`、`repomap_impact` 等）。MCP 服务器注入强制性工作流指令——代理被要求在 grep 之前、读文件之前、编辑之前和编辑之后使用这些工具。每个工具描述都包含何时"必须用"和"可选"的决策规则。
 
 #### 方式二：Skill + CLI
 
@@ -80,7 +80,7 @@ repomap doctor   # 验证安装
 
 ### LSP 设置（可选，代理自动处理）
 
-代理会运行 `repomap lsp doctor` 检查语言服务器，然后通过 `repomap lsp setup` 自动安装缺失的服务器：
+代理会运行 `repomap doctor --lsp` 检查语言服务器，然后通过 `repomap lsp setup` 自动安装缺失的服务器：
 
 ```
 repomap lsp setup --dry-run   # 预览安装计划
@@ -158,7 +158,7 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 使用 MCP 服务器（`repomap-mcp-server`）时，以下工具对编程代理可用。服务器会注入工作流指令，告诉代理每个工具何时**必须使用**。
 
-`repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_git_history` · `repomap_scan`
+`repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_doctor` · `repomap_lsp_setup` · `repomap_scan`
 
 ---
 

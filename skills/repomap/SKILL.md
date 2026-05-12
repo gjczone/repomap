@@ -28,7 +28,7 @@ For most non-trivial coding tasks:
 1. Unknown area: `repomap query --project <project> --query <topic>` or `repomap overview --project <project>`.
 2. Known file: `repomap file-detail --project <project> --file-path <file>`.
 3. Before editing known files: `repomap impact --project <project> --files <file...> --with-symbols`.
-4. Before changing a known function/class/method: `repomap query-symbol --project <project> --symbol <name>`, then `repomap call-chain --project <project> --symbol <name>` and/or `repomap refs --project <project> --symbol <name>`. Run `lsp doctor` early; when LSP is available, always add `--with-lsp`.
+4. Before changing a known function/class/method: `repomap query-symbol --project <project> --symbol <name>`, then `repomap call-chain --project <project> --symbol <name>` and/or `repomap refs --project <project> --symbol <name>`. Run `doctor --lsp` early; when LSP is available, always add `--with-lsp`.
 5. After editing: `repomap verify --project <project>`; add `--with-lsp` for focused local LSP evidence and `--with-diff` when a cache baseline exists.
 
 ## Command selection
@@ -103,22 +103,22 @@ Use `orphan` to discover dead-code candidates, not to justify deletion. Always v
 ### `refs` and `call-chain`
 Use `refs` and `call-chain` before changing a symbol's behavior or signature. When `refs` shows callers in multiple files, inspect each caller before changing the signature. When `call-chain` shows deep chains, focus on direct callers first.
 
-### `check` and `diagnostics`
-Use `check` or `diagnostics` when compiler/type/lint evidence is needed. When `check` reports `unknown`, it means no tool ran; do not treat it as passing. When `check` reports failure, investigate before claiming completion.
+### `check`
+Use `check` when compiler/type/lint evidence is needed. Add `--with-lsp` for focused LSP diagnostics on explicit files. When `check` reports `unknown`, it means no tool ran; do not treat it as passing. When `check` reports failure, investigate before claiming completion.
 
-### `lsp doctor` and LSP evidence
-Use `lsp doctor` early — before your first edit in a project — to confirm which language servers are available. When LSP is available, add `--with-lsp` to `query-symbol`, `refs`, `verify`, or `check` for compiler-grade precision on definitions, references, and diagnostics. LSP evidence is especially valuable before refactoring, signature changes, or deleting code. Do not treat LSP as optional when a language server is detected — it is the highest-precision signal repomap can provide.
+### `doctor --lsp` and LSP evidence
+Use `doctor --lsp` early — before your first edit in a project — to confirm which language servers are available and get install suggestions. When LSP is available, add `--with-lsp` to `query-symbol`, `refs`, `file-detail`, `verify`, or `check` for compiler-grade precision on definitions, references, and diagnostics. LSP evidence is especially valuable before refactoring, signature changes, or deleting code. Do not treat LSP as optional when a language server is detected — it is the highest-precision signal repomap can provide.
 
 ## Before editing
 
 1. Use RepoMap to locate likely files and compute relationships.
-2. Run `lsp doctor` to confirm which language servers are available; use `--with-lsp` on `query-symbol` and `refs` when available.
+2. Run `doctor --lsp` to confirm which language servers are available; use `--with-lsp` on `query-symbol` and `refs` when available.
 3. Read the relevant files before editing; do not edit based on RepoMap output alone.
 4. When the change touches API, state, or persistence, check `routes --with-consumers` (for API consumers), `state-map --symbol <name>` (for state/lifecycle changes), `refs`, and `call-chain` for cross-boundary relationships.
 
 ## After editing
 
-1. Run `verify --with-lsp` as the default post-edit evidence gate. The `--with-lsp` flag adds compiler-grade diagnostics for changed files — use it whenever LSP is available (check with `lsp doctor` first).
+1. Run `verify --with-lsp` as the default post-edit evidence gate. The `--with-lsp` flag adds compiler-grade diagnostics for changed files — use it whenever LSP is available (check with `doctor --lsp` first).
 2. Address each contract risk warning before final handoff.
 3. Run tests separately; RepoMap does not run tests.
 4. If `verify` shows missing evidence (e.g., diagnostics skipped), state the limitation in your completion report.
@@ -161,7 +161,7 @@ Use `lsp doctor` early — before your first edit in a project — to confirm wh
 
 1. `query --project <project> --query <error/domain>` to find likely files.
 2. `query-symbol --project <project> --symbol <name>`, `refs --project <project> --symbol <name>`, or `call-chain --project <project> --symbol <name>` once a symbol is suspected.
-3. `git-history --project <project> --symbol <name>` only if recent change context matters and the project is a git repo.
+3. (deleted — git-history command has been removed)
 4. Use `check --project <project>` or `verify --project <project>` after a fix.
 
 ### API / endpoint change
@@ -189,11 +189,11 @@ Use `lsp doctor` early — before your first edit in a project — to confirm wh
 
 ### Post-edit validation
 
-1. `lsp doctor --project <project>` to confirm LSP availability.
+1. `doctor --lsp --project <project>` to confirm LSP availability.
 2. `verify --project <project> --with-lsp` as the default final evidence gate (adds compiler-grade diagnostics when LSP is available).
 3. Add `--with-diff` when a pre-edit `cache save` baseline exists and graph-change evidence matters.
 4. Review contract risk warnings in verify output; address each one before claiming completion.
-5. Use `verify --project <project> --quick`, `check --project <project>`, `diagnostics --project <project> --source lsp --files <file...>`, or `diff --project <project>` directly when you need specific evidence instead of the aggregated gate.
+5. Use `verify --project <project> --quick`, `check --project <project> --with-lsp`, or `diff --project <project>` directly when you need specific evidence instead of the aggregated gate.
 
 ## LSP
 
