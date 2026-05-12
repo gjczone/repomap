@@ -588,7 +588,7 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
             write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
             stdout = io.StringIO()
-            with patch("src.cli.cli._collect_lsp_evidence_for_symbol", return_value=fake_run):
+            with patch("src.cli.handlers._collect_lsp_evidence_for_symbol", return_value=fake_run):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                     exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper", "--with-lsp"])
 
@@ -618,7 +618,7 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
             write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
             stdout = io.StringIO()
-            with patch("src.cli.cli._collect_lsp_evidence_for_symbol", return_value=fake_run):
+            with patch("src.cli.handlers._collect_lsp_evidence_for_symbol", return_value=fake_run):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                     exit_code = main([
                         "refs", "--project", project_root, "--symbol", "helper",
