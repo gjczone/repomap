@@ -9,7 +9,7 @@
 - **Shape**: Python package (`src/`) + prebuilt binaries for Linux/macOS/Windows (CI-built, distributed via npm platform packages)
 - **Core capability**: tree-sitter AST → symbol extraction → import resolution → call-chain analysis → AI-friendly reports
 - **Languages**: Python, JS/TS (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
-- **Distribution**: MCP (`npx repomap-mcp-server`) / npm (`repomap-bin`) / skill (`skills/repomap/` → `~/.claude/skills/repomap/`) + binary (`~/.local/bin/repomap`)
+- **Distribution**: MCP (`npx repomap-mcp-server@latest`) / npm (`repomap-bin`) / skill (`skills/repomap/` → `~/.claude/skills/repomap/`) + binary (`~/.local/bin/repomap`)
 - **No server/daemon**: LSP integration is opt-in, local-only, stdio-based
 
 ## Commands
@@ -32,7 +32,8 @@ All via `repomap <subcommand> --project <path>`.
 | `orphan [--json]` | Dead-code candidate discovery |
 | `hotspots` | Dense-file inventory |
 | `cache save` / `diff` | Graph baseline + comparison |
-| `lsp doctor` | Inspect local LSP availability |
+| `lsp setup` | Auto-install LSP servers for detected languages (supports 13 languages) |
+| `doctor` | Validate runtime + check LSP availability with `--lsp` |
 
 ```bash
 # Run from source

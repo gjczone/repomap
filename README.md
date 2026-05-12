@@ -48,7 +48,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 }
 ```
 
-Or via CLI: `claude mcp add --transport stdio repomap -- npx --force-refresh -y repomap-mcp-server`
+Or via CLI: `claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
 
 **What happens**: 18 MCP tools appear in the agent's tool list (`repomap_overview`, `repomap_query`, `repomap_impact`, etc.). The MCP server injects mandatory workflow instructions — the agent is told to use these tools BEFORE grep, BEFORE file reads, BEFORE edits, and AFTER edits. Each tool description includes decision rules about when it's MANDATORY vs. optional.
 
