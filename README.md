@@ -42,7 +42,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
   "mcpServers": {
     "repomap": {
       "command": "npx",
-      "args": ["--force-refresh", "-y", "repomap-mcp-server"]
+      "args": ["-y", "repomap-mcp-server@latest"]
     }
   }
 }
@@ -175,6 +175,7 @@ When using the MCP server (`repomap-mcp-server`), the following tools are availa
 ## Related Projects
 
 - **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer. repomap's core idea (tree-sitter + PageRank for coding-agent codebase awareness) comes from aider.
+- **[serena](https://github.com/oraios/serena)** — a full-featured MCP coding toolkit with deep LSP integration (solidlsp). repomap v2.3 adopted serena's LSP server auto-detection patterns, `TextLine`/`MatchedConsecutiveLines` search result formatting, and `NamePath`-style hierarchical symbol indexing. Serena's agent-first tool design and configuration system remain key references.
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — we contributed `deepmap`, a Rust port of repomap's engine, via [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap).
 
 ---

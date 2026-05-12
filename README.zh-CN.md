@@ -42,7 +42,7 @@ repomap doctor   # 验证安装
   "mcpServers": {
     "repomap": {
       "command": "npx",
-      "args": ["--force-refresh", "-y", "repomap-mcp-server"]
+      "args": ["-y", "repomap-mcp-server@latest"]
     }
   }
 }
@@ -173,6 +173,7 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 ## 相关项目
 
 - **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。repomap 的核心思想（tree-sitter + PageRank 为编程代理提供代码库感知）源自 aider。
+- **[serena](https://github.com/oraios/serena)** — 功能全面的 MCP 编程工具包，深度 LSP 集成（solidlsp）。repomap v2.3 借鉴了 serena 的 LSP 服务器自动检测模式、`TextLine`/`MatchedConsecutiveLines` 搜索结果格式和 `NamePath` 风格的分级符号索引。serena 的 Agent-first 工具设计和配置系统仍是重要参考。
 - **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们通过 [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
 
 ---
