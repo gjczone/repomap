@@ -170,9 +170,15 @@ uv run --with pyinstaller python -m src.cli build-binary --output dist
 cp dist/repomap mcp/repomap-bin/platforms/repomap-bin-linux-x64/repomap
 # Binary at ~/.local/bin/repomap must be symlinked to dist/repomap
 
-# 4. Smoke test
+# 4. Smoke test (current project)
 repomap doctor
 repomap overview --project .
+
+# 4.5. Smoke test with local projects (MANDATORY before release)
+#    - Test in at least 2-3 local projects of different languages/frameworks
+#    - Verify: overview, query, file-detail --with-lsp, call-chain, refs, verify --quick
+#    - Verify: lsp setup --dry-run detects languages correctly
+#    - Verify: doctor --lsp finds available servers
 
 # 5. Evaluate: does SKILL.md need updating?
 #    - New commands or changed options → update Command selection table
@@ -184,13 +190,18 @@ repomap overview --project .
 #    - New repomap commands → update Section 8.1 command lists
 #    - Changed distribution method → update availability description
 
-# 7. Rebuild MCP if TypeScript changed
+# 7. Rebuild MCP ALWAYS — even if TypeScript didn't change, to sync version
 cd mcp && npm run build && cd ..
+
+# 7.5. Verify MCP tools match CLI commands
+#    - Check mcp/src/tools.ts for any tools referencing deleted CLI commands
+#    - Check for missing tools for new CLI commands
+#    - Rebuild MCP after any tool.ts changes
 
 # 8. Bump version in all 7 locations (see Distribution Policies)
 
 # 9. Commit + push → CI auto-publishes platform packages
-#    Commit message format: [release]: vX.Y.Z — 简短中文描述
+#    Commit message format: [release]: vX.Y.Z — English summary of primary change
 
 # 10. Wait for CI to complete, then publish repomap-bin + repomap-mcp-server locally
 #     - Poll CI status: gh run list --repo gjczone/repomap --branch main --limit 1 --json status,conclusion
@@ -296,8 +307,23 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - When in doubt, ask the user; default to minor for feature work.
 
 ### Commit Message
-- Format: `[release]: vX.Y.Z — 简短中文描述`
-- The description should capture the primary change in 5-8 Chinese characters.
+- Format: `[release]: vX.Y.Z — English summary of primary change`
+- The description should capture the primary change in English (5-10 words).
+- Example: `[release]: v2.3.0 — LSP 13 languages + gitignore parsing + search format`
+- Type tag `[release]` is always in English; the summary after `—` is also in English.
+
+### Pre-Release Testing
+- **MANDATORY**: smoke test with at least 2-3 local projects before any release commit
+- Test in projects with different language mixes (pure Python, TS+Python, etc.)
+- Key commands to verify: `overview`, `query`, `file-detail --with-lsp`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
+- If any command fails, fix before proceeding with the release
+
+### MCP Sync
+- After ANY CLI command change (add/remove/rename), update `mcp/src/tools.ts`
+- Delete tools for removed CLI commands, add tools for new CLI commands
+- Update parameter schemas for commands with new options
+- Rebuild MCP: `cd mcp && npm run build && cd ..`
+- MCP version must ALWAYS match CLI version
 
 ### GitHub Release Format
 - **Bilingual, independent sections**: English first, then Chinese. Two complete, independent sections separated by `---`. Do NOT interleave languages within sections.
