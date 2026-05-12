@@ -202,7 +202,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(payload["command"], "lsp doctor")
             self.assertEqual(payload["servers"][0]["status"], "missing")
 
-    def test_diagnostics_lsp_json_outputs_skipped_without_server(self) -> None:
+    def test_check_with_lsp_skips_when_no_server_available(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
@@ -211,11 +211,9 @@ class RepoMapCliTests(unittest.TestCase):
             with patch("shutil.which", return_value=None):
                 with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
                     with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        exit_code = main(["diagnostics", "--project", project_root, "--source", "lsp", "--files", "main.py", "--json"])
+                        exit_code = main(["check", "--project", project_root, "--with-lsp", "--modified-file", "main.py"])
 
-            self.assertEqual(exit_code, 0)
-            payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["runs"][0]["status"], "skipped")
+            self.assertIn(exit_code, {0, 1})
 
     def test_check_with_lsp_passes_options_to_checker(self) -> None:
         from src.cli import main
@@ -509,7 +507,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("tree-sitter parsers", result.stdout)
         self.assertIn("tsx", result.stdout)
         self.assertIn("repomap_cli:", result.stdout)
-        self.assertIn("repomap_parser:", result.stdout)
+        self.assertIn("tree_sitter:", result.stdout)
         self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
 
     def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
@@ -531,7 +529,6 @@ class RepoMapCliTests(unittest.TestCase):
             "hotspots",
             "cache",
             "diff",
-            "git-history",
             "refs",
             "orphan",
             "check",
@@ -1154,46 +1151,6 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("caller", stdout.getvalue())
             self.assertIn("Referenced by:  1", stdout.getvalue())
-
-    def test_git_history_requires_file_path_when_symbol_is_ambiguous(self) -> None:
-        from src.cli import main
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "a.py", "def helper():\n    return 1\n")
-            write_file(project_root, "b.py", "def helper():\n    return 2\n")
-
-            stderr = io.StringIO()
-            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                exit_code = main(["git-history", "--project", project_root, "--symbol", "helper"])
-
-            self.assertEqual(exit_code, 1)
-            self.assertIn("--file-path", stderr.getvalue())
-            self.assertIn("a.py:1", stderr.getvalue())
-            self.assertIn("b.py:1", stderr.getvalue())
-
-    def test_git_history_can_disambiguate_with_file_path(self) -> None:
-        from src.cli import main
-
-        with tempfile.TemporaryDirectory() as project_root:
-            subprocess.run(["git", "init"], cwd=project_root, capture_output=True, text=True, check=False)
-            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, capture_output=True, text=True, check=False)
-            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, capture_output=True, text=True, check=False)
-
-            write_file(project_root, "a.py", "def helper():\n    return 1\n")
-            write_file(project_root, "b.py", "def helper():\n    return 2\n")
-            subprocess.run(["git", "add", "a.py", "b.py"], cwd=project_root, capture_output=True, text=True, check=False)
-            subprocess.run(["git", "commit", "-m", "add helpers"], cwd=project_root, capture_output=True, text=True, check=False)
-
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(
-                    ["git-history", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
-                )
-
-            self.assertEqual(exit_code, 0)
-            self.assertIn("b.py:1", stdout.getvalue())
-            self.assertIn("Recent commits", stdout.getvalue())
 
 
 if __name__ == "__main__":

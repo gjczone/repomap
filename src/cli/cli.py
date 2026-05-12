@@ -207,11 +207,6 @@ def build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
     diff_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
-    git_parser = subparsers.add_parser("git-history", help="Scan a repository and inspect symbol git history.")
-    _add_project_args(git_parser)
-    git_parser.add_argument("--symbol", required=True, help="Symbol name to inspect.")
-    git_parser.add_argument("--file-path", help="Disambiguate by relative file path.")
-
     refs_parser = subparsers.add_parser("refs", help="Scan a repository and analyze references.")
     _add_project_args(refs_parser)
     refs_parser.add_argument("--symbol", help="Optional symbol name.")
@@ -242,14 +237,6 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     check_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum explicit files to open through LSP.")
 
-    diagnostics_parser = subparsers.add_parser("diagnostics", help="Focused diagnostics for explicit files from optional evidence sources.")
-    diagnostics_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
-    diagnostics_parser.add_argument("--source", choices=["lsp"], default="lsp", help="Diagnostics source.")
-    diagnostics_parser.add_argument("--files", nargs="+", required=True, help="Project files to check with the diagnostics source.")
-    diagnostics_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
-    diagnostics_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
-    diagnostics_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum files to open through LSP.")
-
     lsp_parser = subparsers.add_parser("lsp", help="Inspect local LSP server availability.")
     lsp_subparsers = lsp_parser.add_subparsers(dest="lsp_command", required=True)
     lsp_doctor_parser = lsp_subparsers.add_parser("doctor", help="Detect local LSP servers without starting analysis.")
@@ -265,8 +252,9 @@ def build_parser() -> argparse.ArgumentParser:
     routes_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     routes_parser.add_argument("--with-consumers", action="store_true", help="Scan for frontend/client consumers of each route.")
 
-    doctor_parser = subparsers.add_parser("doctor", help="Validate runtime and build prerequisites.")
+    doctor_parser = subparsers.add_parser("doctor", help="Validate runtime, prerequisites, and LSP server availability.")
     doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    doctor_parser.add_argument("--lsp", action="store_true", help="Also check LSP server availability and suggest install commands.")
 
     state_map_parser = subparsers.add_parser("state-map", help="Map state values, writers, and readers for an enum/type.")
     _add_project_args(state_map_parser)
@@ -369,8 +357,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_cache(args.project, args.action)
     if command == "diff":
         return run_diff(args.project, args.json)
-    if command == "git-history":
-        return run_git_history(args.project, args.max_files, args.symbol, args.file_path)
     if command == "refs":
         return run_refs(args.project, args.max_files, args.symbol, args.file_path, args.json, args.with_lsp, args.lsp_timeout)
     if command == "orphan":
@@ -387,8 +373,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
         )
-    if command == "diagnostics":
-        return run_diagnostics(args.project, args.source, args.files, args.json, args.lsp_timeout, args.lsp_max_files)
     if command == "lsp":
         if args.lsp_command == "doctor":
             return run_lsp_doctor(args.project, args.json)
@@ -399,7 +383,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "routes":
         return run_routes(args.project, args.max_files, args.json, args.with_consumers)
     if command == "doctor":
-        return run_doctor(args.project)
+        return run_doctor(args.project, getattr(args, "lsp", False))
     if command == "state-map":
         return run_state_map(args.project, args.max_files, args.symbol, args.query, args.json)
     if command == "build-binary":
@@ -1511,7 +1495,7 @@ def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[
     suggested: list[str] = []
     if available and target_files:
         files_arg = " ".join(target_files)
-        suggested.append(f"repomap diagnostics --project {project_root} --source lsp --files {files_arg}")
+        suggested.append(f"repomap check --project {project_root} --with-lsp --modified-file {files_arg}")
         suggested.append(f"repomap refs --project {project_root} --symbol <symbol> --file-path <file> --with-lsp")
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 
@@ -2124,54 +2108,6 @@ def run_verify(
         return 1
 
 
-def run_git_history(project: str, max_files: int, symbol: str, file_path: str | None) -> int:
-    try:
-        engine = _scan_engine(project, max_files)
-        selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
-        if error:
-            print(error, file=sys.stderr)
-            return 1
-        assert selected is not None
-        target = selected
-        result = subprocess.run(
-            ["git", "blame", "-L", f"{target.line},{target.line}", "-p", target.file],
-            cwd=engine.project_root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode != 0:
-            print(
-                f"📍 Symbol: `{target.name}`\n📁 Location: `{target.file}:{target.line}`\n\n❌ Git info unavailable (may not be a git repository)",
-                file=sys.stderr,
-            )
-            return 1
-        commit_hash = result.stdout.split()[0] if result.stdout else "unknown"
-        file_commits = subprocess.run(
-            ["git", "log", "--follow", "-10", "--format=%H|%an|%ad|%s", "--", target.file],
-            cwd=engine.project_root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        lines = [f"## Git History — `{target.name}`\n"]
-        lines.append(f"📍 Location: `{target.file}:{target.line}`")
-        lines.append(f"🔖 Current commit: `{commit_hash[:8]}`\n")
-        if file_commits.returncode == 0 and file_commits.stdout:
-            lines.append("**Recent commits**:")
-            for row in file_commits.stdout.strip().split("\n")[:5]:
-                parts = row.split("|", 3)
-                if len(parts) >= 4:
-                    lines.append(f"  - `[{parts[0][:8]}]` {parts[2][:10]} by {parts[1]}: {parts[3][:50]}")
-        print("\n".join(lines))
-        return 0
-    except Exception as exc:
-        print(f"[{CLI_NAME}] git-history failed: {exc}", file=sys.stderr)
-        return 1
-
-
 def run_refs(
     project: str,
     max_files: int,
@@ -2596,76 +2532,6 @@ def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: boo
         return 1
 
 
-def run_diagnostics(
-    project: str,
-    source: str,
-    files: list[str],
-    as_json: bool,
-    lsp_timeout: float,
-    lsp_max_files: int,
-) -> int:
-    try:
-        project_root = _resolve_project(project)
-        normalized_files = _normalize_project_relative_paths(project_root, files, must_exist=True)
-        if source != "lsp":
-            print(f"[{CLI_NAME}] unsupported diagnostics source: {source}", file=sys.stderr)
-            return 2
-        from ..lsp import collect_lsp_diagnostics, run_result_to_dict
-
-        runs = collect_lsp_diagnostics(project_root, normalized_files, timeout=lsp_timeout, max_files=lsp_max_files)
-        payload = {
-            "command": "diagnostics",
-            "project": project_root,
-            "source": source,
-            "files": normalized_files,
-            "runs": [run_result_to_dict(run) for run in runs],
-        }
-        total_errors = sum(1 for run in runs for item in run.diagnostics if item.severity == "error")
-        total_warnings = sum(1 for run in runs for item in run.diagnostics if item.severity != "error")
-        payload["summary"] = {
-            "totalErrors": total_errors,
-            "totalWarnings": total_warnings,
-            "failedRuns": sum(1 for run in runs if run.status in {"failed", "timeout"}),
-            "skippedRuns": sum(1 for run in runs if run.status == "skipped"),
-        }
-        if as_json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
-        else:
-            print(_format_lsp_diagnostics_report(payload))
-        return 1 if total_errors or payload["summary"]["failedRuns"] else 0
-    except ValueError as exc:
-        print(f"[{CLI_NAME}] diagnostics failed: {exc}", file=sys.stderr)
-        return 1
-    except Exception as exc:
-        print(f"[{CLI_NAME}] diagnostics failed: {exc}", file=sys.stderr)
-        return 1
-
-
-def _format_lsp_diagnostics_report(payload: dict[str, Any]) -> str:
-    lines = ["## LSP Diagnostics\n"]
-    lines.append(f"Project: `{payload['project']}`")
-    lines.append(f"Files: {len(payload.get('files', []))}")
-    summary = payload.get("summary", {})
-    lines.append(f"Errors: **{summary.get('totalErrors', 0)}** | Warnings: **{summary.get('totalWarnings', 0)}**")
-    lines.append("")
-    for run in payload.get("runs", []):
-        status = run.get("status")
-        lines.append(f"### {run.get('language')} / {run.get('server')} — {status}")
-        if run.get("reason"):
-            lines.append(f"- Reason: {run['reason']}")
-        if run.get("workspaceRoot"):
-            lines.append(f"- Workspace: `{run['workspaceRoot']}`")
-        diagnostics = run.get("diagnostics", [])
-        if diagnostics:
-            for item in diagnostics[:20]:
-                icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(item.get("severity"), "ℹ️")
-                lines.append(f"  {icon} `{item['file']}:{item['line']}:{item['col']}` [{item.get('code', '')}] {item.get('message', '')[:120]}")
-        else:
-            lines.append("- No diagnostics returned.")
-        lines.append("")
-    return "\n".join(lines)
-
-
 def run_check(
     project: str,
     types: list[str] | None,
@@ -2792,12 +2658,13 @@ def _module_origin(module_name: str) -> str:
     return spec.origin or "built-in"
 
 
-def run_doctor(project: str | None = None) -> int:
+def run_doctor(project: str | None = None, show_lsp: bool = False) -> int:
     from ..parser import TreeSitterAdapter
 
-    # 如果提供了 --project 参数，显示提示（doctor 不使用它，但保持一致性）
     if project:
-        print(f"Note: --project is accepted for consistency but not used by doctor command.", file=sys.stderr)
+        project_root = _resolve_project(project)
+    else:
+        project_root = str(Path.cwd())
 
     adapter = TreeSitterAdapter()
     parsers = sorted(adapter.parsers)
@@ -2811,15 +2678,28 @@ def run_doctor(project: str | None = None) -> int:
         print("TSX parser: unavailable", file=sys.stderr)
         return 1
     print(f"repomap_cli: {_module_origin('repomap_cli')}")
-    print(f"repomap_parser: {_module_origin('repomap_parser')}")
-    print(f"repomap_core: {_module_origin('repomap_core')}")
     print(f"tree_sitter: {_module_origin('tree_sitter')}")
-    print(f"tree_sitter_typescript: {_module_origin('tree_sitter_typescript')}")
-    print(f"PACKAGE_ROOT: {PACKAGE_ROOT}")
-    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    print("LSP client: available")
-    print("Bundled LSP servers: none")
-    print("LSP server detection: run `repomap lsp doctor --project <path>`")
+    print(f"LSP client: available")
+
+    if show_lsp:
+        from ..lsp import detect_lsp_servers
+        from ..lsp import LSP_INSTALL_STRATEGIES
+        detections = detect_lsp_servers(project_root)
+        available = [d for d in detections if d.status == "available"]
+        missing = [d for d in detections if d.status != "available"]
+        print(f"\nLSP servers (project: {project_root}):")
+        for d in available:
+            print(f"  {d.language}: {d.server_name} ({d.source})")
+        if missing:
+            print(f"\nMissing ({len(missing)}):")
+            for d in missing:
+                strategy = LSP_INSTALL_STRATEGIES.get(d.language, {})
+                print(f"  {d.language}: {d.server_name} — install: {strategy.get('cmd', 'manual')}")
+        else:
+            print("\nAll LSP servers available.")
+        print("\nTip: run `repomap lsp setup --dry-run` to preview auto-install.")
+    else:
+        print("LSP servers: run `repomap doctor --lsp` to check")
     if pyinstaller_spec is not None:
         print("PyInstaller: available")
     else:
