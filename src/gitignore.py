@@ -5,6 +5,18 @@ from pathlib import Path
 
 import pathspec
 
+# 模块级缓存：project_root → GitignoreParser
+_cache: dict[str, "GitignoreParser"] = {}
+
+
+def get_gitignore(project_root: str | Path, extra_patterns: list[str] | None = None) -> "GitignoreParser":
+    root = str(Path(project_root).resolve())
+    key = f"{root}\x00{tuple(extra_patterns or [])}"
+    if key not in _cache:
+        _cache[key] = GitignoreParser(root, extra_patterns=extra_patterns)
+    return _cache[key]
+
+
 BUILTIN_IGNORE_PATTERNS = [
     # 版本控制
     ".git/",

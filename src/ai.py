@@ -598,19 +598,21 @@ def render_file_detail_report(
     return _truncate_output("\n".join(lines), max_chars)
 
 
-def _append_lsp_symbol_outline(lines: list[str], nodes: list[Any], indent: int) -> None:
+def _append_lsp_symbol_outline(lines: list[str], nodes: list[Any], indent: int,
+                               parent_path: str = "") -> None:
     prefix = "  " * indent
     for node in nodes:
         name = node.name if hasattr(node, "name") else node.get("name", "?")
+        qualified = f"{parent_path}/{name}" if parent_path else name
         kind = node.kind_name if hasattr(node, "kind_name") else node.get("kind_name", "")
         line_num = node.line if hasattr(node, "line") else node.get("line", 0)
         end_line = node.end_line if hasattr(node, "end_line") else node.get("end_line", 0)
         sig = node.detail if hasattr(node, "detail") else node.get("detail", "")
         sig_str = f" — {sig}" if sig else ""
-        lines.append(f"{prefix}- `{name}` ({kind}{sig_str}) L{line_num}-L{end_line}")
+        lines.append(f"{prefix}- `{qualified}` ({kind}{sig_str}) L{line_num}-L{end_line}")
         children = node.children if hasattr(node, "children") else node.get("children", [])
         if children:
-            _append_lsp_symbol_outline(lines, children, indent + 1)
+            _append_lsp_symbol_outline(lines, children, indent + 1, parent_path=qualified)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1179,7 +1181,7 @@ def _suggest_manual_verification(changed_files: list[str], risk_level: str) -> l
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_matched_blocks(engine: Any, file_path: str, query: str,
+def _build_matched_blocks(engine: "RepoMapEngine", file_path: str, query: str,
                           context: int = 2) -> list[dict[str, Any]]:
     """在文件中搜索关键词，返回带上下文的匹配块。"""
     try:
@@ -1188,6 +1190,7 @@ def _build_matched_blocks(engine: Any, file_path: str, query: str,
     except OSError:
         return []
     lines = content.splitlines()
+    last_line = len(lines) - 1
     matched_indices: list[int] = []
     query_lower = query.lower()
     for i, line in enumerate(lines):
@@ -1203,10 +1206,10 @@ def _build_matched_blocks(engine: Any, file_path: str, query: str,
             if current_block:
                 blocks.append(current_block)
             start = max(0, idx - context)
-            end = min(len(lines) - 1, idx + context)
+            end = min(last_line, idx + context)
             current_block = {"start": start, "end": end, "matches": [idx]}
         else:
-            end = min(len(lines) - 1, idx + context)
+            end = min(last_line, idx + context)
             current_block["end"] = end
             current_block["matches"].append(idx)
     if current_block:

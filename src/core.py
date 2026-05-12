@@ -30,7 +30,7 @@ from .ai import (
     render_file_detail_report,
     render_overview_report,
 )
-from .gitignore import GitignoreParser
+from .gitignore import GitignoreParser, get_gitignore
 from .parser import EXT_TO_LANG, TreeSitterAdapter
 from .ranking import EdgeBuilder, GraphAnalyzer
 from .resolver import ImportResolver
@@ -52,6 +52,8 @@ logger = logging.getLogger("repomap")
 
 DEFAULT_MAX_FILE_BYTES = 512 * 1024
 
+# 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
+# 保留仅为向后兼容导出。新增忽略规则请修改 src/gitignore.py 的 BUILTIN_IGNORE_PATTERNS。
 SKIP_DIR_NAMES = {
     ".cache",
     ".git",
@@ -543,7 +545,7 @@ class RepoMapEngine:
 
     def _should_skip_path(self, file: str) -> bool:
         if self._gitignore is None:
-            self._gitignore = GitignoreParser(self.project_root)
+            self._gitignore = get_gitignore(self.project_root)
         return self._gitignore.is_ignored(file)
 
     def _should_skip_large_file(self, path: Path) -> bool:

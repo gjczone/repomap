@@ -24,7 +24,7 @@ from ..ai import (
 )
 from ..check import RepoMapChecker
 from ..core import RepoMapEngine
-from ..gitignore import GitignoreParser
+from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
 from .. import (
     Edge,
@@ -464,7 +464,7 @@ def _read_max_file_bytes() -> int:
 
 
 def _iter_source_files(project_root: Path) -> list[str]:
-    gitignore = GitignoreParser(project_root)
+    gitignore = get_gitignore(project_root)
     files: list[str] = []
     for root, dir_names, file_names in os.walk(project_root):
         rel_root = Path(root).relative_to(project_root)
@@ -2546,26 +2546,10 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
         return 1
 
 
-_LSP_INSTALL_STRATEGIES: dict[str, dict[str, str]] = {
-    "python": {"tool": "uv", "cmd": "uv pip install pyright", "detect": ".venv"},
-    "typescript": {"tool": "npm", "cmd": "npm install -g typescript-language-server typescript", "detect": "package.json"},
-    "rust": {"tool": "rustup", "cmd": "rustup component add rust-analyzer", "detect": "Cargo.toml"},
-    "go": {"tool": "go", "cmd": "go install golang.org/x/tools/gopls@latest", "detect": "go.mod"},
-    "cpp": {"tool": "apt/brew", "cmd": "clangd (system package: apt install clangd-12 / brew install llvm)", "detect": "compile_commands.json"},
-    "csharp": {"tool": "dotnet", "cmd": "dotnet tool install --global csharp-ls", "detect": "*.csproj"},
-    "java": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall jdtls", "detect": "pom.xml"},
-    "lua": {"tool": "npm", "cmd": "npm install -g lua-language-server", "detect": ".luarc.json"},
-    "php": {"tool": "npm", "cmd": "npm install -g intelephense", "detect": "composer.json"},
-    "ruby": {"tool": "gem", "cmd": "gem install ruby-lsp", "detect": "Gemfile"},
-    "swift": {"tool": "xcode", "cmd": "sourcekit-lsp (included with Xcode on macOS / Swift toolchain on Linux)", "detect": "Package.swift"},
-    "kotlin": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall kotlin-language-server", "detect": "build.gradle"},
-}
-
-
 def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: bool) -> int:
     try:
         project_root = _resolve_project(project)
-        from ..lsp import detect_lsp_server, detect_lsp_servers, detection_to_dict
+        from ..lsp import detect_lsp_server, detect_lsp_servers, detection_to_dict, LSP_INSTALL_STRATEGIES
 
         if languages:
             detections = [detect_lsp_server(project_root, lang) for lang in languages]
@@ -2591,7 +2575,7 @@ def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: boo
         print(f"\n{'Would install' if dry_run else 'Installing'} {len(missing)} server(s):")
         print()
         for d in missing:
-            strategy = _LSP_INSTALL_STRATEGIES.get(d.language, {})
+            strategy = LSP_INSTALL_STRATEGIES.get(d.language, {})
             tool = strategy.get("tool", "unknown")
             cmd = strategy.get("cmd", "manual install")
             print(f"  [{d.language}] {d.server_name}")
@@ -2606,7 +2590,7 @@ def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: boo
         print("Installation not yet automated. Run the commands above manually.")
         print("Tip: repomap cannot auto-install LSP servers without your consent.")
         print("      Use the commands listed above, then re-run `repomap lsp doctor`.")
-        return 0
+        return 2
     except Exception as exc:
         print(f"[{CLI_NAME}] lsp setup failed: {exc}", file=sys.stderr)
         return 1
