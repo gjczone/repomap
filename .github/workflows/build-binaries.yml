@@ -6,7 +6,15 @@ on:
     branches:
       - main
       - master
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "skills/**"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "skills/**"
 
 jobs:
   build:

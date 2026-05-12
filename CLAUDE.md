@@ -289,6 +289,7 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
   - `mcp/repomap-bin/platforms/repomap-bin-windows-x64/package.json`
   - `mcp/src/index.ts` (hardcoded version string in `McpServer` constructor)
 - **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes platform packages to npm if the version doesn't already exist, then publishes `repomap-bin` and `repomap-mcp-server` from the linux-x64 job.
+  - Docs-only changes (`**/*.md`, `docs/**`, `skills/**`) are ignored by `build-binaries`; use `workflow_dispatch` if a documentation-only commit intentionally needs a build.
   - Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release verification.
   - After CI succeeds, verify all 5 packages match the new version via `npm view <pkg> version`.
 
