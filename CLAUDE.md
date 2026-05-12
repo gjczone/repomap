@@ -52,7 +52,8 @@ src/                    # Python package (flat)
 ├── cli/                   # CLI entrypoint
 │   ├── __init__.py
 │   ├── __main__.py        # python -m repomap entry
-│   └── cli.py             # argparse CLI, all subcommand dispatch
+│   ├── cli.py             # argparse CLI, dispatch, core constants (~410 lines)
+│   └── handlers.py        # All run_* command implementations + shared helpers (~2450 lines)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build, skip lists
 ├── parser.py              # TreeSitterAdapter: AST parsing, import/export bindings
 ├── resolver.py            # ImportResolver: resolve imports to file paths
@@ -81,7 +82,7 @@ dist/repomap               # Local build output (CI builds Linux/macOS/Windows v
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
 - **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`, `hotspots`
-- **CLI/commands**: `src/cli/cli.py` → add subparser + wire to engine + renderer in `src/ai.py`
+- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch) + `src/cli/handlers.py` (run_* implementations) → add subparser in cli.py, implement handler in handlers.py, render via `src/ai.py`
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
