@@ -84,9 +84,8 @@ class GitignoreParser:
         for root, dirs, files in os.walk(self.project_root):
             rel = Path(root).relative_to(self.project_root)
             # 跳过已被 base spec 排除的目录
-            if str(rel) != ".":
-                segs = str(rel).replace(os.sep, "/")
-                if self._match_spec(self._base_spec, segs):
+            if rel != Path("."):
+                if self._match_spec(self._base_spec, rel.as_posix()):
                     dirs.clear()
                     continue
             if ".git" in dirs:

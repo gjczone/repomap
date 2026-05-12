@@ -195,33 +195,15 @@ LSP_SPECS: tuple[LspServerSpec, ...] = (
 )
 
 
+# 从 LSP_SPECS 推导 suffix → language 映射，避免手动维护重复列表。
+_SUFFIX_TO_LANGUAGE: dict[str, str] = {}
+for _spec in LSP_SPECS:
+    for _suffix in _spec.file_suffixes:
+        _SUFFIX_TO_LANGUAGE[_suffix] = _spec.language
+
+
 def language_for_file(file_path: str | Path) -> str | None:
-    suffix = Path(file_path).suffix.lower()
-    if suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}:
-        return "typescript"
-    if suffix == ".py":
-        return "python"
-    if suffix == ".rs":
-        return "rust"
-    if suffix == ".go":
-        return "go"
-    if suffix in {".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"}:
-        return "cpp"
-    if suffix == ".cs":
-        return "csharp"
-    if suffix == ".java":
-        return "java"
-    if suffix == ".lua":
-        return "lua"
-    if suffix == ".php":
-        return "php"
-    if suffix == ".rb":
-        return "ruby"
-    if suffix == ".swift":
-        return "swift"
-    if suffix in {".kt", ".kts"}:
-        return "kotlin"
-    return None
+    return _SUFFIX_TO_LANGUAGE.get(Path(file_path).suffix.lower())
 
 
 def specs_for_language(language: str) -> list[LspServerSpec]:
@@ -871,25 +853,27 @@ _LSP_SYMBOL_KIND_NAMES: dict[int, str] = {
 
 
 def _parse_lsp_symbol_tree(project_root: Path, raw: Any) -> list[LspSymbolInfo]:
-    """递归解析 LSP documentSymbol 返回的嵌套符号结构。"""
+    """递归解析 LSP documentSymbol 返回的嵌套符号结构。
+
+    兼容两种 LSP 格式：
+    - DocumentSymbol: range + selectionRange 在顶层，children 嵌套
+    - SymbolInformation: location.range 含位置信息
+    """
     if not isinstance(raw, list):
         return []
     result: list[LspSymbolInfo] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
-        # 处理 DocumentSymbol 和 SymbolInformation 两种格式
         name = item.get("name", "")
         kind = item.get("kind", 0)
-        location = item
-        range_item = item.get("range", item.get("location", {}).get("range", {}))
-        # 如果是 SymbolInformation（leaf格式），location 在顶层
-        loc = item.get("location", item)
-        _range = loc.get("range", {})
-        if not _range:
-            _range = range_item
-        start = _range.get("start", {})
-        end = _range.get("end", {})
+        # 位置解析：优先使用顶层 range（DocumentSymbol），
+        # 否则从 location.range 获取（SymbolInformation）
+        range_data = item.get("range")
+        if not range_data:
+            range_data = item.get("location", {}).get("range", {})
+        start = range_data.get("start", {})
+        end = range_data.get("end", {})
         children = _parse_lsp_symbol_tree(project_root, item.get("children", []))
         line = int(start.get("line", 0)) + 1
         end_line = int(end.get("line", start.get("line", 0))) + 1
