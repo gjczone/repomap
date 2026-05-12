@@ -93,6 +93,19 @@ jobs:
             npm publish --access public
           fi
 
+      - name: Publish binary meta package to npm
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
+        shell: bash
+        working-directory: mcp/repomap-bin
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG_NAME@$PKG_VER" version >/dev/null 2>&1; then
+            echo "Version $PKG_VER already published, skipping."
+          else
+            npm publish --access public
+          fi
+
       - name: Publish MCP server to npm
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
         shell: bash

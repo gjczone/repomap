@@ -425,6 +425,14 @@ class TreeSitterAdapter:
             "html":       ("tree_sitter_html",        "language"),
             "css":        ("tree_sitter_css",         "language"),
             "json":       ("tree_sitter_json",        "language"),
+            "c":          ("tree_sitter_c",           "language"),
+            "java":       ("tree_sitter_java",        "language"),
+            "kotlin":     ("tree_sitter_kotlin",      "language"),
+            "swift":      ("tree_sitter_swift",       "language"),
+            "cpp":        ("tree_sitter_cpp",         "language"),
+            "c_sharp":    ("tree_sitter_c_sharp",     "language"),
+            "php":        ("tree_sitter_php",         "language"),
+            "ruby":       ("tree_sitter_ruby",        "language"),
         }
 
         # 动态导入，失败则跳过
@@ -437,78 +445,6 @@ class TreeSitterAdapter:
                 logger.debug(f"Parser loaded: {lang}")
             except Exception as e:
                 logger.debug(f"Parser unavailable [{lang}]: {e}")
-
-        # C
-        try:
-            from tree_sitter_c import language as lang_c
-            from tree_sitter import Language, Parser
-            self.parsers["c"] = Parser(Language(lang_c()))
-            logger.debug("Parser loaded: c")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [c]: {e}")
-
-        # Java
-        try:
-            from tree_sitter_java import language as lang_java
-            from tree_sitter import Language, Parser
-            self.parsers["java"] = Parser(Language(lang_java()))
-            logger.debug("Parser loaded: java")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [java]: {e}")
-
-        # Kotlin — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_kotlin import language as lang_kotlin
-            from tree_sitter import Language, Parser
-            self.parsers["kotlin"] = Parser(Language(lang_kotlin()))
-            logger.debug("Parser loaded: kotlin")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [kotlin]: {e}")
-
-        # Swift — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_swift import language as lang_swift
-            from tree_sitter import Language, Parser
-            self.parsers["swift"] = Parser(Language(lang_swift()))
-            logger.debug("Parser loaded: swift")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [swift]: {e}")
-
-        # C++ — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_cpp import language as lang_cpp
-            from tree_sitter import Language, Parser
-            self.parsers["cpp"] = Parser(Language(lang_cpp()))
-            logger.debug("Parser loaded: cpp")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [cpp]: {e}")
-
-        # C# — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_c_sharp import language as lang_csharp
-            from tree_sitter import Language, Parser
-            self.parsers["c_sharp"] = Parser(Language(lang_csharp()))
-            logger.debug("Parser loaded: c_sharp")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [c_sharp]: {e}")
-
-        # PHP — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_php import language as lang_php
-            from tree_sitter import Language, Parser
-            self.parsers["php"] = Parser(Language(lang_php()))
-            logger.debug("Parser loaded: php")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [php]: {e}")
-
-        # Ruby — 可选依赖，未安装时静默跳过
-        try:
-            from tree_sitter_ruby import language as lang_ruby
-            from tree_sitter import Language, Parser
-            self.parsers["ruby"] = Parser(Language(lang_ruby()))
-            logger.debug("Parser loaded: ruby")
-        except Exception as e:
-            logger.debug(f"Parser unavailable [ruby]: {e}")
 
         # TypeScript / TSX：优先专用绑定，TypeScript 回退到 JavaScript parser，TSX 不回退以避免误解析 JSX。
         try:
@@ -646,6 +582,8 @@ class TreeSitterAdapter:
                     name = self._text(name_node)
                     if not name:
                         break
+                    if lang == "python" and kind == "function" and self._is_python_class_member(def_node):
+                        kind = "method"
                     # Python: _ 前缀视为 private
                     if lang == "python" and name.startswith("_") and not name.startswith("__"):
                         vis = "private"
@@ -716,6 +654,17 @@ class TreeSitterAdapter:
             )
         return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
 
+    @staticmethod
+    def _is_python_class_member(node: Any) -> bool:
+        current = getattr(node, "parent", None)
+        while current is not None:
+            if current.type == "class_definition":
+                return True
+            if current.type == "function_definition":
+                return False
+            current = getattr(current, "parent", None)
+        return False
+
     def _is_export_default(self, node: Any) -> bool:
         current = getattr(node, "parent", None)
         depth = 0
@@ -742,6 +691,8 @@ class TreeSitterAdapter:
                     if child.type in {"property_identifier", "identifier", "string"}:
                         key_node = child
                         break
+            if key_node is None:
+                continue
             name = self._identifier_text(key_node) or (self._string_literal_value(key_node) if key_node and key_node.type == "string" else "")
             if not name:
                 continue

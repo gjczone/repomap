@@ -203,17 +203,14 @@ cd mcp && npm run build && cd ..
 
 # 8. Bump version in all 7 locations (see Distribution Policies)
 
-# 9. Commit + push → CI auto-publishes platform packages
+# 9. Commit + push → CI auto-publishes all npm packages
 #    Commit message format: [release]: vX.Y.Z — English summary of primary change
 
-# 10. Wait for CI to complete, then publish repomap-bin + repomap-mcp-server locally
+# 10. Wait for CI to complete, then verify npm versions
 #     - Poll CI status: gh run list --repo gjczone/repomap --branch main --limit 1 --json status,conclusion
 #     - Wait up to 10 minutes; CI typically takes 3-6 minutes
-#     - When CI succeeds: cd mcp/repomap-bin && npm publish && cd /home/guojiancheng/.A1/repomap
-#     - Then: cd mcp && npm publish && cd /home/guojiancheng/.A1/repomap (only if MCP source changed)
+#     - CI publishes platform packages, repomap-bin, and repomap-mcp-server
 #     - Verify all 5 packages: for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do npm view "$pkg" version; done
-#     ⚠️  npm publish changes cwd into the package directory; after publishing,
-#     cd back to /home/guojiancheng/.A1/repomap before running cp or repomap commands.
 
 # 11. Sync skill to ~/.agents/skills/repomap/ + append Optimization Feedback
 cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
@@ -269,11 +266,7 @@ node dist/index.js   # starts MCP server on stdio
 
 ### Publishing to npm
 
-```bash
-cd mcp
-npm version patch   # or minor/major
-npm publish         # publishes repomap-mcp-server + repomap-bin to npm
-```
+Publishing is handled by GitHub Actions after `main` is pushed. The workflow publishes platform binary packages first, then `repomap-bin`, then `repomap-mcp-server`.
 
 ### MCP version sync
 
@@ -281,7 +274,7 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
 - Bump `mcp/package.json` version to match
 - Bump `mcp/repomap-bin/package.json` version to match
 - Rebuild MCP: `cd mcp && npm run build`
-- No GitHub Release needed — npm publishes directly
+- Push `main` and the release tag; GitHub Actions publishes npm packages
 
 ## Distribution Policies
 
@@ -295,9 +288,9 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
   - `mcp/repomap-bin/platforms/repomap-bin-darwin-arm64/package.json`
   - `mcp/repomap-bin/platforms/repomap-bin-windows-x64/package.json`
   - `mcp/src/index.ts` (hardcoded version string in `McpServer` constructor)
-- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes to npm if version doesn't already exist. `repomap-bin` wrapper and `repomap-mcp-server` must be published locally after CI succeeds.
-  - Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before publishing locally.
-  - After local publish, verify all 5 packages match the new version via `npm view <pkg> version`.
+- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes platform packages to npm if the version doesn't already exist, then publishes `repomap-bin` and `repomap-mcp-server` from the linux-x64 job.
+  - Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release verification.
+  - After CI succeeds, verify all 5 packages match the new version via `npm view <pkg> version`.
 
 ## Release Automation Rules
 
@@ -364,8 +357,8 @@ When the user asks to release a new version, follow this automated flow. **No ma
 ### CI Wait Protocol
 1. After `git push`, immediately poll CI status.
 2. If CI is `in_progress` or `queued`: wait 60s, poll again. Report "CI 运行中…" to the user.
-3. If CI completes but `conclusion=failure`: report the failure, do NOT publish locally.
-4. If CI completes and `conclusion=success`: proceed to local npm publish.
+3. If CI completes but `conclusion=failure`: report the failure and stop.
+4. If CI completes and `conclusion=success`: proceed to npm package verification.
 
 ### npm Publish Verification
 After local publish, run this verification command:

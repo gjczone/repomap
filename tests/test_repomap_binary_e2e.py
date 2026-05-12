@@ -1,4 +1,3 @@
-import importlib.util
 import os
 import subprocess
 import sys
@@ -13,8 +12,12 @@ def write_file(root: str, relative_path: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-@unittest.skipIf(importlib.util.find_spec("PyInstaller") is None, "PyInstaller is required for binary E2E tests")
 class RepoMapBinaryE2ETests(unittest.TestCase):
+    repo_root: Path
+    temp_dir: tempfile.TemporaryDirectory[str]
+    output_dir: Path
+    binary_path: Path
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
@@ -25,6 +28,8 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
             [sys.executable, "-m", "src.cli", "build-binary", "--output", str(cls.output_dir)],
             cwd=cls.repo_root,
             capture_output=True,
+            encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
             text=True,
             check=False,
         )
@@ -45,6 +50,8 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
             [str(self.binary_path), "doctor"],
             cwd=self.repo_root,
             capture_output=True,
+            encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
             text=True,
             check=False,
         )
@@ -52,7 +59,6 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("tree-sitter parsers", result.stdout)
 
-    @unittest.skipIf(sys.platform == 'win32', "charmap codec issue on Windows CI")
     def test_binary_query_symbol_runs_on_real_project(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
@@ -66,6 +72,8 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
                 [str(self.binary_path), "query-symbol", "--project", project_root, "--symbol", "helper"],
                 cwd=self.repo_root,
                 capture_output=True,
+                encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
                 text=True,
                 check=False,
             )

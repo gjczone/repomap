@@ -38,6 +38,26 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertEqual(modified, ["main.py"])
             self.assertEqual(deleted, [])
 
+    def test_incremental_scan_rescans_clean_file_with_stale_mtime(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def app():\n    return 1\n")
+            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, check=True)
+            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, check=True)
+            subprocess.run(["git", "add", "main.py"], cwd=project_root, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+
+            full = RepoMapEngine(project_root)
+            full.scan(max_files=10, incremental=False)
+            original_mtime = Path(project_root, "main.py").stat().st_mtime
+            os.utime(Path(project_root, "main.py"), (original_mtime + 5, original_mtime + 5))
+
+            incremental = RepoMapEngine(project_root)
+            incremental.scan(max_files=10, incremental=True)
+
+            self.assertIn("main.py", incremental.graph.file_symbols)
+            self.assertTrue(any(symbol.name == "app" for symbol in incremental.graph.symbols.values()))
+
     def test_tsx_test_file_is_marked_as_test_file_in_analysis(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "src/App.tsx", "export function App() {\n  return <div />;\n}\n")
@@ -60,8 +80,11 @@ class RepoMapEngineTests(unittest.TestCase):
             engine = RepoMapEngine(project_root)
             engine.scan()
 
-            self.assertIn("./packages/pkg", engine._resolver.package_exports)
-            self.assertNotIn("./node_modules/pkg", engine._resolver.package_exports)
+            resolver = engine._resolver
+            self.assertIsNotNone(resolver)
+            assert resolver is not None
+            self.assertIn("./packages/pkg", resolver.package_exports)
+            self.assertNotIn("./node_modules/pkg", resolver.package_exports)
 
     def test_large_files_are_skipped_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -458,6 +481,27 @@ class RepoMapEngineTests(unittest.TestCase):
 
             self.assertIn("run", callers)
 
+    def test_node16_js_runtime_import_resolves_typescript_source(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "foo.ts", "export function foo(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "main.ts",
+                (
+                    "import { foo } from './foo.js';\n\n"
+                    "export function run(): number {\n"
+                    "  return foo();\n"
+                    "}\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "foo.ts")
+            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+
+            self.assertIn("run", callers)
+
     def test_python_dotted_import_resolves_package_file(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "pkg/sub.py", "def helper():\n    return 1\n")
@@ -517,6 +561,27 @@ class RepoMapEngineTests(unittest.TestCase):
             callers = {symbol.name for symbol in engine.call_chain(send.id, "callers", 2)["callers"]}
 
             self.assertNotIn("run", callers)
+
+    def test_python_self_member_call_resolves_same_class_method(self) -> None:
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                (
+                    "class Runner:\n"
+                    "    def helper(self):\n"
+                    "        return 1\n\n"
+                    "    def run(self):\n"
+                    "        return self.helper()\n"
+                ),
+            )
+
+            engine = RepoMapEngine(project_root)
+            engine.scan()
+            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "main.py")
+            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+
+            self.assertIn("run", callers)
 
     def test_typescript_member_call_does_not_fall_back_to_same_file_function(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:

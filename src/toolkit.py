@@ -19,13 +19,13 @@ RepoMap Toolkit - 轻量级代码分析工具
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
@@ -48,6 +48,11 @@ from . import (
 # ═══════════════════════════════════════════════════════════════════════════════
 
 CACHE_SCHEMA_VERSION = 1
+
+
+def _project_root_cache_key(project_path: str | Path) -> str:
+    """为增量缓存生成稳定项目键，避免 Python 进程随机 hash 让校验不可复现。"""
+    return hashlib.sha256(str(Path(project_path).resolve()).encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -246,7 +251,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
         }
 
     cache = IncrementalCache(
-        project_root_hash=str(hash(str(engine.project_root))),
+        project_root_hash=_project_root_cache_key(engine.project_root),
         git_head=git_head,
         files={fp: FileCacheEntry(**data) for fp, data in files.items()},
         scan_stats_json={
@@ -434,15 +439,6 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
         # 解析 blame 输出
         commit_hash = blame_output.split()[0] if blame_output else 'unknown'
         
-        # 获取 commit 详情
-        commit_info = subprocess.run(
-            ['git', 'log', '-1', '--format=%H|%an|%ae|%ad|%s', commit_hash],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
         # 获取该符号相关的所有 commits
         symbol_commits = subprocess.run(
             ['git', 'log', '--follow', '-20', '--format=%H|%an|%ad|%s', '--', str(file_path)],
@@ -517,7 +513,7 @@ def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
             return []
         
         # 统计每个文件的符号数
-        file_symbols = {}
+        file_symbols: dict[str, list[str]] = {}
         for s in cache.symbols:
             f = s['file']
             if f not in file_symbols:
@@ -525,7 +521,7 @@ def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
             file_symbols[f].append(s['name'])
         
         # 找出变更文件中的符号
-        hot_symbols = []
+        hot_symbols: list[dict[str, object]] = []
         for f in changed_files:
             if f in file_symbols:
                 hot_symbols.append({
@@ -533,8 +529,12 @@ def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
                     'symbols': file_symbols[f][:10],
                     'symbol_count': len(file_symbols[f]),
                 })
-        
-        return sorted(hot_symbols, key=lambda x: x['symbol_count'], reverse=True)[:10]
+
+        def symbol_count(item: dict[str, object]) -> int:
+            value = item.get('symbol_count', 0)
+            return value if isinstance(value, int) else 0
+
+        return sorted(hot_symbols, key=symbol_count, reverse=True)[:10]
         
     except Exception:
         return []
@@ -646,8 +646,6 @@ def _is_public_entry(symbol: dict) -> bool:
     """判断是否是公开入口（如 main, handler 等）"""
     name = symbol.get('name', '')
     visibility = symbol.get('visibility', '')
-    kind = symbol.get('kind', '')
-    
     # 只保留有真实静态证据的入口豁免，避免用命名猜测掩盖死代码
     if name in {'main', '__main__'}:
         return True
@@ -730,7 +728,7 @@ def main():
         elif args.load:
             cache = load_cache(project_path)
             if cache:
-                print(f"Cache info:")
+                print("Cache info:")
                 print(f"   Scan time: {cache.scan_time}")
                 print(f"   Files: {cache.file_count}")
                 print(f"   Symbols: {cache.symbol_count}")
@@ -759,12 +757,12 @@ def main():
             print(f"   删除调用: {result['summary']['edges_removed']}")
             
             if result['added_symbols']:
-                print(f"\n➕ 新增符号 (Top 10):")
+                print("\n➕ 新增符号 (Top 10):")
                 for s in result['added_symbols'][:10]:
                     print(f"   - {s['name']} ({s['file']}:{s['line']})")
             
             if result['call_chain_changes']['new_calls']:
-                print(f"\n🔗 新增调用关系 (Top 10):")
+                print("\n🔗 新增调用关系 (Top 10):")
                 for c in result['call_chain_changes']['new_calls'][:10]:
                     from_name = c['from'].split('::')[-2] if '::' in c['from'] else c['from']
                     to_name = c['to'].split('::')[-2] if '::' in c['to'] else c['to']
@@ -783,7 +781,7 @@ def main():
             result = get_symbol_git_history(project_path, args.symbol)
             
             if not result:
-                print(f"❌ 未找到符号或 Git 信息")
+                print("❌ 未找到符号或 Git 信息")
                 return
             
             if 'error' in result:
@@ -793,7 +791,7 @@ def main():
             print(f"\n  Symbol location: {result['file']}:{result['line']}")
             print(f"  Current commit: {result['current_commit']}")
             print(f"\n  Authors: {', '.join(result['authors'])}")
-            print(f"\n📅 最近提交:")
+            print("\n📅 最近提交:")
             for c in result['recent_commits'][:5]:
                 print(f"   [{c['hash']}] {c['date'][:10]} by {c['author']}")
                 print(f"       {c['message'][:60]}")
@@ -824,12 +822,12 @@ def main():
                 for ref in result['calls'][:10]:
                     print(f"   - {ref['name']} ({ref['file']}:{ref['line']})")
         else:
-            print(f"\n📊 全局引用分析")
+            print("\n📊 全局引用分析")
             print(f"   总符号数: {result['total_symbols']}")
             print(f"   入口函数: {len(result['entry_points'])}")
             print(f"   死代码: {len(result['orphaned_symbols'])}")
             
-            print(f"\n🔝 被引用最多 (Top 10):")
+            print("\n🔝 被引用最多 (Top 10):")
             for r in result['most_referenced'][:10]:
                 status = "🚪" if r['is_entry'] else "🍃" if r['is_leaf'] else "  "
                 print(f"   {status} {r['name']}: {r['ref_count']} 次引用 ({r['file']})")

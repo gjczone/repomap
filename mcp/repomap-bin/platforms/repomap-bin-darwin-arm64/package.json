@@ -1,6 +1,6 @@
 {
   "name": "repomap-bin-darwin-arm64",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Prebuilt repomap binary for macOS Apple Silicon — tree-sitter AST code intelligence CLI",
   "os": ["darwin"],
   "cpu": ["arm64"],

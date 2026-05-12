@@ -3,8 +3,7 @@ Separated from CLI dispatch (cli.py)."""
 from __future__ import annotations
 
 import hashlib
-import importlib
-import io
+import importlib.util as importlib_util
 import json
 from datetime import datetime
 import os
@@ -12,24 +11,19 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path, PurePosixPath
-from typing import Any, Sequence
-from unittest.mock import patch
+from typing import Any
 
 from .. import (Edge, HttpRoute, RepoGraph, ScanStats, Symbol,
-    compare_graph_snapshots, edge_identity_from_edge, edge_identity_from_row,
-    get_cache_paths, get_incremental_cache_path, get_session_cache_path,
+    get_session_cache_path,
     serialize_edge, serialize_symbol)
 from ..ai import (_build_query_reading_order, _get_hot_files, _rank_symbols_for_file,
-    render_call_chain_report, render_diff_risk_report,
-    render_file_detail_report, render_impact_report, render_overview_report,
-    render_query_report, render_routes_report, render_verify_report)
-from ..check import DiagnosticRunner, GitHelper, ProjectDetector, RepoMapChecker
+    render_impact_report, render_query_report, render_routes_report, render_verify_report)
+from ..check import RepoMapChecker
 from ..core import RepoMapEngine
 from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
-from ..toolkit import diff_project, load_incremental_cache, save_cache, save_incremental_cache, scan_project
+from ..toolkit import diff_project, save_cache, scan_project
 from ..topic import (FileMatch, TestMatch, classify_file_role, compute_keyword_weights,
     expand_keywords, find_related_tests, find_untested_symbols, is_test_like_file,
     split_identifier, topic_score)
@@ -41,11 +35,14 @@ PYINSTALLER_BINDINGS = [
     "tree_sitter", "tree_sitter_python", "tree_sitter_javascript",
     "tree_sitter_typescript", "tree_sitter_go", "tree_sitter_rust",
     "tree_sitter_html", "tree_sitter_css", "tree_sitter_json",
+    "tree_sitter_c", "tree_sitter_java", "tree_sitter_kotlin",
+    "tree_sitter_swift", "tree_sitter_cpp", "tree_sitter_c_sharp",
+    "tree_sitter_php", "tree_sitter_ruby",
     "repomap_lsp",
 ]
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
-SESSION_CACHE_VERSION = 6
+SESSION_CACHE_VERSION = 7
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INVALID_ARGS = 2
@@ -430,7 +427,7 @@ def _select_symbol_match(
         lines.append(f"- `{item.file}:{item.line}` ({item.kind})")
     if len(candidates) > 10:
         lines.append(f"- ... {len(candidates) - 10} more candidates")
-    lines.append(f"\nTip: use `--file-path <file>` to specify the target file, e.g.:")
+    lines.append("\nTip: use `--file-path <file>` to specify the target file, e.g.:")
     lines.append(f"  repomap call-chain --symbol {symbol} --file-path {candidates[0].file}")
     return None, "\n".join(lines), resolution_tier
 
@@ -886,7 +883,7 @@ def run_query(
         tests: list[TestMatch] = []
         if not no_tests:
             target_files = [m.path for m in top_matches if not is_test_like_file(m.path)]
-            tests = find_related_tests(target_files, engine.graph, analysis, engine.project_root)
+            tests = find_related_tests(target_files, engine.graph, analysis, str(engine.project_root))
 
         if as_json:
             payload = {
@@ -1194,7 +1191,6 @@ def run_impact(
             for edge in engine.graph.incoming.get(sid, []):
                 caller = engine.graph.symbols.get(edge.source)
                 if caller and caller.file not in target_files:
-                    caller_name = caller.name
                     affected_files[caller.file] = (
                         f"references {_sym_name(engine, sid)}",
                         "high",
@@ -1245,7 +1241,7 @@ def run_impact(
 
         # 找相关测试
         analysis = engine.file_analysis()
-        tests = find_related_tests(target_files, engine.graph, analysis, engine.project_root)
+        tests = find_related_tests(target_files, engine.graph, analysis, str(engine.project_root))
 
         # 风险评估
         risk_level, risk_notes = _assess_risk(target_files, set(affected_files), engine)
@@ -1364,9 +1360,9 @@ def _assess_risk(
         if kw in all_paths:
             domain_risk += 1
     if domain_risk >= 6:
-        risk_notes.append(f"touches high-risk domain (auth/security/data persistence)")
+        risk_notes.append("touches high-risk domain (auth/security/data persistence)")
     elif domain_risk >= 3:
-        risk_notes.append(f"touches medium-risk domain (terminal/config/build)")
+        risk_notes.append("touches medium-risk domain (terminal/config/build)")
     total_score += domain_risk
 
     # 第3层：变更类型风险
@@ -1529,7 +1525,7 @@ def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict
     affected_list.sort(key=lambda item: (item[2], item[0]))
 
     source_files = [file_path for file_path in changed_files if not is_test_like_file(file_path)]
-    tests = find_related_tests(source_files, engine.graph, analysis, engine.project_root)
+    tests = find_related_tests(source_files, engine.graph, analysis, str(engine.project_root))
     risk_level, risk_reasons = _assess_risk(source_files, set(file_path for file_path, _, _ in affected_list), engine)
 
     missing_checks: list[str] = []
@@ -1659,9 +1655,13 @@ def _overall_verify_status(
         return "failed"
     if not changed_files:
         return "warning"
-    if risk_level == "high" or missing_checks or graph_diff_payload.get("status") == "changed":
+    # risk_level 表示变更影响面，不等于未解决风险；只有缺证据或破坏性图谱变化才阻断交付。
+    if missing_checks or graph_diff_payload.get("breakingChanges"):
         return "warning"
-    if check_payload.get("status") in {"warning", "unknown"}:
+    check_status = check_payload.get("status")
+    if check_status == "warning":
+        return "warning"
+    if check_status == "unknown" and lsp_payload.get("status") != "passed":
         return "warning"
     return "passed"
 
@@ -2152,7 +2152,7 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
 def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: bool) -> int:
     try:
         project_root = _resolve_project(project)
-        from ..lsp import detect_lsp_server, detect_lsp_servers, detection_to_dict, LSP_INSTALL_STRATEGIES
+        from ..lsp import detect_lsp_server, detect_lsp_servers, LSP_INSTALL_STRATEGIES
 
         if languages:
             detections = [detect_lsp_server(project_root, lang) for lang in languages]
@@ -2319,7 +2319,7 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
 
 
 def _module_origin(module_name: str) -> str:
-    spec = importlib.util.find_spec(module_name)
+    spec = importlib_util.find_spec(module_name)
     if spec is None:
         return "not found"
     return spec.origin or "built-in"
@@ -2335,7 +2335,7 @@ def run_doctor(project: str | None = None, show_lsp: bool = False) -> int:
 
     adapter = TreeSitterAdapter()
     parsers = sorted(adapter.parsers)
-    pyinstaller_spec = importlib.util.find_spec("PyInstaller")
+    pyinstaller_spec = importlib_util.find_spec("PyInstaller")
     if parsers:
         print(f"tree-sitter parsers: {', '.join(parsers)}")
     else:
@@ -2346,7 +2346,7 @@ def run_doctor(project: str | None = None, show_lsp: bool = False) -> int:
         return 1
     print(f"repomap_cli: {_module_origin('repomap_cli')}")
     print(f"tree_sitter: {_module_origin('tree_sitter')}")
-    print(f"LSP client: available")
+    print("LSP client: available")
 
     if show_lsp:
         from ..lsp import detect_lsp_servers
@@ -2392,6 +2392,9 @@ def _pyinstaller_command(output_dir: Path, name: str) -> list[str]:
         str(build_root / "spec"),
     ]
     for module_name in PYINSTALLER_BINDINGS:
+        # 可选 parser 未安装时仍允许构建；已安装的动态模块显式加入 hidden-import，避免二进制漏包。
+        if importlib_util.find_spec(module_name) is None:
+            continue
         command.extend(["--hidden-import", module_name])
     command.append(str(PACKAGE_ROOT / "__main__.py"))
     return command

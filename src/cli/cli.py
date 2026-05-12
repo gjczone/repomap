@@ -1,55 +1,12 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import importlib.util
-import json
-import os
-import subprocess
+import subprocess  # noqa: F401
 import sys
-import tempfile
-from collections import defaultdict
-from datetime import datetime
-from pathlib import Path, PurePosixPath
-from typing import Any, Sequence
+from pathlib import Path
+from typing import Sequence
 
-from ..ai import (
-    _build_query_reading_order,
-    _get_hot_files,
-    _rank_symbols_for_file,
-    render_impact_report,
-    render_query_report,
-    render_routes_report,
-    render_verify_report,
-)
-from ..check import RepoMapChecker
-from ..core import RepoMapEngine
-from ..gitignore import get_gitignore
-from ..parser import EXT_TO_LANG
-from .. import (
-    Edge,
-    HttpRoute,
-    RepoGraph,
-    ScanStats,
-    Symbol,
-    get_cache_paths,
-    get_session_cache_path,
-    serialize_edge,
-    serialize_symbol,
-)
-from ..toolkit import diff_project, save_cache, scan_project
-from ..topic import (
-    FileMatch,
-    TestMatch,
-    classify_file_role,
-    compute_keyword_weights,
-    expand_keywords,
-    find_related_tests,
-    find_untested_symbols,
-    is_test_like_file,
-    split_identifier,
-    topic_score,
-)
+from ..toolkit import diff_project  # noqa: F401
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
@@ -70,12 +27,20 @@ PYINSTALLER_BINDINGS = [
     "tree_sitter_html",
     "tree_sitter_css",
     "tree_sitter_json",
+    "tree_sitter_c",
+    "tree_sitter_java",
+    "tree_sitter_kotlin",
+    "tree_sitter_swift",
+    "tree_sitter_cpp",
+    "tree_sitter_c_sharp",
+    "tree_sitter_php",
+    "tree_sitter_ruby",
     "repomap_lsp",
 ]
 
 # _SCAN_CACHE is now in handlers.py; re-exported below
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
-SESSION_CACHE_VERSION = 6
+SESSION_CACHE_VERSION = 7
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
 DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
 DEFAULT_CALL_CHAIN_MAX_CHARS = 4000

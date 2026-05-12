@@ -31,15 +31,14 @@ from .ai import (
     render_overview_report,
 )
 from .gitignore import GitignoreParser, get_gitignore
-from .parser import EXT_TO_LANG, TreeSitterAdapter
+from .parser import EXT_TO_LANG, QUERIES, TreeSitterAdapter
 from .ranking import EdgeBuilder, GraphAnalyzer
 from .resolver import ImportResolver
 from . import (
+    HttpRoute,
     RepoGraph,
     ScanStats,
     Symbol,
-    get_incremental_cache_path,
-    serialize_symbol,
 )
 
 # ── 日志：统一写 stderr，绝不污染 CLI stdout ────────────────────────────────
@@ -223,19 +222,21 @@ class RepoMapEngine:
         if inc_cache:
             changed_files, deleted_files = self._git_changed_files()
             all_candidate_files = self._list_files(max_files)
-            # 过滤：只保留仍在项目中的变更文件
             changed_set = set(changed_files) & set(all_candidate_files)
             unchanged_set = set(inc_cache.files.keys()) - changed_set - set(deleted_files)
-            # 只解析变更文件
             files_to_scan = [f for f in all_candidate_files if f in changed_set]
-            logger.info(
-                f"Incremental scan: {len(files_to_scan)} changed, "
-                f"{len(unchanged_set)} unchanged, {len(deleted_files)} deleted"
-            )
-            # 还原未变更文件
+            stale_cached_files: list[str] = []
             for f in sorted(unchanged_set):
                 if f in all_candidate_files:
-                    self._restore_from_inc_cache(f, inc_cache.files[f])
+                    if not self._restore_from_inc_cache(f, inc_cache.files[f]):
+                        stale_cached_files.append(f)
+            if stale_cached_files:
+                stale_set = set(stale_cached_files)
+                files_to_scan.extend(f for f in all_candidate_files if f in stale_set and f not in changed_set)
+            logger.info(
+                f"Incremental scan: {len(files_to_scan)} changed/stale, "
+                f"{len(unchanged_set) - len(stale_cached_files)} restored, {len(deleted_files)} deleted"
+            )
             self._inc_cache_loaded = True
         else:
             files_to_scan = self._list_files(max_files)
@@ -299,9 +300,12 @@ class RepoMapEngine:
     def _load_incremental_cache_if_valid(self) -> Any | None:
         """加载增量缓存并校验有效性（项目路径 + git HEAD 匹配）。"""
         try:
-            from .toolkit import load_incremental_cache
+            from .toolkit import _project_root_cache_key, load_incremental_cache
             cache = load_incremental_cache(str(self.project_root))
             if cache is None or not cache.files:
+                return None
+            if cache.project_root_hash != _project_root_cache_key(self.project_root):
+                logger.debug("Incremental cache stale: project root changed")
                 return None
             # 校验 git HEAD 是否匹配
             try:
@@ -355,14 +359,14 @@ class RepoMapEngine:
             pass
         return sorted(set(modified)), sorted(set(deleted))
 
-    def _restore_from_inc_cache(self, file_path: str, entry: Any) -> None:
+    def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
         """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""
-        # 检查文件 mtime 是否一致
         full = self.project_root / file_path
-        if full.exists():
-            actual_mtime = full.stat().st_mtime
-            if abs(actual_mtime - entry.mtime) > 0.001:
-                return  # mtime 不一致，不还原
+        if not full.exists():
+            return False
+        actual_mtime = full.stat().st_mtime
+        if abs(actual_mtime - entry.mtime) > 0.001:
+            return False
 
         # 还原符号
         self.graph.file_symbols.setdefault(file_path, [])
@@ -409,9 +413,13 @@ class RepoMapEngine:
             for c in entry.calls_json
         ]
 
+        self.routes.extend(HttpRoute(**r) for r in entry.routes_json)
+
         # 更新 mtime 缓存
         self._cache[file_path] = entry.mtime
         self.scan_stats.processed_files += 1
+        self.scan_stats.skipped_files += 1
+        return True
 
     # ── 文件处理 ───────────────────────────────────────────────────────────────
 
@@ -703,7 +711,7 @@ class RepoMapEngine:
             lines.append(f"- Import configs: {len(self._resolver.import_configs)}")
         # 超时熔断提示
         if self.scan_stats.timeout_triggered:
-            lines.append(f"- ⚠️ Scan timeout triggered: some files were not processed, results incomplete")
+            lines.append("- ⚠️ Scan timeout triggered: some files were not processed, results incomplete")
         # 失败文件提示（最多显示 3 个）
         if self.scan_stats.failed_files:
             lines.append(f"- Failed files: {len(self.scan_stats.failed_files)}")
@@ -733,9 +741,6 @@ class RepoMapEngine:
 # ═══════════════════════════════════════════════════════════════════════════════
 # 向后兼容导出
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# 从 parser 模块导出常量以保持兼容性
-from .parser import QUERIES
 
 __all__ = [
     "DEFAULT_MAX_FILE_BYTES",

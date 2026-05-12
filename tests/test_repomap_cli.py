@@ -6,17 +6,16 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from unittest.mock import patch
+
+from src.check import RepoMapChecker
 
 
 def write_file(root: str, relative_path: str, content: str) -> None:
     path = Path(root, relative_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-
-
-from src.check import RepoMapChecker
 
 
 class RepoMapCliTests(unittest.TestCase):
@@ -103,6 +102,65 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(json.loads(stdout.getvalue())["result"]["status"], "failed")
+
+    def test_verify_high_impact_passes_when_evidence_is_clean(self) -> None:
+        from src.cli.handlers import _overall_verify_status
+
+        status = _overall_verify_status(
+            changed_files=["src/core.py"],
+            risk_level="high",
+            missing_checks=[],
+            check_payload={"status": "passed"},
+            lsp_payload={"status": "passed"},
+            graph_diff_payload={"status": "changed", "breakingChanges": []},
+        )
+
+        self.assertEqual(status, "passed")
+
+    def test_verify_breaking_graph_change_warns(self) -> None:
+        from src.cli.handlers import _overall_verify_status
+
+        status = _overall_verify_status(
+            changed_files=["src/core.py"],
+            risk_level="low",
+            missing_checks=[],
+            check_payload={"status": "passed"},
+            lsp_payload={"status": "passed"},
+            graph_diff_payload={
+                "status": "changed",
+                "breakingChanges": [{"name": "scan", "risk": "HIGH"}],
+            },
+        )
+
+        self.assertEqual(status, "warning")
+
+    def test_verify_unknown_check_passes_when_lsp_is_clean(self) -> None:
+        from src.cli.handlers import _overall_verify_status
+
+        status = _overall_verify_status(
+            changed_files=["src/core.py"],
+            risk_level="high",
+            missing_checks=[],
+            check_payload={"status": "unknown"},
+            lsp_payload={"status": "passed"},
+            graph_diff_payload={"status": "skipped", "breakingChanges": []},
+        )
+
+        self.assertEqual(status, "passed")
+
+    def test_verify_unknown_check_warns_without_lsp_evidence(self) -> None:
+        from src.cli.handlers import _overall_verify_status
+
+        status = _overall_verify_status(
+            changed_files=["src/core.py"],
+            risk_level="high",
+            missing_checks=[],
+            check_payload={"status": "unknown"},
+            lsp_payload={"status": "skipped"},
+            graph_diff_payload={"status": "skipped", "breakingChanges": []},
+        )
+
+        self.assertEqual(status, "warning")
 
     def test_verify_with_diff_without_cache_is_nonfatal(self) -> None:
         from src.cli import main
@@ -377,6 +435,32 @@ class RepoMapCliTests(unittest.TestCase):
             command = run_mock.call_args.args[0]
             self.assertEqual(command[:5], ["ruff", "check", "--output-format", "json", "--"])
             self.assertIn("src/main.py", command)
+
+    def test_tsc_skips_instead_of_falling_back_to_npx(self) -> None:
+        from src.check import DiagnosticRunner
+
+        with tempfile.TemporaryDirectory() as project_root:
+            runner = DiagnosticRunner(Path(project_root))
+            with patch.object(runner, "_has_cmd", side_effect=lambda cmd: cmd == "npx"):
+                with patch.object(runner, "_run_command") as run_mock:
+                    result = runner._run_tsc()
+
+            self.assertTrue(result.skipped)
+            self.assertEqual(result.skip_reason, "tsc not found")
+            run_mock.assert_not_called()
+
+    def test_eslint_skips_instead_of_falling_back_to_npx(self) -> None:
+        from src.check import DiagnosticRunner
+
+        with tempfile.TemporaryDirectory() as project_root:
+            runner = DiagnosticRunner(Path(project_root))
+            with patch.object(runner, "_has_cmd", side_effect=lambda cmd: cmd == "npx"):
+                with patch.object(runner, "_run_command") as run_mock:
+                    result = runner._run_eslint()
+
+            self.assertTrue(result.skipped)
+            self.assertEqual(result.skip_reason, "eslint not found")
+            run_mock.assert_not_called()
 
     def test_removed_low_value_commands_are_not_public(self) -> None:
         from src.cli import main

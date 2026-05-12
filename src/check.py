@@ -121,7 +121,7 @@ class GitHelper:
     @staticmethod
     def get_modified_files(project_root: Path, since_commit: str | None = None) -> list[str]:
         """获取变更的文件列表"""
-        files = set()
+        files: set[str] = set()
 
         # 1. 获取 staged 文件
         try:
@@ -289,7 +289,7 @@ class DiagnosticRunner:
             output = result.stdout + result.stderr
             return result.returncode, output, duration
         except subprocess.TimeoutExpired:
-            return -1, f"Timeout after 120s", self._now_ms() - start
+            return -1, "Timeout after 120s", self._now_ms() - start
         except Exception as e:
             return -1, str(e), self._now_ms() - start
 
@@ -298,19 +298,17 @@ class DiagnosticRunner:
         tool = "tsc"
         cmd_str = "tsc --noEmit --pretty false"
 
-        if not self._has_cmd("tsc") and not self._has_cmd("npx"):
+        if not self._has_cmd("tsc"):
             return DiagnosticResult(
                 tool=tool,
                 command=cmd_str,
                 exit_code=0,
                 duration_ms=0,
                 skipped=True,
-                skip_reason="tsc/npx not found",
+                skip_reason="tsc not found",
             )
 
         cmd = ["tsc", "--noEmit", "--pretty", "false"]
-        if not self._has_cmd("tsc"):
-            cmd = ["npx", "tsc", "--noEmit", "--pretty", "false"]
 
         exit_code, output, duration = self._run_command(cmd, tool)
         errors, warnings = self._parse_tsc_output(output)
@@ -361,14 +359,14 @@ class DiagnosticRunner:
         tool = "eslint"
         cmd_str = "eslint . --ext .js,.jsx,.mjs,.cjs,.ts,.tsx --format json"
 
-        if not self._has_cmd("eslint") and not self._has_cmd("npx"):
+        if not self._has_cmd("eslint"):
             return DiagnosticResult(
                 tool=tool,
                 command=cmd_str,
                 exit_code=0,
                 duration_ms=0,
                 skipped=True,
-                skip_reason="eslint/npx not found",
+                skip_reason="eslint not found",
             )
 
         # 增量检查：只检查指定文件
@@ -390,9 +388,6 @@ class DiagnosticRunner:
                 "--ext", ".js,.jsx,.mjs,.cjs,.ts,.tsx",
                 "--format", "json",
             ]
-
-        if not self._has_cmd("eslint"):
-            cmd = ["npx"] + cmd
 
         exit_code, output, duration = self._run_command(cmd, tool)
         errors, warnings = self._parse_eslint_output(output)

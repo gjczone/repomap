@@ -102,7 +102,7 @@ wheels = [
 
 [[package]]
 name = "repomap-cli"
-version = "2.2.0"
+version = "2.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "pathspec" },
@@ -131,6 +131,11 @@ build = [
     { name = "pyinstaller" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pyinstaller" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pathspec", specifier = ">=0.12.0" },
@@ -153,6 +158,9 @@ requires-dist = [
     { name = "tree-sitter-yaml", marker = "extra == 'all'", specifier = ">=0.7.0" },
 ]
 provides-extras = ["all", "build"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pyinstaller", specifier = ">=6.0.0" }]
 
 [[package]]
 name = "setuptools"

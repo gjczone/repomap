@@ -1,6 +1,6 @@
 {
   "name": "repomap-mcp-server",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "MCP server for RepoMap \u2014 code intelligence via AST-based repository analysis",
   "type": "module",
   "main": "dist/index.js",
@@ -12,17 +12,18 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "tsx --test src/*.test.ts",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "repomap-bin": "^2.0.0",
+    "repomap-bin": "^2.3.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

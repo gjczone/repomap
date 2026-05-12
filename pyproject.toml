@@ -1,6 +1,6 @@
 [project]
 name = "repomap-cli"
-version = "2.3.0"
+version = "2.3.1"
 description = "Standalone RepoMap CLI with tree-sitter AST parsing"
 requires-python = ">=3.10"
 dependencies = [
@@ -27,6 +27,11 @@ all = [
     "tree-sitter-ruby>=0.23.0",
 ]
 build = [
+    "pyinstaller>=6.0.0",
+]
+
+[dependency-groups]
+dev = [
     "pyinstaller>=6.0.0",
 ]
 

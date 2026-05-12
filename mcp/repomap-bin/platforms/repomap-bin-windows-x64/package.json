@@ -1,6 +1,6 @@
 {
   "name": "repomap-bin-windows-x64",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Prebuilt repomap binary for Windows x86_64 — tree-sitter AST code intelligence CLI",
   "os": ["win32"],
   "cpu": ["x64"],

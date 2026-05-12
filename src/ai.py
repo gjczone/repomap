@@ -85,7 +85,7 @@ def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
         "ruby": "Ruby", "html": "HTML", "css": "CSS", "json": "JSON",
     }
     lang_str = " + ".join(
-        f"{lang_names.get(l, l)} ({c}f)" for l, c in top_langs
+        f"{lang_names.get(lang, lang)} ({count}f)" for lang, count in top_langs
     )
 
     # 检测框架
@@ -193,7 +193,6 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
     from collections import Counter
 
     lines = ["## API Routes\n"]
-    method_order = {"GET": 0, "POST": 1, "PUT": 2, "PATCH": 3, "DELETE": 4, "HEAD": 5, "OPTIONS": 6, "USE": 7, "ALL": 8}
     routes_sorted = sorted(routes, key=lambda r: (r.file, r.line))
 
     if compact and len(routes) > 12:
@@ -273,7 +272,7 @@ def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
                 display_b = neighbor_git_path[len(git_rel_prefix) + 1:] if neighbor_git_path.startswith(git_rel_prefix + "/") else neighbor_git_path
             else:
                 display_b = neighbor_git_path
-            key = tuple(sorted([display_a, display_b]))
+            key = (display_a, display_b) if display_a <= display_b else (display_b, display_a)
             if key in seen_pairs:
                 continue
             if count < 2:
@@ -831,24 +830,24 @@ def render_impact_report(
         checklist.append("- [ ] Run `repomap verify` for final evidence")
         if checklist:
             lines.append("### Edit Checklist\n")
-            for item in checklist:
-                lines.append(item)
+            for checklist_item in checklist:
+                lines.append(checklist_item)
             lines.append("")
 
     if key_symbols:
         lines.append("## Key Symbols\n")
         lines.append("| Symbol | Kind | Location | Incoming | Outgoing |")
         lines.append("| --- | --- | --- | --- | --- |")
-        for item in key_symbols[:12]:
+        for symbol_item in key_symbols[:12]:
             lines.append(
-                f"| `{item['name']}` | {item['kind']} | `{item['file']}:{item['line']}` | {item['incomingCount']} | {item['outgoingCount']} |"
+                f"| `{symbol_item['name']}` | {symbol_item['kind']} | `{symbol_item['file']}:{symbol_item['line']}` | {symbol_item['incomingCount']} | {symbol_item['outgoingCount']} |"
             )
         lines.append("")
 
     if read_next:
         lines.append("## Read Next\n")
-        for item in read_next[:10]:
-            lines.append(f"- `{item['file']}` ({item['role']}): {item['reason']}")
+        for read_item in read_next[:10]:
+            lines.append(f"- `{read_item['file']}` ({read_item['role']}): {read_item['reason']}")
         lines.append("")
 
     if affected_files:
@@ -1077,12 +1076,14 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
 
     if status != "passed":
         lines.append("- [ ] Address failed/warning sections above.")
-    if tests:
+    if tests and status != "passed":
         lines.append("- [ ] Run suggested tests separately.")
     if lsp.get("status") == "skipped":
         lines.append("- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed.")
-    if graph_diff.get("status") == "skipped":
+    if graph_diff.get("enabled") and graph_diff.get("status") == "skipped":
         lines.append("- [ ] Graph diff was skipped; use `--with-diff` after `cache save` for contract change evidence.")
+    if status == "passed":
+        lines.append("- [x] No unresolved verification gaps reported by this command.")
     return _truncate_output("\n".join(lines), max_chars)
 
 

@@ -428,6 +428,16 @@ class ImportResolver:
             matches.append(resolved_str)
             if resolved.suffix.lower() in EXT_TO_LANG:
                 return sorted(set(matches))
+        runtime_source_exts = {
+            ".js": (".ts", ".tsx"),
+            ".jsx": (".tsx",),
+            ".mjs": (".mts", ".ts", ".tsx"),
+            ".cjs": (".cts", ".ts", ".tsx"),
+        }
+        for source_ext in runtime_source_exts.get(resolved.suffix.lower(), ()):
+            source_file = str(resolved.with_suffix(source_ext))
+            if source_file in self.graph.file_symbols:
+                matches.append(source_file)
         for ext in EXT_TO_LANG:
             direct = resolved_str + ext
             index_file = str(resolved / f"index{ext}")
@@ -472,6 +482,8 @@ class ImportResolver:
                 return sorted(set(alias_matches))
             if config.base_url:
                 base_path = self._normalize_posix_path(PurePosixPath(config.base_url, imp))
+                if base_path is None:
+                    continue
                 base_matches = self._candidate_files_for_base_path(base_path)
                 if base_matches:
                     return base_matches
