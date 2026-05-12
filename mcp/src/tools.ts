@@ -688,4 +688,34 @@ export function registerTools(server: McpServer): void {
       }
     },
   );
+
+  server.registerTool(
+    "repomap_doctor",
+    {
+      title: "Health Check",
+      description:
+        "Validate runtime prerequisites: tree-sitter parsers, LSP server availability, binary integrity. " +
+        "Use with_lsp: true to also check which LSP servers are available and get install suggestions for missing ones. " +
+        "Use when suspecting stale binary, parser/runtime issues, or PATH mismatch.",
+      inputSchema: {
+        project: ProjectPathSchema,
+        with_lsp: z.boolean().optional()
+          .describe("Also check LSP server availability and suggest install commands for missing servers"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ project, with_lsp }) => {
+      try {
+        const output = await runRepomap("doctor", { project, lsp: with_lsp });
+        return textResult(output);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
 }
