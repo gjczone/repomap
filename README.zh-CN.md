@@ -161,7 +161,7 @@ repomap orphan --project . --min-confidence 70        # 死代码检查
 
 ## 起源
 
-`repomap` 的核心思想来自 **[aider](https://github.com/Aider-AI/aider)**——用 tree-sitter + PageRank 为编程代理提供代码库感知。v2.3 借鉴了 **[serena](https://github.com/oraios/serena)** 的 LSP 检测模式、搜索结果格式和分级符号索引。
+`repomap` 的核心思想来自 **[aider](https://github.com/Aider-AI/aider)**——用 tree-sitter + PageRank 为编程代理提供代码库感知。LSP 集成借鉴了 **[serena](https://github.com/oraios/serena)** 的服务器自动检测、搜索结果格式和分级符号索引。
 
 ---
 

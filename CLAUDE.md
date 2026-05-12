@@ -55,7 +55,8 @@ src/                    # Python package (flat)
 │   ├── __main__.py        # python -m repomap entry
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~410 lines)
 │   └── handlers.py        # All run_* command implementations + shared helpers (~2450 lines)
-├── core.py                # RepoMapEngine: scan pipeline, graph build, skip lists
+├── gitignore.py            # GitignoreParser: pathspec-based file filtering
+├── core.py                # RepoMapEngine: scan pipeline, graph build
 ├── parser.py              # TreeSitterAdapter: AST parsing, import/export bindings
 ├── resolver.py            # ImportResolver: resolve imports to file paths
 ├── ranking.py             # EdgeBuilder, GraphAnalyzer: PageRank, call-graph edges
@@ -87,10 +88,11 @@ dist/repomap               # Local build output (CI builds Linux/macOS/Windows v
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
+- **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `diff`, `verify --with-diff`
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
 - **State map**: `src/state_map.py` → `state-map --symbol/--query`
-- **LSP**: `src/lsp.py` → opt-in, affects `diagnostics`, `query-symbol --with-lsp`, etc.
+- **LSP**: `src/lsp.py` → opt-in, affects `query-symbol --with-lsp`, `file-detail --with-lsp`, `verify --with-lsp`, `check --with-lsp`, `doctor --lsp`, `lsp setup`
 
 ## Verification
 
@@ -128,7 +130,7 @@ The public README files serve different audiences than this document:
 - Import resolution goes through `src/resolver.py`; do not hand-roll path resolution.
 - Session cache version in `cli.py` must be bumped when scan cache semantics change.
 - `--project` must be absolute when called from AI/Agent contexts.
-- LSP is strictly opt-in, local-only. Never auto-install servers, never run `npx`/`pnpx`/`bunx`.
+- LSP is strictly opt-in, local-only. `lsp setup` suggests install commands per detected language but does not execute them without user consent.
 - `verify` suggests tests but does not run them. Agents must run tests explicitly.
 - Cache directories are keyed by canonical project path.
 - `.gitignore` keeps `docs/` local-only (not in public repo).

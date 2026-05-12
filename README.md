@@ -161,7 +161,7 @@ Available when using the MCP server:
 
 ## Origin
 
-`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)** — tree-sitter + PageRank for coding-agent codebase awareness. v2.3 incorporated LSP patterns from **[serena](https://github.com/oraios/serena)**, including auto-detection, search result formatting, and hierarchical symbol indexing.
+`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)** — tree-sitter + PageRank for coding-agent codebase awareness. LSP integration patterns draw from **[serena](https://github.com/oraios/serena)**, including server auto-detection, search result formatting, and hierarchical symbol indexing.
 
 ---
 
