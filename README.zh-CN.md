@@ -148,7 +148,6 @@ repomap orphan --project . --min-confidence 70        # 死代码检查
 
 - **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。
 - **[serena](https://github.com/oraios/serena)** — 功能全面的 MCP 编程工具包，深度 LSP 集成（solidlsp）。repomap v2.3 借鉴了 serena 的 LSP 检测模式、`TextLine`/`MatchedConsecutiveLines` 搜索格式和 `NamePath` 风格的分级符号索引。
-- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
 
 ---
 

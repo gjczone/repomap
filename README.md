@@ -148,7 +148,6 @@ Available when using the MCP server:
 
 - **[aider](https://github.com/Aider-AI/aider)** — the original CLI repo mapping pioneer.
 - **[serena](https://github.com/oraios/serena)** — full-featured MCP coding toolkit with deep LSP (solidlsp). repomap v2.3 adopted serena's LSP detection patterns, `TextLine`/`MatchedConsecutiveLines` search formatting, and `NamePath`-style hierarchical symbol indexing.
-- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — we contributed `deepmap`, a Rust port of repomap's engine.
 
 ---
 
