@@ -200,6 +200,8 @@ export function registerTools(server: McpServer): void {
           .describe("Comma-separated directory prefixes to limit search scope"),
         exclude: z.string().optional()
           .describe("Comma-separated directory prefixes to exclude from search"),
+        context_lines: z.number().int().min(0).max(10).optional()
+          .describe("Context lines around matched code (default: 2, 0 to disable)"),
       },
       annotations: {
         readOnlyHint: true,
@@ -208,12 +210,12 @@ export function registerTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project, query, max_files_result, max_symbols, no_tests, paths, exclude }) => {
+    async ({ project, query, max_files_result, max_symbols, no_tests, paths, exclude, context_lines }) => {
       try {
         const output = await runRepomap("query", {
           project, query,
           max_files: max_files_result,
-          max_symbols, no_tests, paths, exclude,
+          max_symbols, no_tests, paths, exclude, context_lines,
         }, true);
         return jsonResult(output);
       } catch (err) {
@@ -327,6 +329,10 @@ export function registerTools(server: McpServer): void {
         max_files: MaxFilesSchema,
         max_chars: z.number().int().min(500).optional()
           .describe("Maximum text output size (default: 6000)"),
+        with_lsp: z.boolean().optional()
+          .describe("Include hierarchical LSP symbol tree with NamePath (e.g. ClassName/method_name)"),
+        lsp_timeout: z.number().optional()
+          .describe("Seconds to wait for LSP responses (default: 8.0)"),
       },
       annotations: {
         readOnlyHint: true,
@@ -335,10 +341,10 @@ export function registerTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project, file_path, max_symbols, max_files, max_chars }) => {
+    async ({ project, file_path, max_symbols, max_files, max_chars, with_lsp, lsp_timeout }) => {
       try {
         const output = await runRepomap("file-detail", {
-          project, file_path, max_symbols, max_files, max_chars,
+          project, file_path, max_symbols, max_files, max_chars, with_lsp, lsp_timeout,
         });
         return textResult(output);
       } catch (err) {
@@ -430,40 +436,6 @@ export function registerTools(server: McpServer): void {
       try {
         const output = await runRepomap("diff", { project }, true);
         return jsonResult(output);
-      } catch (err) {
-        return toolError(err instanceof Error ? err.message : String(err));
-      }
-    },
-  );
-
-  server.registerTool(
-    "repomap_git_history",
-    {
-      title: "Symbol Git History",
-      description:
-        "Commit history for a specific symbol — when modified, by whom, and recent changes. " +
-        "Use for bug investigations, ownership questions, or understanding change patterns. " +
-        "Add file_path when the symbol name is ambiguous across files.",
-      inputSchema: {
-        project: ProjectPathSchema,
-        symbol: z.string().describe("Symbol name to inspect"),
-        file_path: z.string().optional()
-          .describe("Relative file path to disambiguate symbol"),
-        max_files: MaxFilesSchema,
-      },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async ({ project, symbol, file_path, max_files }) => {
-      try {
-        const output = await runRepomap("git-history", {
-          project, symbol, file_path, max_files,
-        });
-        return textResult(output);
       } catch (err) {
         return toolError(err instanceof Error ? err.message : String(err));
       }
@@ -674,6 +646,43 @@ export function registerTools(server: McpServer): void {
       try {
         const output = await runRepomap("state-map", { project, max_files, symbol, query }, true);
         return jsonResult(output);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    "repomap_lsp_setup",
+    {
+      title: "LSP Server Setup",
+      description:
+        "Auto-detect and install missing LSP servers for the project's languages. " +
+        "Run this after repomap_scan when LSP servers are missing. " +
+        "Supports 13 languages: Python (pyright), TypeScript/JS, Rust (rust-analyzer), Go (gopls), " +
+        "C/C++ (clangd), C# (csharp-ls), Java (jdtls), Lua, PHP (intelephense), Ruby (ruby-lsp), " +
+        "Swift (sourcekit-lsp), Kotlin. " +
+        "Always use dry_run: true first to preview the install plan.",
+      inputSchema: {
+        project: ProjectPathSchema,
+        languages: z.array(z.string()).optional()
+          .describe("Languages to install servers for (default: auto-detect from project files)"),
+        dry_run: z.boolean().optional()
+          .describe("Preview install plan without executing (always use this first)"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ project, languages, dry_run }) => {
+      try {
+        const output = await runRepomap("lsp setup", {
+          project, languages, dry_run,
+        });
+        return textResult(output);
       } catch (err) {
         return toolError(err instanceof Error ? err.message : String(err));
       }

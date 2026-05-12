@@ -50,7 +50,7 @@ function getNpmBinPath(): string | null {
 }
 
 function buildArgs(command: string, flags: Record<string, unknown>): string[] {
-  const args: string[] = [command];
+  const args: string[] = command.split(/\s+/);
 
   for (const [key, value] of Object.entries(flags)) {
     if (value === undefined || value === null) continue;
