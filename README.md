@@ -113,14 +113,11 @@ Without LSP, all commands still work — LSP adds compiler-grade precision for s
 | `verify` | Post-edit gate: git changes, risk, contract risk warnings, suggested tests, diagnostics, LSP, graph diff |
 | `verify --quick` | Post-edit risk-only (skips compiler/LSP, faster) |
 | `check` | Language diagnostics: tsc, cargo check, ruff, mypy, go vet |
-| `diagnostics --source lsp --files <f...>` | Focused LSP diagnostics for specific files |
 | `orphan` | Dead-code candidates with confidence tiers and pre-deletion checklist |
 | `hotspots` | High-density files ranked by complexity and change frequency |
 | `cache save` | Save current graph as baseline for later `diff` or `verify --with-diff` |
-| `git-history --symbol <name>` | Commit history for a specific symbol |
 | `diff` | Graph comparison against a pre-edit `cache save` baseline |
-| `doctor` | Binary health check: parsers, runtime, LSP availability |
-| `lsp doctor` | Check installed LSP servers for 13 languages |
+| `doctor` | Health check: parsers, runtime, LSP servers; use `--lsp` for full LSP report |
 | `lsp setup` | Auto-detect and install missing LSP servers; use `--dry-run` first |
 
 ---

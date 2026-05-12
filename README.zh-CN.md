@@ -111,14 +111,11 @@ repomap lsp setup             # 安装缺失的服务器
 | `verify` | 编辑后证据门：git 变更、风险、合约风险警告、建议测试、诊断、LSP、图差异 |
 | `verify --quick` | 仅编辑后风险评估（跳过编译器/LSP，更快） |
 | `check` | 语言诊断：tsc、cargo check、ruff、mypy、go vet |
-| `diagnostics --source lsp --files <文件...>` | 指定文件的 LSP 诊断 |
 | `orphan` | 死代码候选发现，含置信度分级和删除前检查清单 |
 | `hotspots` | 按复杂度和变更频率排名的高密度文件 |
 | `cache save` | 保存当前图为基线，供后续 `diff` 或 `verify --with-diff` 使用 |
-| `git-history --symbol <名称>` | 特定符号的提交历史 |
 | `diff` | 与编辑前 `cache save` 基线的图对比 |
-| `doctor` | 二进制健康检查：解析器、运行时、LSP 可用性 |
-| `lsp doctor` | 检查已安装的 LSP 服务器（覆盖 13 种语言） |
+| `doctor` | 健康检查：解析器、运行时、LSP 服务器；添加 `--lsp` 获得完整 LSP 报告 |
 | `lsp setup` | 自动检测并安装缺失的 LSP 服务器；先用 `--dry-run` 预览 |
 
 ---

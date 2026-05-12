@@ -49,15 +49,12 @@ For most non-trivial coding tasks:
 | Final post-edit evidence | `repomap verify --project <project>` | Default after edits; aggregates changed files, risk, suggested tests, contract risk warnings, `check`, optional LSP and graph diff; requires a Git repository. |
 | Optional verify LSP | `repomap verify --project <project> --with-lsp` | Need focused local LSP diagnostics for changed files; requires a Git repository. |
 | Optional verify graph diff | `repomap verify --project <project> --with-diff` | A `cache save` baseline exists and graph-change evidence matters; requires a Git repository. |
-| Diagnostics only | `repomap check --project <project>` | Need compiler/static-analysis evidence without risk aggregation; supports `--with-lsp` for LSP diagnostics; when all tools are skipped, status is `unknown` (not `passed`). |
-| Incremental diagnostics | `repomap check --project <project> --modified-file <file>` or `--since-commit <rev>` | Need narrower diagnostics; add `--with-lsp` only for explicit files. |
-| Focused LSP diagnostics | `repomap diagnostics --project <project> --source lsp --files <file...>` | Need diagnostics for explicit files without full `verify`; local LSP only, no install/daemon. |
-| LSP availability | `repomap lsp doctor --project <project>` | Need to know which local LSP servers can be used; does not install anything. |
-| LSP auto-install | `repomap lsp setup --project <project>` | Missing LSP servers detected; supports `--languages`, `--dry-run` to preview install plan first. |
+| Diagnostics | `repomap check --project <project>` | Compiler/static-analysis evidence with optional `--with-lsp`; use `--modified-file` or `--since-commit` for incremental checks. |
+| LSP availability | `repomap doctor --lsp --project <project>` | Check installed LSP servers and get install suggestions for missing ones. |
+| LSP auto-install | `repomap lsp setup --project <project>` | Auto-install missing LSP servers; supports `--languages`, `--dry-run` to preview first. |
 | API route inventory | `repomap routes --project <project> --json` | Need direct HTTP/API route inventory; use `--json` for machine-readable output; add `--with-consumers` to find frontend/client consumers of each route. |
 | API consumer mapping | `repomap routes --project <project> --with-consumers` | Need to know which frontend/test files call each API route before changing handlers or response shapes. |
 | Hot files | `repomap hotspots --project <project>` | Need dense/complex files first; use sparingly after overview/query. |
-| Symbol history | `repomap git-history --project <project> --symbol <name>` | Need commit context for a symbol; add `--file-path` when ambiguous. |
 | Orphan candidates | `repomap orphan --project <project>` | Need dead-code candidates with confidence tiers; use `--min-confidence 70` for high-confidence only, `--json` for structured output; verify before deleting. |
 | State definition map | `repomap state-map --project <project> --symbol <name>` or `--query <keywords>` | Need state/enum values, writers, and readers before changing lifecycle logic; supports Python/TS/Rust/Go. |
 | Graph baseline | `repomap cache save --project <project>` | Low-level preparation before target edits when later `diff`/`verify --with-diff` graph evidence is valuable. |
@@ -73,9 +70,8 @@ For most non-trivial coding tasks:
 5. If your task concerns API endpoints/routes: use `routes`; add `--json` for structured smoke tests; use `overview` only when route inventory is part of broader repo understanding.
 6. If you changed code, are preparing a handoff, or need final evidence: use `verify`.
 7. If you only need changed-file risk without compiler/LSP checks: use `verify --quick`.
-8. If you only need toolchain diagnostics: use `check`; for focused LSP diagnostics on explicit files use `diagnostics --source lsp --files ...`.
-9. Always run `lsp doctor` early in a project. When a language server is detected, `--with-lsp` is NOT optional — add it to `query-symbol`, `refs`, `file-detail`, `verify`, and `check` for compiler-grade precision. When servers are missing, run `lsp setup --dry-run` to see install plans, then `lsp setup` to install them. LSP is the highest-precision signal repomap provides.
-10. If you need recent history for a symbol: use `git-history`.
+8. If you only need toolchain diagnostics: use `check`; add `--with-lsp` for LSP diagnostics on explicit files.
+9. Always run `doctor --lsp` early in a project. When a language server is detected, `--with-lsp` is NOT optional — add it to `query-symbol`, `refs`, `file-detail`, `verify`, and `check` for compiler-grade precision. When servers are missing, run `lsp setup --dry-run` to see install plans, then `lsp setup` to install them.
 11. If you need dead-code candidates: use `orphan`; review high (≥70) and medium (40-69) confidence tiers; use `--min-confidence 70` to filter noise; verify each candidate with `refs` before deletion.
 12. If you need to understand enum/state lifecycle before changing it: use `state-map --symbol <name>` or `state-map --query <keywords>`.
 13. If installed repomap may be stale or unhealthy: use `doctor`.
