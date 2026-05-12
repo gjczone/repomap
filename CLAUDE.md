@@ -296,6 +296,18 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
 
 When the user asks to release a new version, follow this automated flow. **No manual checkpoints — every step completes before the next begins. If a step requires waiting (CI), poll automatically and report progress.**
 
+### Release Quality Gates
+- Treat release as a full contract, not a version bump: local tests, rebuilt binary, npm package contents, CI, npm versions, and GitHub Release must all be verified.
+- Keep one version chain: Python package, MCP server, `repomap-bin`, platform packages, lockfile, and hardcoded MCP server version must be updated together.
+- Preserve npm publish order: platform packages first, `repomap-bin` second, `repomap-mcp-server` last. Never publish a wrapper that depends on a platform version that is not published.
+- Update the source of truth when behavior or distribution changes: workflow files, README files, CLAUDE.md, and SKILL.md must not describe conflicting release paths.
+- Treat `skipped`, `unknown`, and missing diagnostics as incomplete evidence. Explain why they are expected and cover the gap with real tests, binary smoke tests, or CI evidence.
+- For bug fixes, add or update a regression test that would have failed before the fix unless the change is documentation-only.
+- Before publishing, verify package contents with `npm pack --dry-run --json` for packages touched by the release.
+- Verify real binary entrypoints, not only source CLI: `dist/repomap`, platform package binary, and `node mcp/repomap-bin/run.js`.
+- Keep public and local skills separate: the repository skill is the public distribution source; the local skill may only append `## Optimization Feedback`.
+- Before push or release, confirm clean git status, target remote, branch, tag target commit, and CI target branch.
+
 ### Version Decision
 - **docs/README changes only**: patch bump (x.y.Z)
 - **New feature or behavior enhancement**: minor bump (x.Y.z)
@@ -313,6 +325,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - Test in projects with different language mixes (pure Python, TS+Python, etc.)
 - Key commands to verify: `overview`, `query`, `file-detail --with-lsp`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
 - If any command fails, fix before proceeding with the release
+- If any test, diagnostic, or verify step is skipped/unknown, document why it is acceptable and which non-skipped evidence covers the same risk.
 
 ### MCP Sync
 - After ANY CLI command change (add/remove/rename), update `mcp/src/tools.ts`
@@ -361,7 +374,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 4. If CI completes and `conclusion=success`: proceed to npm package verification.
 
 ### npm Publish Verification
-After local publish, run this verification command:
+After CI publish, run this verification command:
 ```bash
 for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do
   ver=$(npm view "$pkg" version 2>/dev/null || echo "N/A")
