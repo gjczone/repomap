@@ -900,11 +900,13 @@ def _parse_hover_response(raw: Any) -> str:
         return raw
     if isinstance(raw, dict):
         # MarkupContent: {"kind": "markdown", "value": "..."}
-        value = raw.get("value", "")
-        if isinstance(value, str):
+        value = raw.get("value")
+        if isinstance(value, str) and value:
             return value
         # contents 可能是 MarkedString 或 MarkedString[]
-        contents = raw.get("contents", raw)
+        contents = raw.get("contents")
+        if contents is None:
+            return str(raw)
         if isinstance(contents, str):
             return contents
         if isinstance(contents, dict):
@@ -1012,6 +1014,22 @@ def compute_name_paths(
         if node.children:
             result.update(compute_name_paths(node.children, path))
     return result
+
+
+LSP_INSTALL_STRATEGIES: dict[str, dict[str, str]] = {
+    "python": {"tool": "uv", "cmd": "uv pip install pyright", "detect": ".venv"},
+    "typescript": {"tool": "npm", "cmd": "npm install -g typescript-language-server typescript", "detect": "package.json"},
+    "rust": {"tool": "rustup", "cmd": "rustup component add rust-analyzer", "detect": "Cargo.toml"},
+    "go": {"tool": "go", "cmd": "go install golang.org/x/tools/gopls@latest", "detect": "go.mod"},
+    "cpp": {"tool": "apt/brew", "cmd": "clangd (system package: apt install clangd-12 / brew install llvm)", "detect": "compile_commands.json"},
+    "csharp": {"tool": "dotnet", "cmd": "dotnet tool install --global csharp-ls", "detect": "*.csproj"},
+    "java": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall jdtls", "detect": "pom.xml"},
+    "lua": {"tool": "npm", "cmd": "npm install -g lua-language-server", "detect": ".luarc.json"},
+    "php": {"tool": "npm", "cmd": "npm install -g intelephense", "detect": "composer.json"},
+    "ruby": {"tool": "gem", "cmd": "gem install ruby-lsp", "detect": "Gemfile"},
+    "swift": {"tool": "xcode", "cmd": "sourcekit-lsp (included with Xcode on macOS / Swift toolchain on Linux)", "detect": "Package.swift"},
+    "kotlin": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall kotlin-language-server", "detect": "build.gradle"},
+}
 
 
 def detection_to_dict(detection: LspServerDetection) -> dict[str, Any]:
