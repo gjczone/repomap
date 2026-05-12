@@ -1,41 +1,46 @@
 # RepoMap — 编程代理的代码库感知工具
 
-> **一个 CLI 工具，为编程代理提供结构化代码库感知能力——在编辑代码之前知道该从哪读起、改什么会影响什么，编辑之后知道该验证什么。**
+> Tree-sitter 项目地图、13 语言 LSP、编辑前后影响分析 — 为 Claude Code、Cursor、Codex、OpenCode 设计。
 >
-> 专为 **Claude Code**、**Cursor**、**Codex**、**OpenCode** 等 agent harness 构建。两种集成模式：**MCP 服务器**（工具出现在代理的工具列表中）或 **Skill + CLI**（skill 文件指导代理何时调用 CLI）。
->
-> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map 概念。由 [@gjczone](https://github.com/gjczone) vibe coding with [DeepSeek](https://chat.deepseek.com/) 构建。
+> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map。由 [@gjczone](https://github.com/gjczone) 与 [DeepSeek](https://chat.deepseek.com/) 共同构建。
 
 [English README](README.md)
 
-编程代理使用 repomap 获取结构化仓库上下文，替代 `grep` + 逐文件阅读的猜测：
+**编程代理获得的能力**：结构化仓库上下文，替代 grep + 原始文件读取：
 
-- **预定位**：任务该从哪里开始 — `overview`、`query`（含同义词扩展）、`routes --with-consumers`
-- **预防**：改这个文件会影响什么 — `impact`、`call-chain`、`refs`、`state-map`
-- **缺口检测**：编辑后遗漏了什么 — `verify`（含合约风险警告）、`check`、`orphan`
+- **从哪里开始**：`overview`、`query`（同义词扩展）、`routes`
+- **什么会被破坏**：`impact`、`call-chain`、`refs`、`state-map`
+- **遗漏了什么**：`verify`（合约风险警告）、`check`、`orphan`
 
 ---
 
-## 快速安装
+## 快速开始
 
-### 第一步：安装二进制（两种模式都需要）
+### 方案一（推荐）：CLI + Skill
+
+Skill 文件告诉代理*何时*调用每个命令。适用于任何支持自定义 skill 的编程代理。
 
 ```bash
+# 1. 克隆 skill
+mkdir -p ~/.claude/skills
+git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
+cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
+rm -rf /tmp/repomap-install
+
+# 2. 安装二进制文件
 npm install -g repomap-bin
-repomap doctor   # 验证安装
+
+# 3. 验证
+repomap doctor
 ```
 
-### 第二步：选择集成模式
+**效果**：代理读取 `~/.claude/skills/repomap/SKILL.md`，在恰当的时机自动调用 `repomap overview`、`repomap impact`、`repomap verify`。Skill 包含决策规则和强制使用模式。
 
-| | MCP 服务器 | Skill + CLI |
-|---|---|---|
-| **工作原理** | 工具出现在代理的工具列表中。服务器将工作流指令注入系统提示——代理自行决定何时调用每个工具。 | Skill 文件（`SKILL.md`）告诉代理*何时*和*如何*调用 CLI 命令。代理直接运行 `repomap ...`。 |
-| **最适合** | Claude Code、Cursor、VS Code 或任何支持 MCP 的 harness | 任何支持自定义 skill 的编程代理（Claude Code、Codex、OpenCode 等） |
-| **配置** | 添加 5 行 JSON 配置 | 克隆 skill + 安装二进制 |
+### 方案二：MCP 服务器
 
-#### 方式一：MCP 服务器
+MCP 工具出现在代理的工具列表中，附带内置工作流指令。最适合 MCP 原生客户端（Claude Code、Cursor、VS Code）。
 
-在 Claude Code 配置中添加（`~/.claude/settings.json`）：
+添加到 `~/.claude/settings.json`：
 
 ```json
 {
@@ -50,98 +55,67 @@ repomap doctor   # 验证安装
 
 或命令行：`claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
 
-**效果**：19 个 MCP 工具出现在代理的工具列表中（`repomap_overview`、`repomap_query`、`repomap_impact` 等）。MCP 服务器注入强制性工作流指令——代理被要求在 grep 之前、读文件之前、编辑之前和编辑之后使用这些工具。每个工具描述都包含何时"必须用"和"可选"的决策规则。
+**效果**：19 个 MCP 工具（`repomap_overview`、`repomap_query`、`repomap_impact` 等），含强制性工作流规则注入系统提示。
 
-#### 方式二：Skill + CLI
-
-<details>
-<summary>Linux / macOS / Windows</summary>
-
-```
-安装 repomap：
-
-1. 克隆 skill：
-   mkdir -p ~/.claude/skills
-   git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
-   cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
-   rm -rf /tmp/repomap-install
-
-2. 安装二进制（自动处理平台适配）：
-   npm install -g repomap-bin
-
-3. 验证：
-   repomap doctor
-```
-</details>
-
-**效果**：`~/.claude/skills/repomap/SKILL.md` 中的 skill 文件告诉代理何时运行每个 `repomap` CLI 命令。Skill 包含决策规则（"如果 X 则用 Y"）、工作流模式和强制性使用规则。
+> **Skill vs MCP**：Skill 模式给代理一个决策流程（何时调用什么）。MCP 模式给代理工具和描述。两者都可用——根据你的客户端选择。Skill 模式适用于任何能读取 markdown 的代理；MCP 模式需要 MCP 协议支持。
 
 ---
 
-### LSP 设置（可选，代理自动处理）
+### LSP 设置（可选）
 
-代理会运行 `repomap doctor --lsp` 检查语言服务器，然后通过 `repomap lsp setup` 自动安装缺失的服务器：
+为符号查找提供编译器级精度。代理自动处理：
 
+```bash
+repomap doctor --lsp                 # 检查可用服务器
+repomap lsp setup --dry-run          # 预览安装计划
+repomap lsp setup                    # 安装缺失的服务器
 ```
-repomap lsp setup --dry-run   # 预览安装计划
-repomap lsp setup             # 安装缺失的服务器
-```
 
-支持的 LSP 服务器（13 种语言）：`pyright`/`pylsp`（Python）、`typescript-language-server`（TS/JS）、`rust-analyzer`（Rust）、`gopls`（Go）、`clangd`（C/C++）、`csharp-ls`（C#）、`jdtls`（Java）、`lua-language-server`（Lua）、`intelephense`（PHP）、`ruby-lsp`（Ruby）、`sourcekit-lsp`（Swift）、`kotlin-language-server`（Kotlin）。
+**默认服务器**（按语言自动检测）：`pyright`（Python）、`typescript-language-server`（TS/JS）、`rust-analyzer`（Rust）、`gopls`（Go）、`clangd`（C/C++）、`csharp-ls`（C#）、`jdtls`（Java）、`lua-language-server`（Lua）、`intelephense`（PHP）、`ruby-lsp`（Ruby）、`sourcekit-lsp`（Swift）、`kotlin-language-server`（Kotlin）。
 
-无 LSP 时所有命令仍可正常工作——LSP 仅为符号级查找提供编译器级别精度。
+所有命令无需 LSP 即可工作——LSP 是可选的精度增强层。
 
 ---
 
-## 全部命令
+## 命令
 
 | 命令 | 功能 |
 |------|------|
-| `overview` | 项目地图：入口点、热点、关键符号（PageRank）、推荐阅读顺序、模块聚类 |
-| `scan` | 初始扫描摘要：文件/符号/边计数、入口点、扫描健康状态 |
-| `query --query <关键词>` | 主题搜索（含同义词扩展）；支持 `--context-lines <N>` 显示匹配代码行 |
-| `file-detail --file-path <文件>` | 文件内所有符号；添加 `--with-lsp` 查看 LSP 分级符号树 |
-| `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险等级、建议测试 |
-| `call-chain --symbol <名称>` | 符号的调用者和被调用者，支持配置深度 |
-| `query-symbol --symbol <名称>` | 精确或模糊符号查找；添加 `--with-lsp` 获得编译器级精度 |
-| `refs --symbol <名称>` | 符号的所有引用；添加 `--with-lsp` 获得精确跨文件结果 |
-| `routes --json` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
-| `routes --with-consumers` | 将每个路由映射到前端/测试消费者，含置信度级别 |
-| `state-map --symbol <名称>` | 枚举/常量状态值、写入者和读取者（Python/TS/Rust/Go） |
-| `verify` | 编辑后证据门：git 变更、风险、合约风险警告、建议测试、诊断、LSP、图差异 |
-| `verify --quick` | 仅编辑后风险评估（跳过编译器/LSP，更快） |
-| `check` | 语言诊断：tsc、cargo check、ruff、mypy、go vet |
-| `orphan` | 死代码候选发现，含置信度分级和删除前检查清单 |
-| `hotspots` | 按复杂度和变更频率排名的高密度文件 |
-| `cache save` | 保存当前图为基线，供后续 `diff` 或 `verify --with-diff` 使用 |
-| `diff` | 与编辑前 `cache save` 基线的图对比 |
-| `doctor` | 健康检查：解析器、运行时、LSP 服务器；添加 `--lsp` 获得完整 LSP 报告 |
-| `lsp setup` | 自动检测并安装缺失的 LSP 服务器；先用 `--dry-run` 预览 |
+| `overview` | 项目地图：入口点、热点、关键符号（PageRank）、阅读顺序 |
+| `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行 |
+| `file-detail --file-path <文件>` | 文件符号 + 签名；`--with-lsp` 查看分级符号树 |
+| `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
+| `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度 |
+| `query-symbol --symbol <名称>` | 精确/模糊符号查找；`--with-lsp` 获取 hover + 定义/引用证据 |
+| `refs --symbol <名称>` | 符号的所有引用；`--with-lsp` 获取精确跨文件结果 |
+| `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
+| `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
+| `verify [--quick] [--with-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断 |
+| `check [--with-lsp]` | 编译器/类型/lint 诊断（tsc、ruff、cargo check、go vet） |
+| `orphan [--json]` | 死代码候选发现，含置信度分级 |
+| `hotspots` | 按复杂度排名的高密度文件 |
+| `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
+| `lsp setup [--dry-run]` | 自动安装缺失的 LSP 服务器 |
 
 ---
 
-## 编程代理如何使用 RepoMap
+## 代理工作流
 
-你不需要自己输入这些命令。编程代理根据 MCP 服务器指令或 `skills/repomap/SKILL.md` 中的 skill 定义自动调用。
-
-### 编辑前
+代理按此模式自动工作（由 skill 或 MCP 指令引导）：
 
 ```bash
-repomap overview --project .                          # 初次接触：了解项目结构
-repomap query --project . --query "auth token"        # 按业务关键词查找文件
+# 编辑前
+repomap overview --project .                          # 初次接触
+repomap query --project . --query "auth token"        # 按关键词查找
 repomap file-detail --project . --file-path src/auth/login.ts
-repomap impact --project . --files src/auth/login.ts --with-symbols   # 影响范围
-repomap routes --project . --with-consumers           # 谁调用了这个 API？
-repomap state-map --project . --symbol TaskStatus     # 状态生命周期
-repomap call-chain --project . --symbol refreshToken  # 调用者和被调用者
-```
+repomap impact --project . --files src/auth/login.ts --with-symbols
+repomap routes --project . --with-consumers           # API 消费者映射
+repomap call-chain --project . --symbol refreshToken
 
-### 编辑后
-
-```bash
+# 编辑后
 repomap verify --project . --with-lsp                 # 完整证据门
-repomap check --project .                             # 编译器/linter 诊断
-repomap orphan --project . --min-confidence 70        # 删除后检查死代码
+repomap check --project .                             # 编译器诊断
+repomap orphan --project . --min-confidence 70        # 死代码检查
 ```
 
 ---
@@ -150,13 +124,13 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 **8 种内置**（零配置）：Python、JavaScript、TypeScript（TSX）、Go、Rust、HTML、CSS、JSON
 
-**7 种扩展**（`uv sync --all-extras`）：Java、Kotlin、Swift、C/C++、C#、PHP、Ruby
+**7 种扩展**（`npm install -g repomap-bin` 已全部包含）：Java、Kotlin、Swift、C/C++、C#、PHP、Ruby
 
 ---
 
 ## MCP 工具
 
-使用 MCP 服务器（`repomap-mcp-server`）时，以下工具对编程代理可用。服务器会注入工作流指令，告诉代理每个工具何时**必须使用**。
+使用 MCP 服务器时可用：
 
 `repomap_overview` · `repomap_query` · `repomap_file_detail` · `repomap_impact` · `repomap_call_chain` · `repomap_query_symbol` · `repomap_refs` · `repomap_routes` · `repomap_routes_consumers` · `repomap_state_map` · `repomap_verify` · `repomap_check` · `repomap_orphan` · `repomap_hotspots` · `repomap_diff` · `repomap_cache_save` · `repomap_doctor` · `repomap_lsp_setup` · `repomap_scan`
 
@@ -164,17 +138,17 @@ repomap orphan --project . --min-confidence 70        # 删除后检查死代码
 
 ## 起源
 
-`repomap` 的名称和核心思想来自 **[aider](https://github.com/Aider-AI/aider)**。aider 的作者 Paul Gauthier 首创了"仓库映射"——使用 tree-sitter + PageRank 为编程代理提供代码库感知能力。他证明了一个违反直觉的洞见：紧凑的结构化地图在代理理解方面往往优于大量原始代码。
+`repomap` 的核心思想来自 **[aider](https://github.com/Aider-AI/aider)**。Paul Gauthier 首创了仓库映射——用 tree-sitter + PageRank 为编程代理提供代码库感知——证明紧凑的结构化地图往往优于原始代码供代理理解。
 
-`repomap` 扩展了这一概念：15 种语言、增量扫描、查询同义词扩展、路由消费者映射、合约风险检测、状态映射、社区检测以及可选的 LSP 集成。
+`repomap` 扩展了这一概念：15 种语言、增量扫描、查询同义词扩展、路由到消费者映射、合约风险检测、状态映射，以及可选的 LSP 集成。
 
 ---
 
 ## 相关项目
 
-- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。repomap 的核心思想（tree-sitter + PageRank 为编程代理提供代码库感知）源自 aider。
-- **[serena](https://github.com/oraios/serena)** — 功能全面的 MCP 编程工具包，深度 LSP 集成（solidlsp）。repomap v2.3 借鉴了 serena 的 LSP 服务器自动检测模式、`TextLine`/`MatchedConsecutiveLines` 搜索结果格式和 `NamePath` 风格的分级符号索引。serena 的 Agent-first 工具设计和配置系统仍是重要参考。
-- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们通过 [PR](https://github.com/Hmbown/DeepSeek-TUI/pulls?q=deepmap) 贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
+- **[aider](https://github.com/Aider-AI/aider)** — CLI 仓库映射的先驱。
+- **[serena](https://github.com/oraios/serena)** — 功能全面的 MCP 编程工具包，深度 LSP 集成（solidlsp）。repomap v2.3 借鉴了 serena 的 LSP 检测模式、`TextLine`/`MatchedConsecutiveLines` 搜索格式和 `NamePath` 风格的分级符号索引。
+- **[DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI)** — 我们贡献了 `deepmap`，即 repomap 引擎的 Rust 移植。
 
 ---
 
