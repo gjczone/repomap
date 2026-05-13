@@ -51,7 +51,7 @@ For any non-trivial coding task, follow this order:
 
 const server = new McpServer({
   name: "repomap-mcp-server",
-  version: "2.3.1",
+  version: "2.3.2",
 }, {
   instructions: REPOMAP_INSTRUCTIONS,
 });

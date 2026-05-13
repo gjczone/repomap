@@ -145,6 +145,10 @@ The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The l
 - Any references to local file paths (e.g., absolute paths on maintainer's machine)
 - Any maintainer-specific workflow or feedback mechanisms
 
+## Release Rule（铁律）
+
+**任何代码修改完成后，必须走完整发布流程。** 不允许只 commit 不发布。修改即发布，发布即完整（版本号 → binary → MCP → commit → push → CI → npm → GitHub Release）。
+
 ## Post-Change Checklist
 
 After any code change to `src/` or `mcp/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
