@@ -154,8 +154,9 @@ The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The l
 After any code change to `src/` or `mcp/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
 
 ```bash
-# 1. Run tests
+# 1. Run ALL tests (Python + MCP) — both must pass before proceeding
 uv run python -m unittest discover -s tests -v
+cd mcp && npm test && cd ..
 
 # 2. Rebuild binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
