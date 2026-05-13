@@ -192,7 +192,7 @@ cd mcp && npm run build && cd ..
 #    - Check for missing tools for new CLI commands
 #    - Rebuild MCP after any tool.ts changes
 
-# 8. Bump version in all 7 locations (see Distribution Policies)
+# 8. Bump version in all 8 locations (see Distribution Policies)
 
 # 9. Commit + push → CI auto-publishes all npm packages
 #    Commit message format: [release]: vX.Y.Z — English summary of primary change
@@ -272,9 +272,9 @@ When the CLI binary is updated (`src/` changes, binary rebuilt):
 - **npm only**: All distribution is via npm. No PyPI, no GitHub Release binaries, no manual binary downloads.
 - **No binaries in git**: `dist/repomap` and `mcp/repomap-bin/platforms/*/repomap` are gitignored. Build artifacts stay local.
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
-- **Version bump**: When bumping version, update ALL 7 locations in one commit:
+- **Version bump**: When bumping version, update ALL 8 locations in one commit:
   - `pyproject.toml`
-  - `mcp/package.json` + `mcp/repomap-bin/package.json`
+  - `mcp/package.json` + `mcp/repomap-bin/package.json` (version + optionalDependencies)
   - `mcp/repomap-bin/platforms/repomap-bin-linux-x64/package.json`
   - `mcp/repomap-bin/platforms/repomap-bin-darwin-arm64/package.json`
   - `mcp/repomap-bin/platforms/repomap-bin-windows-x64/package.json`
