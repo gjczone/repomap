@@ -2344,7 +2344,9 @@ def run_doctor(project: str | None = None, show_lsp: bool = False) -> int:
     if "tsx" not in adapter.parsers:
         print("TSX parser: unavailable", file=sys.stderr)
         return 1
-    print(f"repomap_cli: {_module_origin('repomap_cli')}")
+    repomap_cli_origin = _module_origin("repomap_cli")
+    if repomap_cli_origin != "not found":
+        print(f"repomap_cli: {repomap_cli_origin} (dev only)")
     print(f"tree_sitter: {_module_origin('tree_sitter')}")
     print("LSP client: available")
 

@@ -137,26 +137,13 @@ The public README files serve different audiences than this document:
 
 ## Agent Boundary Discovery
 
-When using `repomap`, AI agents encounter tool boundaries that specs don't cover. These discoveries are logged in [`docs/BOUNDARIES.md`](docs/BOUNDARIES.md) for continuous improvement.
-
-**What to log**: language/framework gaps, performance boundaries, output precision issues, workflow friction, edge cases.
-
-**When to log**: after any `repomap` command that fails or produces unexpected results; when output requires post-processing; when a real coding task exposes a capability gap.
-
-**Format**: each entry uses `[ ]` (pending) or `[x]` (resolved) checkbox format with discovery scenario, current behavior, expected behavior, and impact on agent workflow.
-
-**Workflow**: use repomap normally → hit a boundary → find alternative approach → log the discovery → after fix is implemented, verify and mark `[x]`.
-
-The SKILL.md `## Optimization Feedback` section is the authoritative procedure for what to capture and how to format entries.
+When using `repomap`, AI agents encounter tool boundaries that specs don't cover (language/framework gaps, performance boundaries, output precision issues, workflow friction). File these as GitHub Issues on the repository — do not log them in local files.
 
 ## Skill Distribution
 
-The open-source skill (`skills/repomap/SKILL.md`) is distributed to users and must NOT include:
-- `## Optimization Feedback` section — local maintainer use only
+The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The local copy (`~/.agents/skills/repomap/SKILL.md`) must be byte-identical to the open-source version. Neither may include:
 - Any references to local file paths (e.g., absolute paths on maintainer's machine)
 - Any maintainer-specific workflow or feedback mechanisms
-
-The local skill (`~/.agents/skills/repomap/SKILL.md`) includes the full `## Optimization Feedback` section for continuous improvement based on real-world usage.
 
 ## Post-Change Checklist
 
@@ -212,12 +199,12 @@ cd mcp && npm run build && cd ..
 #     - CI publishes platform packages, repomap-bin, and repomap-mcp-server
 #     - Verify all 5 packages: for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do npm view "$pkg" version; done
 
-# 11. Sync skill to ~/.agents/skills/repomap/ + append Optimization Feedback
+# 11. Sync skill to ~/.agents/skills/repomap/ (all files must be byte-identical)
 cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
 cp -r skills/repomap/scripts/* ~/.agents/skills/repomap/scripts/
 cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-# Manually append ## Optimization Feedback to local copy
 diff -r skills/repomap/references/ ~/.agents/skills/repomap/references/
+diff skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
 
 # 12. Create GitHub Release — bilingual: English section first, Chinese section second, separated by ---
 ```
@@ -306,7 +293,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - For bug fixes, add or update a regression test that would have failed before the fix unless the change is documentation-only.
 - Before publishing, verify package contents with `npm pack --dry-run --json` for packages touched by the release.
 - Verify real binary entrypoints, not only source CLI: `dist/repomap`, platform package binary, and `node mcp/repomap-bin/run.js`.
-- Keep public and local skills separate: the repository skill is the public distribution source; the local skill may only append `## Optimization Feedback`.
+- Keep public and local skills byte-identical: the repository skill is the public distribution source; the local skill must be an exact copy.
 - Before push or release, confirm clean git status, target remote, branch, tag target commit, and CI target branch.
 
 ### Version Decision
@@ -403,16 +390,12 @@ After modifying repomap source code or skill files, sync between skill directori
 **Sync procedure**:
 
 ```bash
-# Sync references and scripts (must be byte-identical)
+# All files must be byte-identical
 cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
 cp -r skills/repomap/scripts/* ~/.agents/skills/repomap/scripts/
-
-# Sync SKILL.md then add Optimization Feedback section locally
 cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-# Manually append ## Optimization Feedback to local copy
 ```
 
 **Consistency rules**:
-- `references/` and `scripts/`: byte-identical at all times
-- `SKILL.md` in `~/.agents/skills/repomap/`: open-source version **plus** `## Optimization Feedback` appended — no other differences
-- After changes, verify with `diff -r skills/repomap/references/ ~/.agents/skills/repomap/references/`
+- `references/`, `scripts/`, and `SKILL.md`: all byte-identical at all times
+- After changes, verify with `diff -r skills/repomap/ ~/.agents/skills/repomap/`

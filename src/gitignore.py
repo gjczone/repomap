@@ -92,27 +92,43 @@ class GitignoreParser:
         self._walk_and_load()
 
     def _walk_and_load(self) -> None:
-        """递归遍历项目目录，加载所有 .gitignore 文件。"""
-        for root, dirs, files in os.walk(self.project_root):
-            rel = Path(root).relative_to(self.project_root)
-            # 跳过已被 base spec 排除的目录
-            if rel != Path("."):
-                if self._match_spec(self._base_spec, rel.as_posix()):
-                    dirs.clear()
-                    continue
-            if ".git" in dirs:
-                dirs.remove(".git")
-            if ".gitignore" not in files:
+        """递归遍历项目目录，加载所有 .gitignore 文件。
+
+        使用 os.scandir 替代 os.walk：在进入子目录之前检查 ignore spec，
+        避免遍历 node_modules 等大型忽略目录的内容。
+        """
+        self._scan_dir(self.project_root, Path("."))
+
+    def _scan_dir(self, root_path: Path, rel_path: Path) -> None:
+        try:
+            entries = list(os.scandir(root_path))
+        except PermissionError:
+            return
+
+        dirs = []
+        for entry in entries:
+            if entry.is_dir():
+                dirs.append(entry)
+            elif entry.name == ".gitignore" and entry.is_file():
+                self._load_gitignore(Path(entry.path), rel_path)
+
+        for d in dirs:
+            child_rel = rel_path / d.name
+            if self._match_spec(self._base_spec, child_rel.as_posix()):
                 continue
-            gitignore_path = Path(root) / ".gitignore"
-            try:
-                lines = gitignore_path.read_text(encoding="utf-8").splitlines()
-            except OSError:
+            if d.name == ".git":
                 continue
-            if not lines:
-                continue
-            spec = pathspec.PathSpec.from_lines("gitignore", lines)
-            self._specs.append((rel, spec))
+            self._scan_dir(d.path, child_rel)
+
+    def _load_gitignore(self, path: Path, rel_dir: Path) -> None:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+        if not lines:
+            return
+        spec = pathspec.PathSpec.from_lines("gitignore", lines)
+        self._specs.append((rel_dir, spec))
 
     def is_ignored(self, file_path: str | Path) -> bool:
         """判断一个项目相对路径是否应被忽略。"""

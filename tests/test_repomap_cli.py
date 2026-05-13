@@ -590,7 +590,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("tree-sitter parsers", result.stdout)
         self.assertIn("tsx", result.stdout)
-        self.assertIn("repomap_cli:", result.stdout)
+        self.assertNotIn("repomap_cli: not found", result.stdout)
         self.assertIn("tree_sitter:", result.stdout)
         self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
 

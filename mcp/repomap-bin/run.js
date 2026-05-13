@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
