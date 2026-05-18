@@ -27,8 +27,10 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
+
 # 2. Install CLI
-pip install repomap
+npm install -g @gjczone/repomap-linux-x64
+# or: pip install repomap-cli
 # or: uv tool install repomap
 
 # 3. Verify
@@ -42,8 +44,9 @@ repomap doctor
 Install the CLI tool directly for manual use or integration with any workflow:
 
 ```bash
-pip install repomap
-# or: uv tool install repomap
+
+npm install -g @gjczone/repomap-linux-x64
+# or: pip install repomap-cli
 
 # Verify
 repomap doctor
