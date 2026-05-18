@@ -2,7 +2,7 @@
 
 > Tree-sitter 项目地图、13 语言 LSP、编辑前后影响分析 — 为 Claude Code、Cursor、Codex、OpenCode 设计。
 >
-> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map。由 [@gjczone](https://github.com/gjczone) 与 deepseek-v4-pro 共同构建。
+> 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map。由 [@gjczone](https://github.com/gjczone) 与 deepseek-v4-pro 和 glm-5.1 共同构建。
 
 [English README](README.md)
 

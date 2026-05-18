@@ -2,7 +2,7 @@
 
 > Tree-sitter project maps, 13-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
 >
-> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with deepseek-v4-pro.
+> Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with deepseek-v4-pro and glm-5.1.
 
 [中文 README](README.zh-CN.md)
 
