@@ -38,7 +38,8 @@ For most non-trivial coding tasks:
 | Installed runtime sanity | `repomap doctor` | Suspect stale binary, parser/runtime issue, or PATH mismatch. |
 | Project scan summary | `repomap scan --project <project>` | Need counts, entrypoints, and scan health; usually secondary to `overview`. |
 | First repository overview | `repomap overview --project <project>` | Need modules, entrypoints, reading order, hotspots, and lightweight non-AST supporting files; add `--with-heat`/`--with-co-change` only when needed. |
-| Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact file/symbol names; supports `--paths`, `--exclude`, `--no-tests`, `--json`, `--context-lines <N>`. |
+| Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact file-symbols; supports `--paths`, `--exclude`, `--no-tests`, `--json`, `--context-lines <N>`. |
+| Symbol search (BM25) | `repomap search --project <project> --query <text>` | Need semantic symbol search by natural language; uses BM25 ranking with keyword fallback; supports `--top-k`. |
 | Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading or editing one file; tune `--max-symbols`/`--max-chars` if output is large; add `--with-lsp` for hierarchical LSP symbol tree. |
 | Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous, `--with-lsp` for local definition/reference evidence. |
 | Call flow | `repomap call-chain --project <project> --symbol <name>` | Need callers/callees before behavior change; supports `--direction`, `--depth`, `--file-path`, `--json`. |
@@ -218,6 +219,9 @@ When you need LSP evidence inside the repomap workflow, choose repomap's opt-in 
 - `cache save` is a low-level baseline-preparation command and must be run before target edits; `diff` is an advanced graph-only comparison. Prefer `verify --with-diff` for final handoff evidence. Missing cache baseline should not be treated as proof of safety. `cache load` is not public.
 - `orphan` output is tiered by confidence (high/medium/low). Structural elements (module, HTML element, JSON key) are auto-excluded. Never delete solely from this output — use `refs` to verify each high-confidence candidate, and require additional code/business verification before deletion.
 - Member-call safety: `obj.method()` must not fall back to unrelated global candidates without evidence. Edges require same-file, explicit import binding, or imported-file evidence.
+- Precise call graph supports Python (ast module), TypeScript/TSX, Go, and Rust (tree-sitter AST). `self.method()` / `this.method()` / `Self::method()` resolve to class/impl methods. Cross-file import resolution works for all four languages.
+- `search` uses BM25 ranking (rank-bm25) with keyword fallback when the library is unavailable. Symbol documents include name tokens, signature, docstring, return_type, and params.
+- Git operations use pygit2 (libgit2 C binding) when available, falling back to subprocess git. Both backends produce consistent output formats.
 - JS/TS object literal API methods such as `getMetadata: () => ...` are recognized as named method symbols.
 - `.tsx` uses the dedicated TSX parser. Import dependency extraction should use module source strings, not imported symbol names.
 - Path-taking commands normalize `./...` and absolute in-project paths and must reject paths outside the project.
