@@ -29,7 +29,7 @@ try:
     import pygit2
     _HAS_PYGIT2 = True
 except ImportError:
-    pass
+    pygit2 = None  # type: ignore[assignment]
 
 
 class SubprocessBackend:

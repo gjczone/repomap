@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.git_backend import GitBackend, Pygit2Backend, SubprocessBackend
+from src.git_backend import GitBackend, Pygit2Backend, SubprocessBackend, _HAS_PYGIT2
 
 
 def _mock_completed(stdout: str = "", returncode: int = 0) -> MagicMock:
@@ -261,6 +261,7 @@ class TestSubprocessBackend:
 # ── TestPygit2Backend ───────────────────────────────────────────────
 
 
+@pytest.mark.skipif(not _HAS_PYGIT2, reason="pygit2 未安装")
 class TestPygit2Backend:
     ROOT = "/fake/project"
 
