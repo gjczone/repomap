@@ -210,7 +210,8 @@ repomap overview --project .
 
 ## Distribution Policies
 
-- **No binaries in git**: `dist/repomap` is gitignored. Build artifacts stay local.
+- **No binaries in git**: `dist/repomap` and `npm/platforms/*/repomap*` are gitignored. Build artifacts stay local.
+- **npm distribution**: CI publishes platform-specific packages (`@gjczone/repomap-linux-x64`, `@gjczone/repomap-darwin-arm64`, `@gjczone/repomap-windows-x64`). Users install via `npm install -g @gjczone/repomap-<platform>`. npm version is synced from `pyproject.toml` during CI build.
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
 - **Version bump**: When bumping version, update `pyproject.toml`.
 - **CI build**: CI builds the binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.

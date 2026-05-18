@@ -73,3 +73,23 @@ jobs:
         with:
           name: repomap-${{ runner.os }}
           path: dist/repomap*
+
+      - name: Copy binary to npm platform package
+        shell: bash
+        run: |
+          cp dist/${{ matrix.bin-name }} npm/platforms/${{ matrix.platform }}/${{ matrix.bin-name }}
+
+      - name: Sync npm version from pyproject.toml
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          cd npm/platforms/${{ matrix.platform }}
+          node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+
+      - name: Publish to npm
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          cd npm/platforms/${{ matrix.platform }}
+          npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
+          npm publish --access public
