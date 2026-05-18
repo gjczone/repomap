@@ -172,10 +172,9 @@ class RepoMapEngine:
         # 子组件
         self._resolver: ImportResolver | None = None
         self._analyzer = GraphAnalyzer(self.graph)
-        # 路由提取结果
         self.routes: list = []
-        # gitignore 解析器（延迟初始化）
         self._gitignore: GitignoreParser | None = None
+        self._search_index: Any | None = None
 
     @staticmethod
     def _read_max_file_bytes() -> int:
@@ -307,57 +306,27 @@ class RepoMapEngine:
             if cache.project_root_hash != _project_root_cache_key(self.project_root):
                 logger.debug("Incremental cache stale: project root changed")
                 return None
-            # 校验 git HEAD 是否匹配
-            try:
-                result = subprocess.run(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=self.project_root, capture_output=True, text=True, timeout=5,
-                )
-                if result.returncode != 0:
-                    return None
-                if cache.git_head and cache.git_head != result.stdout.strip():
+            if cache.git_head:
+                from .git_backend import GitBackend
+                git = GitBackend(str(self.project_root))
+                current_head = git.rev_parse_head()
+                if current_head and cache.git_head != current_head:
                     logger.debug("Incremental cache stale: git HEAD changed")
                     return None
-            except Exception:
-                pass
             return cache
         except Exception:
             return None
 
     def _git_changed_files(self) -> tuple[list[str], list[str]]:
         """返回 (modified_files, deleted_files)，相对于项目根目录。"""
-        modified, deleted = [], []
         try:
-            # unstaged + staged modifications + untracked files
-            for status_cmd in (["git", "diff", "--name-only", "HEAD"],):
-                result = subprocess.run(
-                    status_cmd, cwd=self.project_root, capture_output=True, text=True, timeout=10,
-                )
-                if result.returncode == 0:
-                    for line in result.stdout.strip().split("\n"):
-                        if line:
-                            modified.append(line)
-            # untracked files (new files never git add-ed)
-            result = subprocess.run(
-                ["git", "ls-files", "--others", "--exclude-standard"],
-                cwd=self.project_root, capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line:
-                        modified.append(line)
-            # deleted files
-            result = subprocess.run(
-                ["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],
-                cwd=self.project_root, capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line:
-                        deleted.append(line)
+            from .git_backend import GitBackend
+            git = GitBackend(str(self.project_root))
+            modified = git.changed_files()
+            deleted = git.deleted_files()
+            return sorted(set(modified)), sorted(set(deleted))
         except Exception:
-            pass
-        return sorted(set(modified)), sorted(set(deleted))
+            return [], []
 
     def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
         """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""
@@ -379,6 +348,8 @@ class RepoMapEngine:
                 visibility=sym_dict.get("visibility", "private"),
                 docstring=sym_dict.get("docstring", ""),
                 signature=sym_dict.get("signature", ""),
+                return_type=sym_dict.get("return_type", ""),
+                params=sym_dict.get("params", ""),
                 pagerank=sym_dict.get("pagerank", 0.0),
             )
             self.graph.symbols[sym.id] = sym
@@ -595,6 +566,10 @@ class RepoMapEngine:
             self.graph.symbols[sym.id] = sym
             self.graph.file_symbols[file].append(sym.id)
 
+        if lang in ("python", "typescript", "tsx", "go", "rust",
+                     "java", "kotlin", "swift", "c_sharp", "cpp"):
+            self._enrich_symbol_types(file, tree, lang)
+
         imports = self.ts.extract_imports(tree, lang)
         import_bindings = self.ts.extract_js_ts_import_bindings(content, lang, tree=tree)
         import_modules = {module for module, _ in imports}
@@ -634,12 +609,147 @@ class RepoMapEngine:
             if symbol and symbol.name in exported_names:
                 symbol.visibility = "exported"
 
+    def _enrich_python_call_edges(self) -> None:
+        python_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".py") or f.endswith(".pyi")
+        ]
+        if not python_files:
+            return
+        try:
+            from .callgraph import analyze_python_callgraph, resolve_precise_edges
+            modules = analyze_python_callgraph(self.project_root, python_files)
+            precise_edges = resolve_precise_edges(modules)
+            existing_edges = {
+                (e.source, e.target)
+                for edges in self.graph.outgoing.values()
+                for e in edges
+            }
+            added = 0
+            for caller_file, caller_name, callee_file, callee_line, kind in precise_edges:
+                caller_id = self._find_symbol_id(caller_file, caller_name)
+                callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
+                if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
+                    from . import Edge
+                    edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind="call")
+                    self.graph.outgoing.setdefault(caller_id, []).append(edge)
+                    self.graph.incoming.setdefault(callee_id, []).append(edge)
+                    existing_edges.add((caller_id, callee_id))
+                    added += 1
+            if added:
+                logger.debug(f"Python precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"Python call graph enrichment failed: {exc}")
+
+    def _enrich_ts_call_edges(self) -> None:
+        ts_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".ts") or f.endswith(".tsx")
+        ]
+        if not ts_files:
+            return
+        try:
+            from .callgraph import analyze_ts_callgraph, resolve_precise_edges
+            modules = analyze_ts_callgraph(self.project_root, ts_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"TypeScript precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"TypeScript call graph enrichment failed: {exc}")
+
+    def _enrich_go_call_edges(self) -> None:
+        go_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".go")
+        ]
+        if not go_files:
+            return
+        try:
+            from .callgraph import analyze_go_callgraph, resolve_precise_edges
+            modules = analyze_go_callgraph(self.project_root, go_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"Go precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"Go call graph enrichment failed: {exc}")
+
+    def _enrich_rust_call_edges(self) -> None:
+        rust_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".rs")
+        ]
+        if not rust_files:
+            return
+        try:
+            from .callgraph import analyze_rust_callgraph, resolve_precise_edges
+            modules = analyze_rust_callgraph(self.project_root, rust_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"Rust precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"Rust call graph enrichment failed: {exc}")
+
+    def _add_precise_edges(
+        self,
+        precise_edges: list[tuple[str, str, str, int, str]],
+    ) -> int:
+        existing_edges = {
+            (e.source, e.target)
+            for edges in self.graph.outgoing.values()
+            for e in edges
+        }
+        added = 0
+        for caller_file, caller_name, callee_file, callee_line, kind in precise_edges:
+            caller_id = self._find_symbol_id(caller_file, caller_name)
+            callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
+            if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
+                from . import Edge
+                edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind="call")
+                self.graph.outgoing.setdefault(caller_id, []).append(edge)
+                self.graph.incoming.setdefault(callee_id, []).append(edge)
+                existing_edges.add((caller_id, callee_id))
+                added += 1
+        return added
+
+    def _find_symbol_id(self, file: str, name: str) -> str | None:
+        for sym_id in self.graph.file_symbols.get(file, []):
+            sym = self.graph.symbols.get(sym_id)
+            if sym and sym.name == name:
+                return sym_id
+        base_name = name.split(".")[-1]
+        for sym_id in self.graph.file_symbols.get(file, []):
+            sym = self.graph.symbols.get(sym_id)
+            if sym and sym.name == base_name:
+                return sym_id
+        return None
+
+    def _find_symbol_id_by_line(self, file: str, line: int) -> str | None:
+        for sym_id in self.graph.file_symbols.get(file, []):
+            sym = self.graph.symbols.get(sym_id)
+            if sym and sym.line == line:
+                return sym_id
+        return None
+
+    def _enrich_symbol_types(self, file: str, tree: Any, lang: str) -> None:
+        from .type_inference import extract_types_for_file
+        sym_ids = self.graph.file_symbols.get(file, [])
+        if not sym_ids:
+            return
+        extract_types_for_file(tree, lang, sym_ids, self.graph.symbols)
+
     # ── 构建边 ─────────────────────────────────────────────────────────────────
 
     def _build_edges(self) -> None:
         self._resolver = ImportResolver(self.project_root, self.graph)
         edge_builder = EdgeBuilder(self.graph, self._resolver)
         edge_builder.build_edges()
+        self._enrich_python_call_edges()
+        self._enrich_ts_call_edges()
+        self._enrich_go_call_edges()
+        self._enrich_rust_call_edges()
 
     # ── PageRank ───────────────────────────────────────────────────────────────
 
@@ -736,6 +846,14 @@ class RepoMapEngine:
                            lsp_symbol_tree: list[Any] | None = None) -> str:
         return render_file_detail_report(self, file_path, max_symbols=max_symbols, max_chars=max_chars,
                                          lsp_symbol_tree=lsp_symbol_tree)
+
+    def search_symbols(self, query: str, top_k: int = 20) -> list[tuple[Any, float]]:
+        """BM25 符号搜索，返回 [(Symbol, score), ...]。"""
+        if self._search_index is None:
+            from .search import SymbolSearchIndex
+            self._search_index = SymbolSearchIndex(self.graph.symbols)
+        results = self._search_index.search(query, top_k)
+        return [(self.graph.symbols[sid], score) for sid, score in results if sid in self.graph.symbols]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

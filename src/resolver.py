@@ -13,7 +13,6 @@ Repo Map Resolver — Import and Alias Resolution Layer
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -23,7 +22,7 @@ from typing import Any
 
 from .gitignore import get_gitignore
 from .parser import EXT_TO_LANG
-from . import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph
+from . import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph, json_loads
 
 logger = logging.getLogger("repomap")
 
@@ -224,7 +223,7 @@ class ImportResolver:
         package_json_path = self.project_root / "package.json"
         if package_json_path.exists():
             try:
-                data = json.loads(package_json_path.read_text(encoding="utf-8"))
+                data = json_loads(package_json_path.read_text(encoding="utf-8"))
                 if isinstance(data, dict) and "exports" in data:
                     self._register_package_exports(".", data["exports"], PurePosixPath("."))
                     package_name = data.get("name")
@@ -245,7 +244,7 @@ class ImportResolver:
             if sub_package_path == package_json_path:
                 continue
             try:
-                sub_data = json.loads(sub_package_path.read_text(encoding="utf-8"))
+                sub_data = json_loads(sub_package_path.read_text(encoding="utf-8"))
                 if not isinstance(sub_data, dict) or "exports" not in sub_data:
                     continue
                 rel_path = sub_package_path.parent.relative_to(self.project_root)
@@ -781,8 +780,8 @@ class ImportResolver:
         next_visited = set(visited)
         next_visited.add(config_path)
         try:
-            raw_data = json.loads(self._strip_jsonc(config_path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError):
+            raw_data = json_loads(self._strip_jsonc(config_path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
             return {}
         if not isinstance(raw_data, dict):
             return {}

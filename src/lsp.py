@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import queue
 import shutil
@@ -10,6 +9,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import json_dumps, json_loads
 
 
 @dataclass(frozen=True)
@@ -381,7 +382,7 @@ def _uri_to_path(uri: str) -> Path:
 
 
 def _json_rpc_frame(payload: dict[str, Any]) -> bytes:
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    body = json_dumps(payload).encode("utf-8")
     return b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
 
 
@@ -403,7 +404,7 @@ def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
     body = stream.read(length)
     if not body:
         return None
-    return json.loads(body.decode("utf-8"))
+    return json_loads(body.decode("utf-8"))
 
 
 class StdioLspClient:

@@ -22,28 +22,20 @@ def _truncate_output(output: str, max_chars: int) -> str:
 
 def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
     """通过 git diff 获取近 N 天修改过的文件集合（路径相对于 project_root）。"""
-    import subprocess
     from pathlib import Path
+    from .git_backend import GitBackend
 
     try:
-        # 获取 git root 用于路径转换
-        git_root = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=project_root, capture_output=True, text=True, timeout=5,
-        ).stdout.strip()
+        git = GitBackend(project_root)
+        git_root = git.show_toplevel()
     except Exception:
         return set()
     if not git_root:
         return set()
 
     try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", f"HEAD@{{{days}.days ago}}", "HEAD", "--", "."],
-            cwd=project_root, capture_output=True, text=True, timeout=10,
-        )
+        changed = git.diff_name_only_since(days)
     except Exception:
-        return set()
-    if result.returncode != 0:
         return set()
 
     hot_files: set[str] = set()
@@ -53,11 +45,10 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
     else:
         prefix = ""
 
-    for line in result.stdout.strip().split("\n"):
-        path = line.strip()
+    for path in changed:
+        path = path.strip()
         if not path:
             continue
-        # 去掉 git root 相对前缀，转为 project_root 相对路径
         if prefix and path.startswith(prefix):
             path = path[len(prefix):]
         hot_files.add(path)
@@ -227,18 +218,14 @@ def _format_route_table(routes: list) -> str:
 
 def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
     """为 overview 渲染隐式耦合板块（git 共变频率最高的文件对）。"""
-    import subprocess
     from pathlib import Path
+    from .git_backend import GitBackend
 
     project_root = str(engine.project_root)
 
-    # 计算从 git root 到 project_root 的相对路径前缀
     try:
-        git_root = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=project_root,
-            capture_output=True, text=True, timeout=5,
-        ).stdout.strip()
+        git = GitBackend(project_root)
+        git_root = git.show_toplevel()
     except Exception:
         return []
     if not git_root:
@@ -577,6 +564,10 @@ def render_file_detail_report(
         lines.append(f"- `{symbol.name}` ({symbol.kind}) — L{symbol.line} PR={pagerank:.1f}")
         if symbol.signature:
             lines.append(f"  - sig: `{symbol.signature}`")
+        if symbol.return_type:
+            lines.append(f"  - returns: `{symbol.return_type}`")
+        if symbol.params:
+            lines.append(f"  - params: `{symbol.params}`")
         if symbol.docstring:
             lines.append(f"  - doc: {symbol.docstring[:120]}")
         callers = [

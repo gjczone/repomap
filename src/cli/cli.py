@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess  # noqa: F401
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -57,7 +56,7 @@ DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=CLI_NAME,
-        description="Standalone RepoMap CLI. Former MCP capabilities are exposed as direct subcommands.",
+        description="RepoMap CLI — repository intelligence for AI agents.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -227,6 +226,11 @@ def build_parser() -> argparse.ArgumentParser:
     state_map_parser.add_argument("--query", default=None, help="Keywords to find relevant state definitions.")
     state_map_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
+    search_parser = subparsers.add_parser("search", help="BM25 symbol search by natural language query.")
+    _add_project_args(search_parser)
+    search_parser.add_argument("--query", "-q", required=True, help="Search query (natural language or keywords).")
+    search_parser.add_argument("--top-k", type=int, default=20, help="Maximum results (default 20).")
+
     build_parser_cmd = subparsers.add_parser("build-binary", help="Build a one-file executable with PyInstaller.")
     build_parser_cmd.add_argument("--output", default="dist", help="Directory for the final binary.")
     build_parser_cmd.add_argument("--name", default=CLI_NAME, help="Binary file name.")
@@ -263,7 +267,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_file_detail, run_routes, run_hotspots, run_cache, run_diff,
         run_query, run_impact, run_verify, run_refs, run_orphan,
         run_lsp_doctor, run_lsp_setup, run_check, run_doctor,
-        run_state_map, run_build_binary,
+        run_state_map, run_build_binary, run_search,
     )
     parser = build_parser()
     try:
@@ -358,6 +362,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_doctor(args.project, getattr(args, "lsp", False))
     if command == "state-map":
         return run_state_map(args.project, args.max_files, args.symbol, args.query, args.json)
+    if command == "search":
+        return run_search(args.project, args.max_files, args.query, args.top_k)
     if command == "build-binary":
         return run_build_binary(args.output, args.name)
     parser.error(f"unknown command: {command}")

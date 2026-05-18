@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util as importlib_util
-import json
 from datetime import datetime
 import os
 import subprocess
@@ -13,6 +12,8 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from .. import json_dumps, json_dump, json_loads
 
 from .. import (Edge, HttpRoute, RepoGraph, ScanStats, Symbol,
     get_session_cache_path,
@@ -263,6 +264,8 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
             visibility=row.get("visibility", "private"),
             docstring=row.get("docstring", ""),
             signature=row.get("signature", ""),
+            return_type=row.get("return_type", ""),
+            params=row.get("params", ""),
             pagerank=row.get("pagerank", 0.0),
         )
         graph.symbols[symbol.id] = symbol
@@ -327,7 +330,7 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     if not cache_path.exists():
         return None
     try:
-        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        payload = json_loads(cache_path.read_text(encoding="utf-8"))
     except Exception:
         return None
     if payload.get("project_root") != project_root:
@@ -352,7 +355,7 @@ def _save_session_engine(project_root: str, fingerprint: str, engine: RepoMapEng
             suffix=".tmp",
             delete=False,
         ) as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            json_dump(payload, handle, ensure_ascii=False, indent=2)
             tmp_path = Path(handle.name)
         tmp_path.replace(cache_path)
     except Exception:
@@ -551,7 +554,7 @@ def run_overview(project: str, max_files: int, max_chars: int, as_json: bool,
                 "supporting_files": engine.supporting_files(DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES),
                 "hot_files": list(_get_hot_files(str(engine.project_root))) if with_heat else [],
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
         print(engine.render_overview(max_chars, with_heat=with_heat, with_co_change=with_co_change, granularity=granularity))
         return 0
@@ -594,7 +597,7 @@ def run_call_chain(
                 "callers": [_format_symbol_ref(engine, item.id) for item in chain["callers"]],
                 "callees": [_format_symbol_ref(engine, item.id) for item in chain["callees"]],
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
         if direction != "both":
             data = engine.call_chain(selected.id, direction, depth)
@@ -685,6 +688,10 @@ def run_query_symbol(
                 lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
+                if item.return_type:
+                    lines.append(f"  - returns: `{item.return_type}`")
+                if item.params:
+                    lines.append(f"  - params: `{item.params}`")
 
         if fuzzy_matches:
             lines.append(f"\n## Fuzzy matches ({len(fuzzy_matches)})\n")
@@ -693,6 +700,10 @@ def run_query_symbol(
                 lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
+                if item.return_type:
+                    lines.append(f"  - returns: `{item.return_type}`")
+                if item.params:
+                    lines.append(f"  - params: `{item.params}`")
 
         if len(results) > 10 and (len(exact_matches) > 10 or len(fuzzy_matches) > 10):
             lines.append("\n> Many results; use `--file-path` to narrow.")
@@ -753,7 +764,7 @@ def run_routes(project: str, max_files: int, as_json: bool, with_consumers: bool
                         for c in clist
                     ]
                 payload["consumers"] = consumer_json
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
         if with_consumers:
             from ..consumers import find_route_consumers
@@ -810,7 +821,7 @@ def run_diff(project: str, as_json: bool) -> int:
         print(result["error"], file=sys.stderr)
         return 1
     if as_json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json_dumps(result, ensure_ascii=False, indent=2))
         return 0
     lines = ["## Change Detection\n"]
     lines.append(f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n")
@@ -911,7 +922,7 @@ def run_query(
                     "symbols": _query_symbols_json(engine, top_matches, max_result_symbols),
                 },
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
         print(render_query_report(engine, query, top_matches, tests, max_result_files, max_result_symbols,
@@ -1286,7 +1297,7 @@ def run_impact(
                     "lspHint": lsp_hint,
                 },
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
         print(render_impact_report(
@@ -1399,25 +1410,22 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
 
 
 def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | None]:
+    from ..git_backend import GitBackend
     project_path = Path(project_root).resolve()
-    git_root_result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=project_path, capture_output=True, text=True, timeout=10,
-    )
-    git_root = git_root_result.stdout.strip()
-    if git_root_result.returncode != 0 or not git_root:
-        return [], f"git root failed: {git_root_result.stderr.strip() or 'not a git repository'}"
+    git = GitBackend(str(project_path))
+    git_root = git.show_toplevel()
+    if not git_root:
+        return [], "not a git repository"
 
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=project_path, capture_output=True, text=True, timeout=10,
-    )
-    if status.returncode != 0:
-        return [], f"git status failed: {status.stderr.strip() or status.stdout.strip()}"
-
+    status_lines = git.status_porcelain()
     changed_files: list[str] = []
-    for git_relative_path in _parse_git_status_porcelain_paths(status.stdout):
-        abs_path = Path(git_root, git_relative_path).resolve()
+    for line in status_lines:
+        stripped = line[3:] if len(line) > 3 else line
+        if not stripped:
+            continue
+        if " -> " in stripped:
+            stripped = stripped.split(" -> ", 1)[-1]
+        abs_path = Path(git_root, stripped).resolve()
         try:
             changed_files.append(abs_path.relative_to(project_path).as_posix())
         except ValueError:
@@ -1756,7 +1764,7 @@ def run_verify(
             },
         }
         if as_json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(render_verify_report(payload))
 
@@ -1816,7 +1824,7 @@ def run_refs(
             if with_lsp:
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(engine, target, lsp_timeout)
             if as_json:
-                print(json.dumps(payload, ensure_ascii=False, indent=2))
+                print(json_dumps(payload, ensure_ascii=False, indent=2))
             else:
                 lines = [f"## Reference Analysis — `{target.name}`\n"]
                 lines.append(f"- Referenced by:  {payload['ref_count']}")
@@ -1849,7 +1857,7 @@ def run_refs(
             ],
         }
         if as_json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
         lines = ["## Global Reference Analysis\n"]
         lines.append(f"- Total symbols:  {payload['total_symbols']}")
@@ -2030,7 +2038,7 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
                 "medium_confidence": [_to_dict(s) for s in medium],
                 "low_confidence": [_to_dict(s) for s in low],
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
         # Text output
@@ -2125,7 +2133,7 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
             "servers": [detection_to_dict(item) for item in detections],
         }
         if as_json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
         lines = ["## LSP Doctor\n"]
         lines.append(f"Project: `{project_root}`")
@@ -2432,7 +2440,7 @@ def run_state_map(project: str, max_files: int, symbol: str | None, query: str |
                     for d in defs
                 ],
             }
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
         # Text output
@@ -2476,3 +2484,29 @@ def run_build_binary(output: str, name: str) -> int:
         return result.returncode or 1
     print(f"binary ready: {output_dir / name}")
     return 0
+
+
+def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
+    try:
+        engine = _scan_engine(project, max_files)
+        results = engine.search_symbols(query, top_k)
+        if not results:
+            print(f"> No symbols found for query: `{query}`")
+            return EXIT_NO_RESULTS
+
+        from ..search import _HAS_BM25
+        backend = "BM25" if _HAS_BM25 else "keyword"
+        lines = [f"Found {len(results)} symbols (backend: {backend})\n"]
+        lines.append(f"## Search results for `{query}`\n")
+        for sym, score in results:
+            pr = sym.pagerank * 1000
+            lines.append(f"- **{sym.name}** ({sym.kind}) `{sym.file}:{sym.line}` score={score:.2f} PR={pr:.1f}")
+            if sym.return_type:
+                lines.append(f"  - returns: `{sym.return_type}`")
+            if sym.signature:
+                lines.append(f"  - sig: `{sym.signature}`")
+        print("\n".join(lines))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] search failed: {exc}", file=sys.stderr)
+        return 1

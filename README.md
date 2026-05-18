@@ -16,7 +16,7 @@
 
 ## Quick Start
 
-### Option 1 (recommended): CLI + Skill
+### Option 1: CLI + Skill
 
 The skill file tells the agent *when* to call each command. Works with any coding agent that supports custom skills.
 
@@ -27,8 +27,9 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. Install binary
-npm install -g repomap-bin
+# 2. Install CLI
+pip install repomap
+# or: uv tool install repomap
 
 # 3. Verify
 repomap doctor
@@ -36,28 +37,17 @@ repomap doctor
 
 **Result**: The agent reads `~/.claude/skills/repomap/SKILL.md` and automatically calls `repomap overview`, `repomap impact`, `repomap verify` at the right moments. The skill includes decision rules and mandatory usage patterns.
 
-### Option 2: MCP Server
+### Option 2: CLI Only
 
-MCP tools appear in the agent's tool list with built-in workflow instructions. Best for MCP-native harnesses (Claude Code, Cursor, VS Code).
+Install the CLI tool directly for manual use or integration with any workflow:
 
-Add to `~/.claude/settings.json`:
+```bash
+pip install repomap
+# or: uv tool install repomap
 
-```json
-{
-  "mcpServers": {
-    "repomap": {
-      "command": "npx",
-      "args": ["-y", "repomap-mcp-server@latest"]
-    }
-  }
-}
+# Verify
+repomap doctor
 ```
-
-Or via CLI: `claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
-
-**Result**: 19 MCP tools with mandatory workflow rules injected into the system prompt.
-
-> **Skill vs MCP**: Skill mode gives the agent a decision procedure (when to call what). MCP mode gives it tools with descriptions. Both work — choose based on your harness. Skill mode works with any agent that reads markdown files; MCP mode needs MCP protocol support.
 
 ---
 
@@ -114,7 +104,7 @@ All commands work without LSP — it's an opt-in precision layer.
 
 ## Agent Workflow
 
-The agent follows this pattern automatically (guided by the skill or MCP instructions):
+The agent follows this pattern automatically (guided by the skill instructions):
 
 ```bash
 # Before editing
@@ -130,32 +120,6 @@ repomap verify --project . --with-lsp                 # full evidence gate
 repomap check --project .                             # compiler diagnostics
 repomap orphan --project . --min-confidence 70        # dead code check
 ```
-
----
-
-## MCP Tools
-
-Available when using the MCP server:
-
-| Tool | Maps to |
-|------|---------|
-| `repomap_overview` | `overview` |
-| `repomap_query` | `query` |
-| `repomap_file_detail` | `file-detail` |
-| `repomap_impact` | `impact` |
-| `repomap_call_chain` | `call-chain` |
-| `repomap_query_symbol` | `query-symbol` |
-| `repomap_refs` | `refs` |
-| `repomap_routes` / `repomap_routes_consumers` | `routes` |
-| `repomap_state_map` | `state-map` |
-| `repomap_verify` | `verify` |
-| `repomap_check` | `check` |
-| `repomap_orphan` | `orphan` |
-| `repomap_hotspots` | `hotspots` |
-| `repomap_diff` / `repomap_cache_save` | `diff` / `cache save` |
-| `repomap_doctor` | `doctor` |
-| `repomap_lsp_setup` | `lsp setup` |
-| `repomap_scan` | `scan` |
 
 ---
 

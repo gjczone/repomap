@@ -20,9 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
-import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +36,10 @@ from . import (
     compare_graph_snapshots,
     get_cache_paths,
     get_incremental_cache_path,
+    json_dump,
+    json_dumps,
+    json_load,
+    json_loads,
     serialize_edge,
     serialize_symbol,
 )
@@ -156,7 +158,7 @@ def save_cache(project_path: str, symbols: list[Symbol], edges: list[Edge]) -> P
             delete=False
         ) as f:
             temp_path = f.name
-            json.dump(asdict(cache), f, indent=2, ensure_ascii=False)
+            json_dump(asdict(cache), f, indent=2, ensure_ascii=False)
         # 原子替换（Windows 和 Linux 都支持）
         os.replace(temp_path, cache_file)
     except Exception:
@@ -179,7 +181,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
     
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json_load(f)
         # Schema version check - 不匹配时删除旧缓存，触发重建
         if data.get("_schema_version") != CACHE_SCHEMA_VERSION:
             print(f"[repomap] Cache schema version mismatch (cached: v{data.get('_schema_version')}, current: v{CACHE_SCHEMA_VERSION}), clearing old cache and re-scanning", file=sys.stderr)
@@ -189,7 +191,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
                 pass
             return None
         return SymbolCache(**data)
-    except json.JSONDecodeError:
+    except ValueError:
         # Cache file corrupted
         print(f"[repomap] Cache file corrupted ({cache_file}), clearing and re-scanning", file=sys.stderr)
         try:
@@ -210,7 +212,7 @@ def load_last_snapshot(project_path: str) -> SymbolCache | None:
 
     try:
         with open(last_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json_load(f)
         return SymbolCache(**data)
     except Exception:
         return None
@@ -227,12 +229,11 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
 
     git_head = ""
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=project_path, capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            git_head = result.stdout.strip()
+        from .git_backend import GitBackend
+        git = GitBackend(project_path)
+        head = git.rev_parse_head()
+        if head:
+            git_head = head
     except Exception:
         pass
 
@@ -268,7 +269,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
             prefix='.tmp_inc_', suffix='.json', delete=False,
         ) as f:
             temp_path = f.name
-            json.dump(_inc_cache_to_dict(cache), f, indent=2, ensure_ascii=False)
+            json_dump(_inc_cache_to_dict(cache), f, indent=2, ensure_ascii=False)
         os.replace(temp_path, cache_path)
     except Exception:
         if 'temp_path' in locals() and os.path.exists(temp_path):
@@ -285,7 +286,7 @@ def load_incremental_cache(project_path: str) -> IncrementalCache | None:
         return None
     try:
         with open(cache_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json_load(f)
         files = {}
         for fp, entry_data in data.get("files", {}).items():
             files[fp] = FileCacheEntry(
@@ -303,7 +304,7 @@ def load_incremental_cache(project_path: str) -> IncrementalCache | None:
             files=files,
             scan_stats_json=data.get("scan_stats_json", {}),
         )
-    except (json.JSONDecodeError, KeyError):
+    except (ValueError, KeyError):
         return None
 
 
@@ -416,66 +417,20 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
     file_path = symbol['file']
     line = symbol['line']
     
-    # Git blame 获取最近修改
     full_path = Path(project_path) / file_path
     if not full_path.exists():
         return None
     
     try:
-        # 获取该行的 blame 信息
-        result = subprocess.run(
-            ['git', 'blame', '-L', f'{line},{line}', '-p', str(file_path)],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        from .git_backend import GitBackend
+        git = GitBackend(project_path)
         
-        if result.returncode != 0:
-            return None
+        blame_info = git.blame_line(file_path, line)
+        commit_hash = blame_info.get("commit", "unknown") if blame_info else "unknown"
         
-        blame_output = result.stdout
+        recent_commits = git.log_file_commits(file_path, limit=20)
         
-        # 解析 blame 输出
-        commit_hash = blame_output.split()[0] if blame_output else 'unknown'
-        
-        # 获取该符号相关的所有 commits
-        symbol_commits = subprocess.run(
-            ['git', 'log', '--follow', '-20', '--format=%H|%an|%ad|%s', '--', str(file_path)],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        recent_commits = []
-        if symbol_commits.returncode == 0:
-            for line in symbol_commits.stdout.strip().split('\n'):
-                if '|' in line:
-                    parts = line.split('|', 3)
-                    if len(parts) >= 4:
-                        recent_commits.append({
-                            'hash': parts[0][:8],
-                            'author': parts[1],
-                            'date': parts[2],
-                            'message': parts[3],
-                        })
-        
-        # 统计该文件的作者
-        authors_result = subprocess.run(
-            ['git', 'shortlog', '-sn', '--', str(file_path)],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        authors = []
-        if authors_result.returncode == 0:
-            for line in authors_result.stdout.strip().split('\n'):
-                parts = line.strip().split('\t', 1)
-                if len(parts) == 2:
-                    authors.append(parts[1])
+        authors = git.file_authors(file_path)
         
         return {
             'symbol': symbol['name'],
@@ -486,8 +441,6 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
             'recent_commits': recent_commits[:10],
         }
         
-    except subprocess.TimeoutExpired:
-        return {'error': 'Git operation timed out'}
     except Exception as e:
         return {'error': str(e)}
 
@@ -495,18 +448,9 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
 def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
     """获取最近修改频繁的文件/符号"""
     try:
-        result = subprocess.run(
-            ['git', 'diff', '--name-only', f'HEAD@{{{days}.days ago}}', 'HEAD'],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode != 0:
-            return []
-        
-        changed_files = result.stdout.strip().split('\n')
+        from .git_backend import GitBackend
+        git = GitBackend(project_path)
+        changed_files = git.diff_name_only_since(days)
         
         cache = load_cache(project_path)
         if not cache:
@@ -747,7 +691,7 @@ def main():
             return
         
         if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(json_dumps(result, indent=2, ensure_ascii=False))
         else:
             print(f"\n📊 变更摘要 ({result['last_scan']} -> {result['scan_time']})")
             print(f"   新增符号: {result['summary']['added']}")
@@ -805,7 +749,7 @@ def main():
             return
         
         if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(json_dumps(result, indent=2, ensure_ascii=False))
         elif args.symbol:
             print(f"\n📌 {result['symbol']}")
             print(f"   被引用次数: {result['ref_count']}")

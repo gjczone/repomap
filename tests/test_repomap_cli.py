@@ -35,12 +35,11 @@ class RepoMapCliTests(unittest.TestCase):
     def test_verify_json_outputs_post_edit_evidence(self) -> None:
         from src.cli import main
 
-        def fake_run(cmd, **kwargs):
-            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        def fake_git_show_toplevel(self):
+            return project_root
+
+        def fake_git_status_porcelain(self):
+            return [" M main.py"]
 
         def fake_check(self, **kwargs):
             return {
@@ -57,10 +56,11 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.cli.cli.subprocess.run", side_effect=fake_run):
-                with patch.object(RepoMapChecker, "check", fake_check):
-                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        exit_code = main(["verify", "--project", project_root, "--json"])
+            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
+                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
+                    with patch.object(RepoMapChecker, "check", fake_check):
+                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                            exit_code = main(["verify", "--project", project_root, "--json"])
 
         self.assertEqual(exit_code, 0)
         payload = json.loads(stdout.getvalue())
@@ -73,12 +73,11 @@ class RepoMapCliTests(unittest.TestCase):
     def test_verify_returns_nonzero_when_check_fails(self) -> None:
         from src.cli import main
 
-        def fake_run(cmd, **kwargs):
-            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        def fake_git_show_toplevel(self):
+            return project_root
+
+        def fake_git_status_porcelain(self):
+            return [" M main.py"]
 
         def fake_check(self, **kwargs):
             return {
@@ -95,10 +94,11 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.cli.cli.subprocess.run", side_effect=fake_run):
-                with patch.object(RepoMapChecker, "check", fake_check):
-                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        exit_code = main(["verify", "--project", project_root, "--json"])
+            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
+                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
+                    with patch.object(RepoMapChecker, "check", fake_check):
+                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                            exit_code = main(["verify", "--project", project_root, "--json"])
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(json.loads(stdout.getvalue())["result"]["status"], "failed")
@@ -165,12 +165,11 @@ class RepoMapCliTests(unittest.TestCase):
     def test_verify_with_diff_without_cache_is_nonfatal(self) -> None:
         from src.cli import main
 
-        def fake_run(cmd, **kwargs):
-            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=f"{project_root}\n", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=" M main.py\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        def fake_git_show_toplevel(self):
+            return project_root
+
+        def fake_git_status_porcelain(self):
+            return [" M main.py"]
 
         def fake_check(self, **kwargs):
             return {
@@ -187,11 +186,12 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.cli.cli.subprocess.run", side_effect=fake_run):
-                with patch("src.cli.cli.diff_project", return_value={"error": "No cache found; run cache --save first"}):
-                    with patch.object(RepoMapChecker, "check", fake_check):
-                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                            exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])
+            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
+                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
+                    with patch("src.cli.cli.diff_project", return_value={"error": "No cache found; run cache --save first"}):
+                        with patch.object(RepoMapChecker, "check", fake_check):
+                            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                                exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])
 
         self.assertEqual(exit_code, 0)
         graph_diff = json.loads(stdout.getvalue())["result"]["graphDiff"]
@@ -594,7 +594,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("tree_sitter:", result.stdout)
         self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
 
-    def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
+    def test_help_lists_all_commands(self) -> None:
         from src.cli import main
 
         stdout = io.StringIO()
@@ -746,7 +746,7 @@ class RepoMapCliTests(unittest.TestCase):
             stdout = io.StringIO()
             stderr = io.StringIO()
 
-            with patch("src.cli.cli.subprocess.run") as run_mock:
+            with patch("src.cli.handlers.subprocess.run") as run_mock:
                 run_mock.return_value.returncode = 0
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     exit_code = main(["build-binary", "--output", output_dir])
