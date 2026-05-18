@@ -1,6 +1,6 @@
 ---
 name: repomap
-description: "MUST invoke this skill before reading, editing, investigating, or deleting code — before every find, every grep, every file read, every edit, and after every edit. The only exceptions are single-character typo fixes and purely non-coding conversations."
+description: "MUST invoke this skill for any coding task — before reading, editing, searching, debugging, refactoring, navigating, or understanding code. Before every find, every grep, every file read, every edit, every symbol lookup, every impact check. After every edit. The only exceptions: single-character typo fixes and purely non-coding conversations."
 ---
 
 # repomap
