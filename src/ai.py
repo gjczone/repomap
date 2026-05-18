@@ -24,6 +24,7 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
     """通过 git diff 获取近 N 天修改过的文件集合（路径相对于 project_root）。"""
     from pathlib import Path
     from .git_backend import GitBackend
+    # TODO: refactor to accept pre-fetched data through engine instead of reaching down to git_backend directly
 
     try:
         git = GitBackend(project_root)

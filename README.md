@@ -86,6 +86,7 @@ All commands work without LSP — it's an opt-in precision layer.
 |---------|---------|
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order |
 | `query --query <keywords>` | Topic search with synonym expansion; `--context-lines <N>` for matched code |
+| `search --query <text>` | BM25 semantic symbol search; `--top-k <N>` for result count |
 | `file-detail --file-path <f>` | File symbols + signatures; `--with-lsp` for hierarchical symbol tree |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
 | `call-chain --symbol <name>` | Callers and callees with configurable depth |

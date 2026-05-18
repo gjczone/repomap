@@ -596,9 +596,6 @@ def _resolve_call(
             for mfpath, mline in func_matches:
                 if mfpath != caller_file:
                     return (mfpath, method_name, mline, "import_call")
-            class_matches = class_name_to_file.get(method_name, [])
-            for cfpath, cinfo in class_matches:
-                return (cfpath, method_name, list(cinfo.methods.values())[0] if cinfo.methods else 0, "import_call")
 
         class_matches = class_name_to_file.get(obj_name, [])
         for cfpath, cinfo in class_matches:

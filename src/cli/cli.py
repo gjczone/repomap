@@ -2,40 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
+from pathlib import Path  # kept: Path used in _add_project_args
 from typing import Sequence
 
-from ..toolkit import diff_project  # noqa: F401
+from .handlers import CLI_NAME
 
-PACKAGE_ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = PACKAGE_ROOT.parent
-CLI_NAME = "repomap"
-
-# 统一 exit code 语义
-EXIT_SUCCESS = 0       # 成功，有有效输出
-EXIT_ERROR = 1         # Command execution failed
-EXIT_INVALID_ARGS = 2  # 参数错误
-EXIT_NO_RESULTS = 3    # 无结果（query 无匹配、routes 为空）
-PYINSTALLER_BINDINGS = [
-    "tree_sitter",
-    "tree_sitter_python",
-    "tree_sitter_javascript",
-    "tree_sitter_typescript",
-    "tree_sitter_go",
-    "tree_sitter_rust",
-    "tree_sitter_html",
-    "tree_sitter_css",
-    "tree_sitter_json",
-    "tree_sitter_c",
-    "tree_sitter_java",
-    "tree_sitter_kotlin",
-    "tree_sitter_swift",
-    "tree_sitter_cpp",
-    "tree_sitter_c_sharp",
-    "tree_sitter_php",
-    "tree_sitter_ruby",
-    "repomap_lsp",
-]
 
 # _SCAN_CACHE is now in handlers.py; re-exported below
 # 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。

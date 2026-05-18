@@ -188,7 +188,7 @@ class RepoMapCliTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
                 with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
-                    with patch("src.cli.cli.diff_project", return_value={"error": "No cache found; run cache --save first"}):
+                    with patch("src.cli.handlers.diff_project", return_value={"error": "No cache found; run cache --save first"}):
                         with patch.object(RepoMapChecker, "check", fake_check):
                             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                                 exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])

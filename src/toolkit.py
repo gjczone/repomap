@@ -27,6 +27,8 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
+# Allow direct execution via `python src/toolkit.py` for development/debugging.
+# When imported normally as a package, this insert is harmless (already on path).
 from .core import RepoMapEngine
 from . import (
     Edge,

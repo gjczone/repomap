@@ -109,7 +109,12 @@ def _extract_go_params(def_node: Any) -> str:
     param_lists = _find_children_by_type(def_node, "parameter_list")
     if not param_lists:
         return ""
-    params_node = param_lists[-1] if len(param_lists) > 1 else param_lists[0]
+    if def_node.type == "method_declaration":
+        # method: index 0 = receiver, index 1 = input params
+        params_node = param_lists[1] if len(param_lists) > 1 else param_lists[0]
+    else:
+        # function_declaration: first param_list is input params
+        params_node = param_lists[0]
     parts: list[str] = []
     for child in params_node.children:
         if child.type in ("(", ")", ",", "comment"):

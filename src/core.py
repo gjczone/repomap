@@ -212,6 +212,7 @@ class RepoMapEngine:
         self._cache = {}
         self.scan_stats = ScanStats()
         self.routes = []
+        self._search_index = None  # invalidate search index on re-scan
         self._inc_cache_loaded = False
 
         # 尝试加载增量缓存
@@ -707,7 +708,7 @@ class RepoMapEngine:
             callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
             if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
                 from . import Edge
-                edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind="call")
+                edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind=kind)
                 self.graph.outgoing.setdefault(caller_id, []).append(edge)
                 self.graph.incoming.setdefault(callee_id, []).append(edge)
                 existing_edges.add((caller_id, callee_id))

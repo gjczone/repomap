@@ -86,6 +86,7 @@ repomap lsp setup                    # 安装缺失的服务器
 |------|------|
 | `overview` | 项目地图：入口点、热点、关键符号（PageRank）、阅读顺序 |
 | `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行 |
+| `search --query <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数 |
 | `file-detail --file-path <文件>` | 文件符号 + 签名；`--with-lsp` 查看分级符号树 |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
 | `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度 |

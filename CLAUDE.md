@@ -20,6 +20,7 @@ All via `repomap <subcommand> --project <path>`.
 |---|---|
 | `overview` | Project map: modules, entry points, reading order, hotspots, key symbols |
 | `query --query "keyword"` | Topic/feature discovery by business words |
+| `search --query "text"` | BM25 semantic symbol search with keyword fallback |
 | `file-detail --file-path <f>` | Symbols and structure of a known file |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning |
 | `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |

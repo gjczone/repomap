@@ -266,6 +266,8 @@ class Pygit2Backend:
             if workdir is None:
                 return []
             for fp, flags in status.items():
+                if flags & pygit2.GIT_STATUS_IGNORED:
+                    continue
                 is_changed = bool(flags & (pygit2.GIT_STATUS_INDEX_MODIFIED | pygit2.GIT_STATUS_WT_MODIFIED))
                 is_new_wt = bool(flags & pygit2.GIT_STATUS_WT_NEW)
                 is_new_idx = bool(flags & pygit2.GIT_STATUS_INDEX_NEW)

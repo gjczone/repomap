@@ -5,9 +5,4 @@ dist/.pyinstaller/
 dist/repomap
 dist/repomap.exe
 .pytest_cache/
-mcp/node_modules/
-mcp/dist/
-mcp/package-lock.json
-mcp/repomap-bin/platforms/*/repomap
-mcp/repomap-bin/platforms/*/repomap.exe
 docs/
