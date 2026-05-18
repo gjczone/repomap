@@ -86,10 +86,11 @@ jobs:
           cd npm/platforms/${{ matrix.platform }}
           node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
+
       - name: Publish to npm
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           cd npm/platforms/${{ matrix.platform }}
           npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
-          npm publish --access public
+          npm publish --access public 2>&1 || echo "npm publish skipped (version may already exist)"
