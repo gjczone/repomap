@@ -73,7 +73,6 @@ src/                    # Python package (flat)
 └── lsp.py                 # Optional local LSP integration (stdio, on-demand)
 skills/repomap/            # AI agent skill definition
 ├── SKILL.md               # Agent decision procedure
-└── references/            # Command map, prompt examples, authoring checklist
 tests/                     # Test suite
 ├── test_git_backend.py    # GitBackend unit tests (61 cases)
 ├── test_callgraph.py      # Call graph unit tests (45 cases)
@@ -152,7 +151,7 @@ When using `repomap`, AI agents encounter tool boundaries that specs don't cover
 
 ## Skill Distribution
 
-The open-source skill directory (`skills/repomap/`) is distributed to users. The entire local copy (`~/.agents/skills/repomap/`) — including SKILL.md, references/, and scripts/ — must be byte-identical to the open-source version. Neither may include:
+The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The local copy (`~/.agents/skills/repomap/SKILL.md`) must be byte-identical to the open-source version. The skill is a single file — no subdirectories. Neither may include:
 - Any references to local file paths (e.g., absolute paths on maintainer's machine)
 - Any maintainer-specific workflow or feedback mechanisms
 
@@ -191,7 +190,7 @@ repomap overview --project .
 
 
 # 4.5. Sync local skill directory to ~/.agents/skills/repomap/
-#      cp -r skills/repomap/* ~/.agents/skills/repomap/
+#      cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
 # 5. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
 #    - New repomap commands → update Section 8.1 command lists
 #    - Changed distribution method → update availability description
