@@ -327,24 +327,37 @@ class Pygit2Backend:
             lines: list[str] = []
             status = repo.status()
             for fp, flags in status.items():
-                xy = ""
+                if flags & pygit2.GIT_STATUS_IGNORED:
+                    lines.append(f"!! {fp}")
+                    continue
+                if flags & pygit2.GIT_STATUS_WT_NEW and not (flags & (pygit2.GIT_STATUS_INDEX_NEW | pygit2.GIT_STATUS_INDEX_MODIFIED | pygit2.GIT_STATUS_INDEX_DELETED)):
+                    lines.append(f"?? {fp}")
+                    continue
+                x = " "
                 if flags & pygit2.GIT_STATUS_INDEX_NEW:
-                    xy += "A"
+                    x = "A"
                 elif flags & pygit2.GIT_STATUS_INDEX_MODIFIED:
-                    xy += "M"
+                    x = "M"
                 elif flags & pygit2.GIT_STATUS_INDEX_DELETED:
-                    xy += "D"
-                else:
-                    xy += " "
+                    x = "D"
+                elif flags & pygit2.GIT_STATUS_INDEX_RENAMED:
+                    x = "R"
+                elif flags & pygit2.GIT_STATUS_INDEX_TYPECHANGE:
+                    x = "T"
+                y = " "
                 if flags & pygit2.GIT_STATUS_WT_MODIFIED:
-                    xy += "M"
+                    y = "M"
                 elif flags & pygit2.GIT_STATUS_WT_DELETED:
-                    xy += "D"
+                    y = "D"
+                elif flags & pygit2.GIT_STATUS_WT_RENAMED:
+                    y = "R"
+                elif flags & pygit2.GIT_STATUS_WT_TYPECHANGE:
+                    y = "T"
                 elif flags & pygit2.GIT_STATUS_WT_NEW:
-                    xy += "?"
-                else:
-                    xy += " "
-                lines.append(f"{xy} {fp}")
+                    y = "?"
+                if flags & pygit2.GIT_STATUS_CONFLICTED:
+                    x, y = "U", "U"
+                lines.append(f"{x}{y} {fp}")
             return lines
         except Exception:
             return []
@@ -426,10 +439,12 @@ class Pygit2Backend:
         if repo is None:
             return None
         try:
-            blame = repo.blame_file(file_path, min_line=line, max_line=line)
-            if blame and len(blame) > 0:
-                hunk = blame[0]
-                return {"commit": str(hunk.final_commit_id)[:8]}
+            blame = repo.blame(file_path)
+            for hunk in blame:
+                start = hunk.final_start_line_number
+                end = start + hunk.lines_in_hunk - 1
+                if start <= line <= end:
+                    return {"commit": str(hunk.final_commit_id)[:8]}
         except Exception:
             pass
         return None

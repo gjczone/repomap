@@ -1,15 +1,17 @@
 """
-Python 精确调用图构建模块。
+多语言精确调用图构建模块。
 
-基于 ast 模块做 Python 专属的精确调用图分析，补充 tree-sitter 的
-简单名称匹配。核心能力：
+Python：基于 ast 模块做精确调用图分析
+TypeScript/Go/Rust：基于 tree-sitter AST 做精确调用图分析
+
+核心能力：
 - 跨文件 import 解析：obj.method() 调用能追踪到定义文件
-- 类方法分发：self.method() 追踪到类定义中的方法
-- 装饰器感知：识别 @staticmethod / @classmethod
+- 类方法分发：self.method() / this.method() 追踪到类定义中的方法
+- Go receiver 解析：func (r *Type) Method() 的方法分发
+- Rust impl 块解析：impl Type { fn method() } 的方法分发
 
 设计原则：
-- 纯 Python ast 模块，无外部依赖
-- 仅处理 Python 文件，其他语言仍用 tree-sitter
+- Python 用 ast 模块，TS/Go/Rust 用 tree-sitter AST
 - 结果合并到 RepoGraph 的 edge 体系
 """
 
@@ -21,6 +23,21 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("repomap.callgraph")
+
+
+def _node_text(node: Any) -> str:
+    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
+
+
+def _find_child_by_type(node: Any, child_type: str) -> Any | None:
+    for child in node.children:
+        if child.type == child_type:
+            return child
+    return None
+
+
+def _find_children_by_type(node: Any, child_type: str) -> list[Any]:
+    return [child for child in node.children if child.type == child_type]
 
 
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
@@ -47,6 +64,11 @@ class ModuleInfo:
         self.functions: dict[str, int] = {}
         self.imports: dict[str, str] = {}
         self.calls: list[tuple[str, str, int]] = []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Python 调用图（基于 ast 模块）
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class _PyCallGraphVisitor(ast.NodeVisitor):
@@ -112,15 +134,6 @@ def analyze_python_callgraph(
     project_root: Path,
     python_files: list[str],
 ) -> dict[str, ModuleInfo]:
-    """
-    分析 Python 文件的精确调用图。
-
-    参数：
-        project_root: 项目根目录
-        python_files: 相对路径的 Python 文件列表
-
-    返回：file_path → ModuleInfo 映射
-    """
     modules: dict[str, ModuleInfo] = {}
 
     for rel_path in python_files:
@@ -139,6 +152,338 @@ def analyze_python_callgraph(
         modules[rel_path] = visitor.info
 
     return modules
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TypeScript/TSX 调用图（基于 tree-sitter AST）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) -> None:
+    if node.child_count == 0:
+        return
+
+    if node.type == "class_declaration":
+        name_node = _find_child_by_type(node, "type_identifier") or _find_child_by_type(node, "identifier")
+        if name_node:
+            class_name = _node_text(name_node)
+            cls = ClassInfo(class_name)
+            body = _find_child_by_type(node, "class_body") or _find_child_by_type(node, "object_type")
+            if body:
+                for child in body.children:
+                    if child.type == "method_definition":
+                        mn = _find_child_by_type(child, "property_identifier")
+                        if mn:
+                            cls.methods[_node_text(mn)] = child.start_point[0] + 1
+            info.classes[class_name] = cls
+            old = current_class[0]
+            current_class[0] = class_name
+            for child in node.children:
+                if child.type != "class_body":
+                    _walk_ts_node(child, info, current_class)
+            current_class[0] = old
+            return
+
+    if node.type == "function_declaration":
+        name_node = _find_child_by_type(node, "identifier")
+        if name_node and not current_class[0]:
+            info.functions[_node_text(name_node)] = node.start_point[0] + 1
+
+    if node.type == "variable_declarator":
+        name_node = _find_child_by_type(node, "identifier")
+        val = _find_child_by_type(node, "arrow_function") or _find_child_by_type(node, "function_expression")
+        if name_node and val and not current_class[0]:
+            info.functions[_node_text(name_node)] = node.start_point[0] + 1
+
+    if node.type == "import_statement":
+        source_node = _find_child_by_type(node, "string")
+        source = _node_text(source_node).strip("\"'") if source_node else ""
+        clause = _find_child_by_type(node, "import_clause")
+        if clause:
+            for child in clause.children:
+                if child.type == "identifier":
+                    local = _node_text(child)
+                    info.imports[local] = source
+                elif child.type == "named_imports":
+                    for spec in child.children:
+                        if spec.type == "import_specifier":
+                            sn = _find_child_by_type(spec, "identifier")
+                            if sn:
+                                info.imports[_node_text(sn)] = source
+
+    if node.type == "call_expression":
+        call_name = _extract_ts_call_name(node)
+        if call_name:
+            info.calls.append((call_name, current_class[0] or "", node.start_point[0] + 1))
+
+    for child in node.children:
+        _walk_ts_node(child, info, current_class)
+
+
+def _extract_ts_call_name(node: Any) -> str:
+    func = node.child_by_field_name("function")
+    if not func:
+        return ""
+    if func.type == "identifier":
+        return _node_text(func)
+    if func.type == "member_expression":
+        prop = func.child_by_field_name("property")
+        obj = func.child_by_field_name("object")
+        prop_text = _node_text(prop) if prop else ""
+        obj_text = _node_text(obj) if obj else ""
+        if obj_text and prop_text:
+            return f"{obj_text}.{prop_text}"
+        return prop_text
+    return ""
+
+
+def analyze_ts_callgraph(
+    project_root: Path,
+    ts_files: list[str],
+    ts_adapter: Any,
+) -> dict[str, ModuleInfo]:
+    modules: dict[str, ModuleInfo] = {}
+    for rel_path in ts_files:
+        full_path = project_root / rel_path
+        if not full_path.exists():
+            continue
+        try:
+            source = full_path.read_bytes()
+        except OSError:
+            continue
+        ext = Path(rel_path).suffix.lower()
+        lang = "tsx" if ext == ".tsx" else "typescript"
+        tree = ts_adapter.parse(source, lang)
+        if not tree:
+            continue
+        info = ModuleInfo(rel_path)
+        _walk_ts_node(tree.root_node, info, [None])
+        modules[rel_path] = info
+    return modules
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Go 调用图（基于 tree-sitter AST）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None]) -> None:
+    if node.child_count == 0:
+        return
+
+    if node.type == "function_declaration":
+        name_node = _find_child_by_type(node, "identifier")
+        if name_node:
+            info.functions[_node_text(name_node)] = node.start_point[0] + 1
+
+    if node.type == "method_declaration":
+        receiver = _find_child_by_type(node, "parameter_list")
+        method_name_node = _find_child_by_type(node, "field_identifier")
+        if receiver and method_name_node:
+            method_name = _node_text(method_name_node)
+            recv_type = _extract_go_receiver_type(receiver)
+            if recv_type:
+                if recv_type not in info.classes:
+                    info.classes[recv_type] = ClassInfo(recv_type)
+                info.classes[recv_type].methods[method_name] = node.start_point[0] + 1
+                current_receiver[0] = recv_type
+
+    if node.type == "import_declaration":
+        spec_list = _find_child_by_type(node, "import_spec_list")
+        if spec_list:
+            for spec in spec_list.children:
+                if spec.type == "import_spec":
+                    path_node = _find_child_by_type(spec, "interpreted_string_literal")
+                    alias_nodes = _find_children_by_type(spec, "identifier")
+                    if path_node:
+                        pkg_path = _node_text(path_node).strip("\"")
+                        pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        if alias_nodes:
+                            alias = _node_text(alias_nodes[-1])
+                            info.imports[alias] = pkg_path
+                        else:
+                            info.imports[pkg_name] = pkg_path
+        else:
+            for child in node.children:
+                if child.type == "import_spec":
+                    path_node = _find_child_by_type(child, "interpreted_string_literal")
+                    alias_nodes = _find_children_by_type(child, "identifier")
+                    if path_node:
+                        pkg_path = _node_text(path_node).strip("\"")
+                        pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        if alias_nodes:
+                            alias = _node_text(alias_nodes[-1])
+                            info.imports[alias] = pkg_path
+                        else:
+                            info.imports[pkg_name] = pkg_path
+
+    if node.type == "call_expression":
+        call_name = _extract_go_call_name(node)
+        if call_name:
+            info.calls.append((call_name, current_receiver[0] or "", node.start_point[0] + 1))
+
+    for child in node.children:
+        _walk_go_node(child, info, current_receiver)
+
+
+def _extract_go_receiver_type(param_list: Any) -> str:
+    for child in param_list.children:
+        if child.type in ("parameter_declaration", "variadic_parameter_declaration"):
+            type_info = _find_child_by_type(child, "type_identifier") or \
+                        _find_child_by_type(child, "pointer_type") or \
+                        _find_child_by_type(child, "generic_type")
+            if type_info:
+                text = _node_text(type_info)
+                text = text.lstrip("*")
+                if "<" in text:
+                    text = text[:text.index("<")]
+                return text
+    return ""
+
+
+def _extract_go_call_name(node: Any) -> str:
+    func = node.child_by_field_name("function")
+    if not func:
+        return ""
+    if func.type == "identifier":
+        return _node_text(func)
+    if func.type == "selector_expression":
+        field = func.child_by_field_name("field")
+        operand = func.child_by_field_name("operand")
+        field_text = _node_text(field) if field else ""
+        operand_text = _node_text(operand) if operand else ""
+        if operand_text and field_text:
+            return f"{operand_text}.{field_text}"
+        return field_text
+    return ""
+
+
+def analyze_go_callgraph(
+    project_root: Path,
+    go_files: list[str],
+    ts_adapter: Any,
+) -> dict[str, ModuleInfo]:
+    modules: dict[str, ModuleInfo] = {}
+    for rel_path in go_files:
+        full_path = project_root / rel_path
+        if not full_path.exists():
+            continue
+        try:
+            source = full_path.read_bytes()
+        except OSError:
+            continue
+        tree = ts_adapter.parse(source, "go")
+        if not tree:
+            continue
+        info = ModuleInfo(rel_path)
+        _walk_go_node(tree.root_node, info, [None])
+        modules[rel_path] = info
+    return modules
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rust 调用图（基于 tree-sitter AST）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None]) -> None:
+    if node.child_count == 0:
+        return
+
+    if node.type == "function_item":
+        name_node = _find_child_by_type(node, "identifier")
+        if name_node and not current_impl[0]:
+            info.functions[_node_text(name_node)] = node.start_point[0] + 1
+
+    if node.type == "impl_item":
+        type_node = _find_child_by_type(node, "type_identifier")
+        if type_node:
+            impl_type = _node_text(type_node)
+            if impl_type not in info.classes:
+                info.classes[impl_type] = ClassInfo(impl_type)
+            old = current_impl[0]
+            current_impl[0] = impl_type
+            for child in node.children:
+                if child.type == "function_item":
+                    fn_name_node = _find_child_by_type(child, "identifier")
+                    if fn_name_node:
+                        fn_name = _node_text(fn_name_node)
+                        info.classes[impl_type].methods[fn_name] = child.start_point[0] + 1
+                _walk_rust_node(child, info, current_impl)
+            current_impl[0] = old
+            return
+
+    if node.type == "use_declaration":
+        arg = node.child_by_field_name("argument")
+        if arg:
+            use_path = _node_text(arg)
+            parts = use_path.split("::")
+            if parts:
+                local = parts[-1]
+                if local == "{self}" or local == "self":
+                    local = parts[-2] if len(parts) >= 2 else parts[-1]
+                info.imports[local] = use_path
+
+    if node.type == "call_expression":
+        call_name = _extract_rust_call_name(node)
+        if call_name:
+            info.calls.append((call_name, current_impl[0] or "", node.start_point[0] + 1))
+
+    for child in node.children:
+        _walk_rust_node(child, info, current_impl)
+
+
+def _extract_rust_call_name(node: Any) -> str:
+    func = node.child_by_field_name("function")
+    if not func:
+        return ""
+    if func.type == "identifier":
+        return _node_text(func)
+    if func.type == "field_expression":
+        field = func.child_by_field_name("field")
+        value = func.child_by_field_name("value")
+        field_text = _node_text(field) if field else ""
+        value_text = _node_text(value) if value else ""
+        if value_text and field_text:
+            return f"{value_text}.{field_text}"
+        return field_text
+    if func.type == "scoped_identifier":
+        name = func.child_by_field_name("name")
+        path = func.child_by_field_name("path")
+        name_text = _node_text(name) if name else ""
+        path_text = _node_text(path) if path else ""
+        if path_text and name_text:
+            return f"{path_text}::{name_text}"
+        return name_text
+    return ""
+
+
+def analyze_rust_callgraph(
+    project_root: Path,
+    rust_files: list[str],
+    ts_adapter: Any,
+) -> dict[str, ModuleInfo]:
+    modules: dict[str, ModuleInfo] = {}
+    for rel_path in rust_files:
+        full_path = project_root / rel_path
+        if not full_path.exists():
+            continue
+        try:
+            source = full_path.read_bytes()
+        except OSError:
+            continue
+        tree = ts_adapter.parse(source, "rust")
+        if not tree:
+            continue
+        info = ModuleInfo(rel_path)
+        _walk_rust_node(tree.root_node, info, [None])
+        modules[rel_path] = info
+    return modules
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 统一边解析（Python + TS + Go + Rust）
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def resolve_precise_edges(
@@ -191,22 +536,26 @@ def _resolve_call(
     module_path_map: dict[str, str],
 ) -> tuple[str, str, int, str] | None:
     parts = call_name.split(".")
+    sep = "::" if "::" in call_name else "."
+
+    if "::" in call_name:
+        parts = call_name.split("::")
 
     if len(parts) >= 2:
         obj_name = parts[0]
         method_name = parts[1]
 
-        if obj_name == "self" and in_class:
+        if obj_name in ("self", "this") and in_class:
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
                 if method_name in cinfo.methods:
-                    return (cfpath, f"{in_class}.{method_name}", cinfo.methods[method_name], "method_call")
+                    return (cfpath, f"{in_class}{sep}{method_name}", cinfo.methods[method_name], "method_call")
 
         if obj_name == "cls" and in_class:
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
                 if method_name in cinfo.methods:
-                    return (cfpath, f"{in_class}.{method_name}", cinfo.methods[method_name], "method_call")
+                    return (cfpath, f"{in_class}{sep}{method_name}", cinfo.methods[method_name], "method_call")
 
         import_target = caller_info.imports.get(obj_name)
         if import_target:
@@ -214,11 +563,14 @@ def _resolve_call(
             for mfpath, mline in func_matches:
                 if mfpath != caller_file:
                     return (mfpath, method_name, mline, "import_call")
+            class_matches = class_name_to_file.get(method_name, [])
+            for cfpath, cinfo in class_matches:
+                return (cfpath, method_name, list(cinfo.methods.values())[0] if cinfo.methods else 0, "import_call")
 
         class_matches = class_name_to_file.get(obj_name, [])
         for cfpath, cinfo in class_matches:
             if method_name in cinfo.methods:
-                return (cfpath, f"{obj_name}.{method_name}", cinfo.methods[method_name], "method_call")
+                return (cfpath, f"{obj_name}{sep}{method_name}", cinfo.methods[method_name], "method_call")
 
     func_name = parts[0]
     matches = name_to_file.get(func_name, [])

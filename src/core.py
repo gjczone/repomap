@@ -640,6 +640,79 @@ class RepoMapEngine:
         except Exception as exc:
             logger.debug(f"Python call graph enrichment failed: {exc}")
 
+    def _enrich_ts_call_edges(self) -> None:
+        ts_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".ts") or f.endswith(".tsx")
+        ]
+        if not ts_files:
+            return
+        try:
+            from .callgraph import analyze_ts_callgraph, resolve_precise_edges
+            modules = analyze_ts_callgraph(self.project_root, ts_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"TypeScript precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"TypeScript call graph enrichment failed: {exc}")
+
+    def _enrich_go_call_edges(self) -> None:
+        go_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".go")
+        ]
+        if not go_files:
+            return
+        try:
+            from .callgraph import analyze_go_callgraph, resolve_precise_edges
+            modules = analyze_go_callgraph(self.project_root, go_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"Go precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"Go call graph enrichment failed: {exc}")
+
+    def _enrich_rust_call_edges(self) -> None:
+        rust_files = [
+            f for f in self.graph.file_symbols
+            if f.endswith(".rs")
+        ]
+        if not rust_files:
+            return
+        try:
+            from .callgraph import analyze_rust_callgraph, resolve_precise_edges
+            modules = analyze_rust_callgraph(self.project_root, rust_files, self.ts)
+            precise_edges = resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
+            if added:
+                logger.debug(f"Rust precise call graph added {added} edges")
+        except Exception as exc:
+            logger.debug(f"Rust call graph enrichment failed: {exc}")
+
+    def _add_precise_edges(
+        self,
+        precise_edges: list[tuple[str, str, str, int, str]],
+    ) -> int:
+        existing_edges = {
+            (e.source, e.target)
+            for edges in self.graph.outgoing.values()
+            for e in edges
+        }
+        added = 0
+        for caller_file, caller_name, callee_file, callee_line, kind in precise_edges:
+            caller_id = self._find_symbol_id(caller_file, caller_name)
+            callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
+            if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
+                from . import Edge
+                edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind="call")
+                self.graph.outgoing.setdefault(caller_id, []).append(edge)
+                self.graph.incoming.setdefault(callee_id, []).append(edge)
+                existing_edges.add((caller_id, callee_id))
+                added += 1
+        return added
+
     def _find_symbol_id(self, file: str, name: str) -> str | None:
         for sym_id in self.graph.file_symbols.get(file, []):
             sym = self.graph.symbols.get(sym_id)
@@ -673,6 +746,9 @@ class RepoMapEngine:
         edge_builder = EdgeBuilder(self.graph, self._resolver)
         edge_builder.build_edges()
         self._enrich_python_call_edges()
+        self._enrich_ts_call_edges()
+        self._enrich_go_call_edges()
+        self._enrich_rust_call_edges()
 
     # ── PageRank ───────────────────────────────────────────────────────────────
 
