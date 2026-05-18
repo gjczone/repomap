@@ -1,39 +1,39 @@
 {
-   "name": "@gjczone/repomap-linux-x64",
-   "version": "2.4.1",
-   "description": "RepoMap CLI binary for Linux x64 — repository intelligence for AI agents",
-   "bin": {
-      "repomap": "repomap"
-   },
-   "scripts": {
-      "postinstall": "node install.js"
-   },
-   "files": [
-      "repomap",
-      "install.js"
-   ],
-   "os": [
-      "linux"
-   ],
-   "cpu": [
-      "x64"
-   ],
-   "keywords": [
-      "repomap",
-      "codebase",
-      "repository",
-      "ai-agent",
-      "tree-sitter",
-      "lsp",
-      "cli"
-   ],
-   "author": "gjczone",
-   "license": "MIT",
-   "repository": {
-      "type": "git",
-      "url": "https://github.com/gjczone/repomap"
-   },
-   "publishConfig": {
-      "access": "public"
-   }
+  "name": "@gjczone/repomap-linux-x64",
+  "version": "2.4.2",
+  "description": "RepoMap CLI binary for Linux x64 — repository intelligence for AI agents",
+  "bin": {
+    "repomap": "repomap"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "repomap",
+    "install.js"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "keywords": [
+    "repomap",
+    "codebase",
+    "repository",
+    "ai-agent",
+    "tree-sitter",
+    "lsp",
+    "cli"
+  ],
+  "author": "gjczone",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gjczone/repomap"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
