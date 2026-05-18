@@ -58,7 +58,7 @@ class SymbolSearchIndex:
         self._bm25: Any | None = None
         self._built = False
 
-        if not _HAS_BM25 or not symbols:
+        if not symbols:
             return
 
         for sym_id, sym in symbols.items():
@@ -67,13 +67,12 @@ class SymbolSearchIndex:
                 self._symbol_ids.append(sym_id)
                 self._documents.append(doc)
 
-        if self._documents:
+        if self._documents and _HAS_BM25:
             try:
                 self._bm25 = BM25Okapi(self._documents)
                 self._built = True
             except Exception as exc:
                 logger.debug(f"BM25 index build failed: {exc}")
-
     @property
     def available(self) -> bool:
         return self._built
