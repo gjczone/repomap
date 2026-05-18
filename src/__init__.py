@@ -6,6 +6,46 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+try:
+    import orjson as _orjson
+
+    def json_dumps(obj: Any, **kwargs: Any) -> str:
+        option = 0
+        if kwargs.get("indent") is not None:
+            option |= _orjson.OPT_INDENT_2
+        if kwargs.get("ensure_ascii") is False:
+            option |= _orjson.OPT_NON_STR_KEYS
+        if not option:
+            return _orjson.dumps(obj).decode("utf-8")
+        return _orjson.dumps(obj, option=option).decode("utf-8")
+
+    def json_loads(s: str | bytes, **kwargs: Any) -> Any:
+        return _orjson.loads(s)
+
+    def json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
+        fp.write(json_dumps(obj, **kwargs))
+
+    def json_load(fp: Any) -> Any:
+        return json_loads(fp.read())
+
+    HAS_ORJSON = True
+except ImportError:
+    import json as _json_mod
+
+    def json_dumps(obj: Any, **kwargs: Any) -> str:
+        return _json_mod.dumps(obj, **kwargs)
+
+    def json_loads(s: str | bytes, **kwargs: Any) -> Any:
+        return _json_mod.loads(s, **kwargs)
+
+    def json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
+        return _json_mod.dump(obj, fp, **kwargs)
+
+    def json_load(fp: Any) -> Any:
+        return _json_mod.load(fp)
+
+    HAS_ORJSON = False
+
 
 CACHE_DIR = Path.home() / ".cache" / "repomap"
 
@@ -77,6 +117,8 @@ class Symbol:
     visibility: str = "private"
     docstring: str = ""
     signature: str = ""
+    return_type: str = ""
+    params: str = ""
     pagerank: float = 0.0
 
 
@@ -204,6 +246,8 @@ def serialize_symbol(symbol: Symbol) -> dict[str, Any]:
         "col": symbol.col,
         "visibility": symbol.visibility,
         "signature": symbol.signature,
+        "return_type": symbol.return_type,
+        "params": symbol.params,
         "docstring": symbol.docstring,
         "pagerank": symbol.pagerank,
     }

@@ -10,7 +10,6 @@ RepoMap Check — 编译器/静态分析诊断模块
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -19,6 +18,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import json_dumps, json_loads
 
 
 @dataclass
@@ -121,52 +122,17 @@ class GitHelper:
     @staticmethod
     def get_modified_files(project_root: Path, since_commit: str | None = None) -> list[str]:
         """获取变更的文件列表"""
-        files: set[str] = set()
-
-        # 1. 获取 staged 文件
         try:
-            result = subprocess.run(
-                ["git", "diff", "--cached", "--name-only"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode == 0:
-                files.update(f for f in result.stdout.strip().split("\n") if f)
+            from .git_backend import GitBackend
+            git = GitBackend(str(project_root))
+            files: set[str] = set()
+            files.update(git.diff_cached_name_only())
+            files.update(git.diff_name_only())
+            if since_commit:
+                files.update(git.diff_name_only(since=since_commit))
+            return sorted(files)
         except Exception:
-            pass
-
-        # 2. 获取 unstaged 文件
-        try:
-            result = subprocess.run(
-                ["git", "diff", "--name-only"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode == 0:
-                files.update(f for f in result.stdout.strip().split("\n") if f)
-        except Exception:
-            pass
-
-        # 3. 获取 since_commit 以来的变更
-        if since_commit:
-            try:
-                result = subprocess.run(
-                    ["git", "diff", "--name-only", since_commit, "HEAD"],
-                    cwd=project_root,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode == 0:
-                    files.update(f for f in result.stdout.strip().split("\n") if f)
-            except Exception:
-                pass
-
-        return sorted(files)
+            return []
 
 
 class DiagnosticRunner:
@@ -407,7 +373,7 @@ class DiagnosticRunner:
         """解析 ESLint JSON 输出"""
         errors, warnings = [], []
         try:
-            data = json.loads(output) if output.strip() else []
+            data = json_loads(output) if output.strip() else []
             for record in data:
                 file_path = record.get("filePath", "")
                 for msg in record.get("messages", []):
@@ -441,7 +407,7 @@ class DiagnosticRunner:
                         errors.append(issue)
                     elif severity == "warning":
                         warnings.append(issue)
-        except json.JSONDecodeError:
+        except ValueError:
             pass
 
         return errors, warnings
@@ -491,7 +457,7 @@ class DiagnosticRunner:
             if not line:
                 continue
             try:
-                obj = json.loads(line)
+                obj = json_loads(line)
                 if obj.get("reason") != "compiler-message":
                     continue
                 msg = obj.get("message", {})
@@ -532,7 +498,7 @@ class DiagnosticRunner:
                     errors.append(issue)
                 else:
                     warnings.append(issue)
-            except json.JSONDecodeError:
+            except ValueError:
                 continue
 
         return errors, warnings
@@ -690,7 +656,7 @@ class DiagnosticRunner:
         """解析 ruff JSON 输出，尝试获取修复建议"""
         errors = []
         try:
-            data = json.loads(output) if output.strip() else []
+            data = json_loads(output) if output.strip() else []
             for item in data:
                 loc = item.get("location", {})
 
@@ -713,7 +679,7 @@ class DiagnosticRunner:
                     suggested_fix=suggested_fix,
                 )
                 errors.append(issue)
-        except json.JSONDecodeError:
+        except ValueError:
             pass
 
         return errors, []
@@ -1204,4 +1170,4 @@ if __name__ == "__main__":
         since_commit=since_commit,
         modified_files=modified_files,
     )
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    print(json_dumps(result, indent=2, ensure_ascii=False))

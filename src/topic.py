@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -551,38 +550,20 @@ def get_co_change_neighbors(
 
 def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
+    from .git_backend import GitBackend
     scores: dict[tuple[str, str], int] = defaultdict(int)
     try:
-        result = subprocess.run(
-            ["git", "log", "--name-only", "--pretty=format:", "--since=90.days.ago", "--", "."],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        git = GitBackend(project_root)
+        commit_groups = git.log_commits_grouped(since_days=90)
     except Exception:
         return dict(scores)
 
-    current_commit_files: list[str] = []
-    for line in result.stdout.split("\n"):
-        stripped = line.strip()
-        if not stripped:
-            # 空行分隔 commit
-            if len(current_commit_files) > 1:
-                for i in range(len(current_commit_files)):
-                    for j in range(i + 1, len(current_commit_files)):
-                        a, b = sorted([current_commit_files[i], current_commit_files[j]])
-                        scores[(a, b)] += 1
-            current_commit_files = []
-        else:
-            current_commit_files.append(stripped)
-
-    # 处理最后一个 commit
-    if len(current_commit_files) > 1:
-        for i in range(len(current_commit_files)):
-            for j in range(i + 1, len(current_commit_files)):
-                a, b = sorted([current_commit_files[i], current_commit_files[j]])
-                scores[(a, b)] += 1
+    for commit_files in commit_groups:
+        if len(commit_files) > 1:
+            for i in range(len(commit_files)):
+                for j in range(i + 1, len(commit_files)):
+                    a, b = sorted([commit_files[i], commit_files[j]])
+                    scores[(a, b)] += 1
 
     return dict(scores)
 

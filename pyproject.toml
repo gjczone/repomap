@@ -13,7 +13,7 @@ dependencies = [
     "tree-sitter-html>=0.23.0",
     "tree-sitter-css>=0.23.0",
     "tree-sitter-json>=0.23.0",
-    "pathspec>=0.12.0",
+    "pathspec[re2]>=0.12.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +25,10 @@ all = [
     "tree-sitter-kotlin>=0.4.0",
     "tree-sitter-php>=0.23.0",
     "tree-sitter-ruby>=0.23.0",
+    "orjson>=3.9.0",
+    "pygit2>=1.14.0",
+    "rank-bm25>=0.2.2",
+    "pycg>=0.1.0",
 ]
 build = [
     "pyinstaller>=6.0.0",
