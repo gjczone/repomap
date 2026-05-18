@@ -686,6 +686,10 @@ def run_query_symbol(
                 lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
+                if item.return_type:
+                    lines.append(f"  - returns: `{item.return_type}`")
+                if item.params:
+                    lines.append(f"  - params: `{item.params}`")
 
         if fuzzy_matches:
             lines.append(f"\n## Fuzzy matches ({len(fuzzy_matches)})\n")
@@ -694,6 +698,10 @@ def run_query_symbol(
                 lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
+                if item.return_type:
+                    lines.append(f"  - returns: `{item.return_type}`")
+                if item.params:
+                    lines.append(f"  - params: `{item.params}`")
 
         if len(results) > 10 and (len(exact_matches) > 10 or len(fuzzy_matches) > 10):
             lines.append("\n> Many results; use `--file-path` to narrow.")
@@ -1410,9 +1418,12 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
     status_lines = git.status_porcelain()
     changed_files: list[str] = []
     for line in status_lines:
-        parts = line.split(" ", 1)
-        git_relative_path = parts[1] if len(parts) > 1 else parts[0]
-        abs_path = Path(git_root, git_relative_path).resolve()
+        stripped = line.lstrip("MADRCUT? !")
+        if not stripped:
+            continue
+        if " -> " in stripped:
+            stripped = stripped.split(" -> ", 1)[-1]
+        abs_path = Path(git_root, stripped).resolve()
         try:
             changed_files.append(abs_path.relative_to(project_path).as_posix())
         except ValueError:
@@ -2471,3 +2482,29 @@ def run_build_binary(output: str, name: str) -> int:
         return result.returncode or 1
     print(f"binary ready: {output_dir / name}")
     return 0
+
+
+def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
+    try:
+        engine = _scan_engine(project, max_files)
+        results = engine.search_symbols(query, top_k)
+        if not results:
+            print(f"> No symbols found for query: `{query}`")
+            return EXIT_NO_RESULTS
+
+        from ..search import _HAS_BM25
+        backend = "BM25" if _HAS_BM25 else "keyword"
+        lines = [f"Found {len(results)} symbols (backend: {backend})\n"]
+        lines.append(f"## Search results for `{query}`\n")
+        for sym, score in results:
+            pr = sym.pagerank * 1000
+            lines.append(f"- **{sym.name}** ({sym.kind}) `{sym.file}:{sym.line}` score={score:.2f} PR={pr:.1f}")
+            if sym.return_type:
+                lines.append(f"  - returns: `{sym.return_type}`")
+            if sym.signature:
+                lines.append(f"  - sig: `{sym.signature}`")
+        print("\n".join(lines))
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] search failed: {exc}", file=sys.stderr)
+        return 1

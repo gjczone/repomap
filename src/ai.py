@@ -564,6 +564,10 @@ def render_file_detail_report(
         lines.append(f"- `{symbol.name}` ({symbol.kind}) — L{symbol.line} PR={pagerank:.1f}")
         if symbol.signature:
             lines.append(f"  - sig: `{symbol.signature}`")
+        if symbol.return_type:
+            lines.append(f"  - returns: `{symbol.return_type}`")
+        if symbol.params:
+            lines.append(f"  - params: `{symbol.params}`")
         if symbol.docstring:
             lines.append(f"  - doc: {symbol.docstring[:120]}")
         callers = [
