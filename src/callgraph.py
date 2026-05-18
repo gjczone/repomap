@@ -74,7 +74,8 @@ class ModuleInfo:
 class _PyCallGraphVisitor(ast.NodeVisitor):
     def __init__(self, filepath: str):
         self.info = ModuleInfo(filepath)
-        self._current_class: str | None = None
+        self._current_class: list[str] = []
+        self._in_function: bool = False
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         cls = ClassInfo(node.name)
@@ -82,26 +83,39 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 cls.methods[item.name] = item.lineno
         self.info.classes[node.name] = cls
-        self._current_class = node.name
+        self._current_class.append(node.name)
         self.generic_visit(node)
-        self._current_class = None
+        self._current_class.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if self._current_class is None:
+        if not self._current_class:
             self.info.functions[node.name] = node.lineno
+        old_in_func = self._in_function
+        self._in_function = True
         self._visit_calls_in_func(node)
+        self._in_function = old_in_func
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        if self._current_class is None:
+        if not self._current_class:
             self.info.functions[node.name] = node.lineno
+        old_in_func = self._in_function
+        self._in_function = True
         self._visit_calls_in_func(node)
+        self._in_function = old_in_func
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if not self._in_function and not self._current_class:
+            call_name = self._extract_call_name(node.func)
+            if call_name:
+                self.info.calls.append((call_name, "", node.lineno))
+        self.generic_visit(node)
 
     def _visit_calls_in_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
                 call_name = self._extract_call_name(child.func)
                 if call_name:
-                    self.info.calls.append((call_name, self._current_class or "", child.lineno))
+                    self.info.calls.append((call_name, self._current_class[-1] if self._current_class else "", child.lineno))
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -159,8 +173,8 @@ def analyze_python_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) -> None:
-    if node.child_count == 0:
+def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None], depth: int = 0) -> None:
+    if depth > 50 or node.child_count == 0:
         return
 
     if node.type == "class_declaration":
@@ -168,7 +182,7 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) 
         if name_node:
             class_name = _node_text(name_node)
             cls = ClassInfo(class_name)
-            body = _find_child_by_type(node, "class_body") or _find_child_by_type(node, "object_type")
+            body = _find_child_by_type(node, "class_body")
             if body:
                 for child in body.children:
                     if child.type == "method_definition":
@@ -179,8 +193,7 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) 
             old = current_class[0]
             current_class[0] = class_name
             for child in node.children:
-                if child.type != "class_body":
-                    _walk_ts_node(child, info, current_class)
+                _walk_ts_node(child, info, current_class, depth + 1)
             current_class[0] = old
             return
 
@@ -204,12 +217,22 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) 
                 if child.type == "identifier":
                     local = _node_text(child)
                     info.imports[local] = source
+                elif child.type == "namespace_import":
+                    ns_id = _find_child_by_type(child, "identifier")
+                    if ns_id:
+                        info.imports[_node_text(ns_id)] = source
                 elif child.type == "named_imports":
                     for spec in child.children:
                         if spec.type == "import_specifier":
-                            sn = _find_child_by_type(spec, "identifier")
-                            if sn:
-                                info.imports[_node_text(sn)] = source
+                            alias_node = _find_child_by_type(spec, "alias_identifier")
+                            if alias_node:
+                                info.imports[_node_text(alias_node)] = source
+                            else:
+                                ids = _find_children_by_type(spec, "identifier")
+                                if len(ids) >= 2:
+                                    info.imports[_node_text(ids[1])] = source
+                                elif ids:
+                                    info.imports[_node_text(ids[0])] = source
 
     if node.type == "call_expression":
         call_name = _extract_ts_call_name(node)
@@ -217,7 +240,7 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None]) 
             info.calls.append((call_name, current_class[0] or "", node.start_point[0] + 1))
 
     for child in node.children:
-        _walk_ts_node(child, info, current_class)
+        _walk_ts_node(child, info, current_class, depth + 1)
 
 
 def _extract_ts_call_name(node: Any) -> str:
@@ -267,8 +290,8 @@ def analyze_ts_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None]) -> None:
-    if node.child_count == 0:
+def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None], depth: int = 0) -> None:
+    if depth > 50 or node.child_count == 0:
         return
 
     if node.type == "function_declaration":
@@ -294,7 +317,7 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
             for spec in spec_list.children:
                 if spec.type == "import_spec":
                     path_node = _find_child_by_type(spec, "interpreted_string_literal")
-                    alias_nodes = _find_children_by_type(spec, "identifier")
+                    alias_nodes = _find_children_by_type(spec, "identifier") + _find_children_by_type(spec, "package_identifier")
                     if path_node:
                         pkg_path = _node_text(path_node).strip("\"")
                         pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
@@ -307,7 +330,7 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
             for child in node.children:
                 if child.type == "import_spec":
                     path_node = _find_child_by_type(child, "interpreted_string_literal")
-                    alias_nodes = _find_children_by_type(child, "identifier")
+                    alias_nodes = _find_children_by_type(child, "identifier") + _find_children_by_type(child, "package_identifier")
                     if path_node:
                         pkg_path = _node_text(path_node).strip("\"")
                         pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
@@ -323,7 +346,7 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
             info.calls.append((call_name, current_receiver[0] or "", node.start_point[0] + 1))
 
     for child in node.children:
-        _walk_go_node(child, info, current_receiver)
+        _walk_go_node(child, info, current_receiver, depth + 1)
 
 
 def _extract_go_receiver_type(param_list: Any) -> str:
@@ -386,8 +409,8 @@ def analyze_go_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None]) -> None:
-    if node.child_count == 0:
+def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None], depth: int = 0) -> None:
+    if depth > 50 or node.child_count == 0:
         return
 
     if node.type == "function_item":
@@ -396,7 +419,10 @@ def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None])
             info.functions[_node_text(name_node)] = node.start_point[0] + 1
 
     if node.type == "impl_item":
-        type_node = _find_child_by_type(node, "type_identifier")
+        type_node = node.child_by_field_name("type")
+        if type_node is None:
+            type_ids = _find_children_by_type(node, "type_identifier")
+            type_node = type_ids[-1] if type_ids else None
         if type_node:
             impl_type = _node_text(type_node)
             if impl_type not in info.classes:
@@ -409,7 +435,14 @@ def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None])
                     if fn_name_node:
                         fn_name = _node_text(fn_name_node)
                         info.classes[impl_type].methods[fn_name] = child.start_point[0] + 1
-                _walk_rust_node(child, info, current_impl)
+                elif child.type == "declaration_list":
+                    for decl_child in child.children:
+                        if decl_child.type == "function_item":
+                            fn_name_node = _find_child_by_type(decl_child, "identifier")
+                            if fn_name_node:
+                                fn_name = _node_text(fn_name_node)
+                                info.classes[impl_type].methods[fn_name] = decl_child.start_point[0] + 1
+                _walk_rust_node(child, info, current_impl, depth + 1)
             current_impl[0] = old
             return
 
@@ -430,7 +463,7 @@ def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None])
             info.calls.append((call_name, current_impl[0] or "", node.start_point[0] + 1))
 
     for child in node.children:
-        _walk_rust_node(child, info, current_impl)
+        _walk_rust_node(child, info, current_impl, depth + 1)
 
 
 def _extract_rust_call_name(node: Any) -> str:
@@ -545,7 +578,7 @@ def _resolve_call(
         obj_name = parts[0]
         method_name = parts[1]
 
-        if obj_name in ("self", "this") and in_class:
+        if obj_name in ("self", "this", "Self") and in_class:
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
                 if method_name in cinfo.methods:

@@ -49,17 +49,21 @@ uv run --with pyinstaller python -m src.cli build-binary --output dist
 
 ```
 src/                    # Python package (flat)
-├── __init__.py            # Core data structures: Symbol, Edge, RepoGraph, ScanStats
+├── __init__.py            # Core data structures: Symbol, Edge, RepoGraph, ScanStats + orjson compat layer
 ├── cli/                   # CLI entrypoint
 │   ├── __init__.py
 │   ├── __main__.py        # python -m repomap entry
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~410 lines)
 │   └── handlers.py        # All run_* command implementations + shared helpers (~2450 lines)
 ├── gitignore.py            # GitignoreParser: pathspec-based file filtering
+├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
 ├── parser.py              # TreeSitterAdapter: AST parsing, import/export bindings
 ├── resolver.py            # ImportResolver: resolve imports to file paths
 ├── ranking.py             # EdgeBuilder, GraphAnalyzer: PageRank, call-graph edges
+├── callgraph.py           # Multi-language precise call graph (Python ast + TS/Go/Rust tree-sitter)
+├── type_inference.py      # Multi-language type annotation extraction (10 languages)
+├── search.py              # BM25 symbol search index (rank-bm25 with keyword fallback)
 ├── topic.py               # Topic scoring, test matching, file role classification
 ├── check.py               # RepoMapChecker: diagnostics (eslint, tsc, ruff, go vet, ...)
 ├── toolkit.py             # Cache/diff/git helper logic
@@ -75,15 +79,23 @@ mcp/                       # MCP server (TypeScript)
 ├── repomap-bin/           # Binary finder + npm wrapper package
 └── package.json           # MCP server package metadata
 tests/                     # Test suite
+├── test_git_backend.py    # GitBackend unit tests (61 cases)
+├── test_callgraph.py      # Call graph unit tests (45 cases)
+├── test_type_inference.py # Type inference unit tests (33 cases)
+└── ...                    # Other test files
 dist/repomap               # Local build output (CI builds Linux/macOS/Windows via GitHub Actions)
 ```
 
-**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git).
+**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git).
 
 ## Change Map
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
 - **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`, `hotspots`
+- **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter)
+- **Type inference**: `src/type_inference.py` → `query-symbol` return_type/params (10 languages)
+- **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
+- **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch) + `src/cli/handlers.py` (run_* implementations) → add subparser in cli.py, implement handler in handlers.py, render via `src/ai.py`
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
@@ -103,6 +115,9 @@ dist/repomap               # Local build output (CI builds Linux/macOS/Windows v
 | Engine | `uv run python -m unittest discover -s tests -p 'test_repomap_engine.py' -v` |
 | Toolkit | `uv run python -m unittest discover -s tests -p 'test_repomap_toolkit.py' -v` |
 | LSP | `uv run python -m unittest discover -s tests -p 'test_repomap_lsp.py' -v` |
+| Git Backend | `uv run python -m pytest tests/test_git_backend.py -v` |
+| Call Graph | `uv run python -m pytest tests/test_callgraph.py -v` |
+| Type Inference | `uv run python -m pytest tests/test_type_inference.py -v` |
 | Binary E2E | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v` |
 | Full | `uv run python -m unittest discover -s tests -v` |
 | Smoke | `repomap doctor && repomap overview --project . && repomap verify --project . --quick` |

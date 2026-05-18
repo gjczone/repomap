@@ -168,7 +168,7 @@ class SubprocessBackend:
             if r.returncode != 0:
                 return None
             output = r.stdout
-            commit_hash = output.split()[0] if output else "unknown"
+            commit_hash = output.split()[0][:8] if output else "unknown"
             return {"commit": commit_hash}
         except Exception:
             return None
@@ -293,6 +293,8 @@ class Pygit2Backend:
 
     @staticmethod
     def diff_name_only(project_root: str, since: str | None = None) -> list[str]:
+        if since and "days.ago" in since:
+            return SubprocessBackend.diff_name_only(project_root, since)
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
@@ -341,6 +343,7 @@ class Pygit2Backend:
                 elif flags & pygit2.GIT_STATUS_INDEX_DELETED:
                     x = "D"
                 elif flags & pygit2.GIT_STATUS_INDEX_RENAMED:
+                    # pygit2 repo.status() 不提供旧路径，只能输出 R NEW_PATH
                     x = "R"
                 elif flags & pygit2.GIT_STATUS_INDEX_TYPECHANGE:
                     x = "T"
@@ -350,6 +353,7 @@ class Pygit2Backend:
                 elif flags & pygit2.GIT_STATUS_WT_DELETED:
                     y = "D"
                 elif flags & pygit2.GIT_STATUS_WT_RENAMED:
+                    # pygit2 repo.status() 不提供旧路径，只能输出 R NEW_PATH
                     y = "R"
                 elif flags & pygit2.GIT_STATUS_WT_TYPECHANGE:
                     y = "T"
@@ -371,14 +375,18 @@ class Pygit2Backend:
             files: set[str] = set()
             import time as _time
             now = _time.time()
-            since_seconds = int(now) - 90 * 86400
+            import re as _re
+            _m = _re.match(r"(\d+)\.days\.ago", since)
+            since_days = int(_m.group(1)) if _m else 90
+            since_seconds = int(now) - since_days * 86400
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for commit in walker:
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
-                    continue
-                diff = repo.diff(commit.parents[0].tree, commit.tree)
+                    diff = commit.tree.diff_to_tree(swap=True)
+                else:
+                    diff = repo.diff(commit.parents[0].tree, commit.tree)
                 for d in diff.deltas:
                     if d.new_file.path:
                         files.add(d.new_file.path)
@@ -401,8 +409,9 @@ class Pygit2Backend:
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
-                    continue
-                diff = repo.diff(commit.parents[0].tree, commit.tree)
+                    diff = commit.tree.diff_to_tree(swap=True)
+                else:
+                    diff = repo.diff(commit.parents[0].tree, commit.tree)
                 commit_files = [d.new_file.path for d in diff.deltas if d.new_file.path]
                 if commit_files:
                     groups.append(commit_files)
@@ -424,8 +433,9 @@ class Pygit2Backend:
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
-                    continue
-                diff = repo.diff(commit.parents[0].tree, commit.tree)
+                    diff = commit.tree.diff_to_tree(swap=True)
+                else:
+                    diff = repo.diff(commit.parents[0].tree, commit.tree)
                 for d in diff.deltas:
                     if d.new_file.path:
                         files.add(d.new_file.path)
@@ -460,8 +470,8 @@ class Pygit2Backend:
             for commit in walker:
                 if len(commits) >= limit:
                     break
-                for parent in commit.parents:
-                    diff = repo.diff(parent.tree, commit.tree)
+                if not commit.parents:
+                    diff = commit.tree.diff_to_tree(swap=True)
                     for d in diff.deltas:
                         if d.new_file.path == file_path or d.old_file.path == file_path:
                             commits.append({
@@ -471,9 +481,21 @@ class Pygit2Backend:
                                 "message": commit.message.split("\n")[0],
                             })
                             break
-                    else:
-                        continue
-                    break
+                else:
+                    for parent in commit.parents:
+                        diff = repo.diff(parent.tree, commit.tree)
+                        for d in diff.deltas:
+                            if d.new_file.path == file_path or d.old_file.path == file_path:
+                                commits.append({
+                                    "hash": str(commit.id)[:8],
+                                    "author": commit.author.name,
+                                    "date": commit.commit_time,
+                                    "message": commit.message.split("\n")[0],
+                                })
+                                break
+                        else:
+                            continue
+                        break
             return commits
         except Exception:
             return []

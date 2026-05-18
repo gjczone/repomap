@@ -264,6 +264,8 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
             visibility=row.get("visibility", "private"),
             docstring=row.get("docstring", ""),
             signature=row.get("signature", ""),
+            return_type=row.get("return_type", ""),
+            params=row.get("params", ""),
             pagerank=row.get("pagerank", 0.0),
         )
         graph.symbols[symbol.id] = symbol
@@ -1418,7 +1420,7 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
     status_lines = git.status_porcelain()
     changed_files: list[str] = []
     for line in status_lines:
-        stripped = line.lstrip("MADRCUT? !")
+        stripped = line[3:] if len(line) > 3 else line
         if not stripped:
             continue
         if " -> " in stripped:

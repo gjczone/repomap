@@ -30,6 +30,10 @@ def _find_child_by_type(node: Any, child_type: str) -> Any | None:
     return None
 
 
+def _find_children_by_type(node: Any, child_type: str) -> list[Any]:
+    return [child for child in node.children if child.type == child_type]
+
+
 def _extract_python_return_type(def_node: Any) -> str:
     for child in def_node.children:
         if child.type == "block":
@@ -89,19 +93,23 @@ def _extract_go_return_type(def_node: Any) -> str:
                           "array_type", "slice_type", "map_type", "channel_type",
                           "function_type", "struct_type", "generic_type"):
             return _node_text(child).strip()
-        if child.type == "grouped_expression":
-            inner = []
-            for c in child.children:
-                if c.type not in ("(", ")"):
-                    inner.append(_node_text(c).strip())
-            return ", ".join(inner)
+    param_lists = _find_children_by_type(def_node, "parameter_list")
+    if len(param_lists) >= 2:
+        result_params: list[str] = []
+        for child in param_lists[-1].children:
+            if child.type in ("(", ")", ",", "comment"):
+                continue
+            result_params.append(_node_text(child).strip())
+        if result_params:
+            return ", ".join(result_params)
     return ""
 
 
 def _extract_go_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "parameter_list")
-    if not params_node:
+    param_lists = _find_children_by_type(def_node, "parameter_list")
+    if not param_lists:
         return ""
+    params_node = param_lists[-1] if len(param_lists) > 1 else param_lists[0]
     parts: list[str] = []
     for child in params_node.children:
         if child.type in ("(", ")", ",", "comment"):
@@ -111,9 +119,13 @@ def _extract_go_params(def_node: Any) -> str:
 
 
 def _extract_rust_return_type(def_node: Any) -> str:
+    found_arrow = False
     for child in def_node.children:
-        if child.type == "return_type":
-            return _node_text(child).lstrip("->").strip()
+        if child.type == "->":
+            found_arrow = True
+            continue
+        if found_arrow:
+            return _node_text(child).strip()
     return ""
 
 
@@ -222,6 +234,10 @@ def _extract_cpp_return_type(def_node: Any) -> str:
 
 def _extract_cpp_params(def_node: Any) -> str:
     params_node = _find_child_by_type(def_node, "parameter_list") or _find_child_by_type(def_node, "parameters")
+    if not params_node:
+        declarator = _find_child_by_type(def_node, "function_declarator") or _find_child_by_type(def_node, "declarator")
+        if declarator:
+            params_node = _find_child_by_type(declarator, "parameter_list") or _find_child_by_type(declarator, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
