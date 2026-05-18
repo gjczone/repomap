@@ -158,7 +158,7 @@ Claude Code LSP plugins and `repomap` are complementary:
 - JS/TS object literal API methods: property functions such as `getMetadata: () => ...` are emitted as named method symbols.
 - `.tsx`: uses dedicated TSX grammar. Import dependency extraction should use source strings only, not imported symbol names.
 - Path safety: commands accepting project files/directories normalize in-project absolute/relative paths and reject outside-project paths.
-- LSP: opt-in, local-only, no plugin/MCP, no install, no bundled server, no `npx`/`pnpx`/`bunx`, no daemon.
+- LSP: opt-in, local-only, no plugin/MCP, no install, no bundled server, no daemon.
 
 ## Value Guidance
 

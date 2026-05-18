@@ -594,7 +594,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("tree_sitter:", result.stdout)
         self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
 
-    def test_help_lists_former_mcp_commands_and_excludes_mcp(self) -> None:
+    def test_help_lists_all_commands(self) -> None:
         from src.cli import main
 
         stdout = io.StringIO()

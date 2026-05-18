@@ -16,7 +16,7 @@
 
 ## 快速开始
 
-### 方案一（推荐）：CLI + Skill
+### 方案一：CLI + Skill
 
 Skill 文件告诉代理*何时*调用每个命令。适用于任何支持自定义 skill 的编程代理。
 
@@ -27,8 +27,9 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. 安装二进制文件
-npm install -g repomap-bin
+# 2. 安装 CLI
+pip install repomap
+# 或：uv tool install repomap
 
 # 3. 验证
 repomap doctor
@@ -36,28 +37,17 @@ repomap doctor
 
 **效果**：代理读取 `~/.claude/skills/repomap/SKILL.md`，在恰当的时机自动调用 `repomap overview`、`repomap impact`、`repomap verify`。Skill 包含决策规则和强制使用模式。
 
-### 方案二：MCP 服务器
+### 方案二：仅 CLI
 
-MCP 工具出现在代理的工具列表中，附带内置工作流指令。最适合 MCP 原生客户端（Claude Code、Cursor、VS Code）。
+直接安装 CLI 工具，用于手动使用或集成到任何工作流：
 
-添加到 `~/.claude/settings.json`：
+```bash
+pip install repomap
+# 或：uv tool install repomap
 
-```json
-{
-  "mcpServers": {
-    "repomap": {
-      "command": "npx",
-      "args": ["-y", "repomap-mcp-server@latest"]
-    }
-  }
-}
+# 验证
+repomap doctor
 ```
-
-或命令行：`claude mcp add --transport stdio repomap -- npx -y repomap-mcp-server@latest`
-
-**效果**：19 个 MCP 工具，含强制性工作流规则注入系统提示。
-
-> **Skill vs MCP**：Skill 模式给代理一个决策流程（何时调用什么）。MCP 模式给代理工具和描述。两者都可用——根据你的客户端选择。Skill 模式适用于任何能读取 markdown 的代理；MCP 模式需要 MCP 协议支持。
 
 ---
 
@@ -114,7 +104,7 @@ repomap lsp setup                    # 安装缺失的服务器
 
 ## 代理工作流
 
-代理按此模式自动工作（由 skill 或 MCP 指令引导）：
+代理按此模式自动工作（由 skill 指令引导）：
 
 ```bash
 # 编辑前
@@ -130,32 +120,6 @@ repomap verify --project . --with-lsp                 # 完整证据门
 repomap check --project .                             # 编译器诊断
 repomap orphan --project . --min-confidence 70        # 死代码检查
 ```
-
----
-
-## MCP 工具
-
-使用 MCP 服务器时可用：
-
-| 工具 | 对应命令 |
-|------|----------|
-| `repomap_overview` | `overview` |
-| `repomap_query` | `query` |
-| `repomap_file_detail` | `file-detail` |
-| `repomap_impact` | `impact` |
-| `repomap_call_chain` | `call-chain` |
-| `repomap_query_symbol` | `query-symbol` |
-| `repomap_refs` | `refs` |
-| `repomap_routes` / `repomap_routes_consumers` | `routes` |
-| `repomap_state_map` | `state-map` |
-| `repomap_verify` | `verify` |
-| `repomap_check` | `check` |
-| `repomap_orphan` | `orphan` |
-| `repomap_hotspots` | `hotspots` |
-| `repomap_diff` / `repomap_cache_save` | `diff` / `cache save` |
-| `repomap_doctor` | `doctor` |
-| `repomap_lsp_setup` | `lsp setup` |
-| `repomap_scan` | `scan` |
 
 ---
 

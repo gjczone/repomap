@@ -2,14 +2,14 @@
 
 `repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent *when* to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
-**Distribution**: npm is the sole distribution channel. All 5 packages (`repomap-mcp-server`, `repomap-bin`, and 3 platform binaries) are published to npm. No PyPI, no GitHub Release binaries, no manual downloads. See [README.md](./README.md) for the user-facing install instructions.
+**Distribution**: Pure Python skill+CLI tool. Distributed via skill definition (`skills/repomap/`) and CLI binary (`repomap`). Version managed in `pyproject.toml`.
 
 ## Project Snapshot
 
-- **Shape**: Python package (`src/`) + prebuilt binaries for Linux/macOS/Windows (CI-built, distributed via npm platform packages)
+- **Shape**: Python package (`src/`) with CLI binary
 - **Core capability**: tree-sitter AST → symbol extraction → import resolution → call-chain analysis → AI-friendly reports
 - **Languages**: Python, JS/TS (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
-- **Distribution**: MCP (`npx repomap-mcp-server@latest`) / npm (`repomap-bin`) / skill (`skills/repomap/` → `~/.claude/skills/repomap/`) + binary (`~/.local/bin/repomap`)
+- **Distribution**: skill (`skills/repomap/`) + CLI binary (`repomap`)
 - **No server/daemon**: LSP integration is opt-in, local-only, stdio-based
 
 ## Commands
@@ -74,10 +74,6 @@ src/                    # Python package (flat)
 skills/repomap/            # AI agent skill definition
 ├── SKILL.md               # Agent decision procedure
 └── references/            # Command map, prompt examples, authoring checklist
-mcp/                       # MCP server (TypeScript)
-├── src/                   # MCP server source (index.ts, repomap.ts, tools.ts)
-├── repomap-bin/           # Binary finder + npm wrapper package
-└── package.json           # MCP server package metadata
 tests/                     # Test suite
 ├── test_git_backend.py    # GitBackend unit tests (61 cases)
 ├── test_callgraph.py      # Call graph unit tests (45 cases)
@@ -132,7 +128,7 @@ The public README files serve different audiences than this document:
 
 **Rules for README changes**:
 - README describes the *product*, not the implementation. No module names, internal architecture, or refactoring details.
-- Binary distribution is via npm platform packages (`repomap-bin-linux-x64`, etc.), not manual download.
+- Binary distribution is via CLI binary (`repomap`), not manual download.
 - Language support list must match `src/parser.py` and `pyproject.toml`.
 - When adding commands, update README.md, README.zh-CN.md, and SKILL.md.
 - README does NOT say "For Humans" / "For AI Agents" — present information directly.
@@ -162,158 +158,68 @@ The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The l
 
 ## Release Rule（铁律）
 
-**任何代码修改完成后，必须走完整发布流程。** 不允许只 commit 不发布。修改即发布，发布即完整（版本号 → binary → MCP → commit → push → CI → npm → GitHub Release）。
+**任何代码修改完成后，必须走完整发布流程。** 不允许只 commit 不发布。修改即发布，发布即完整（版本号 → binary → commit → push → CI → GitHub Release）。
 
 ## Post-Change Checklist
 
-After any code change to `src/` or `mcp/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
+After any code change to `src/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
 
 ```bash
-# 1. Run ALL tests (Python + MCP) — both must pass before proceeding
+# 1. Run ALL tests
 uv run python -m unittest discover -s tests -v
-cd mcp && npm test && cd ..
 
 # 2. Rebuild binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
 
-# 3. Copy to platform package + update PATH
-cp dist/repomap mcp/repomap-bin/platforms/repomap-bin-linux-x64/repomap
-# Binary at ~/.local/bin/repomap must be symlinked to dist/repomap
-
-# 4. Smoke test (current project)
+# 3. Smoke test (current project)
 repomap doctor
 repomap overview --project .
 
-# 4.5. Smoke test with local projects (MANDATORY before release)
+# 3.5. Smoke test with local projects (MANDATORY before release)
 #    - Test in at least 2-3 local projects of different languages/frameworks
 #    - Verify: overview, query, file-detail --with-lsp, call-chain, refs, verify --quick
 #    - Verify: lsp setup --dry-run detects languages correctly
 #    - Verify: doctor --lsp finds available servers
 
-# 5. Evaluate: does SKILL.md need updating?
+# 4. Evaluate: does SKILL.md need updating?
 #    - New commands or changed options → update Command selection table
 #    - Changed behavior → update Boundaries section
 #    - New limitations discovered → update Boundaries section
 #    See skills/repomap/SKILL.md
 
-# 6. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
+# 5. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
 #    - New repomap commands → update Section 8.1 command lists
 #    - Changed distribution method → update availability description
 
-# 7. Rebuild MCP ALWAYS — even if TypeScript didn't change, to sync version
-cd mcp && npm run build && cd ..
+# 6. Bump version in pyproject.toml
 
-# 7.5. Verify MCP tools match CLI commands
-#    - Check mcp/src/tools.ts for any tools referencing deleted CLI commands
-#    - Check for missing tools for new CLI commands
-#    - Rebuild MCP after any tool.ts changes
-
-# 8. Bump version in all 8 locations (see Distribution Policies)
-
-# 9. Commit + push → CI auto-publishes all npm packages
+# 7. Commit + push → CI auto-builds binary
 #    Commit message format: [release]: vX.Y.Z — English summary of primary change
 
-# 10. Wait for CI to complete, then verify npm versions
+# 8. Wait for CI to complete
 #     - Poll CI status: gh run list --repo gjczone/repomap --branch main --limit 1 --json status,conclusion
 #     - Wait up to 10 minutes; CI typically takes 3-6 minutes
-#     - CI publishes platform packages, repomap-bin, and repomap-mcp-server
-#     - Verify all 5 packages: for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do npm view "$pkg" version; done
 
-# 11. Sync skill to ~/.agents/skills/repomap/ (all files must be byte-identical)
-cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
-cp -r skills/repomap/scripts/* ~/.agents/skills/repomap/scripts/
-cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-diff -r skills/repomap/references/ ~/.agents/skills/repomap/references/
-diff skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-
-# 12. Create GitHub Release — bilingual: English section first, Chinese section second, separated by ---
+# 9. Create GitHub Release — bilingual: English section first, Chinese section second, separated by ---
 ```
-
-## MCP Server
-
-`mcp/` is a TypeScript MCP (Model Context Protocol) server that exposes repomap commands as MCP tools for Claude Code, Cursor, VS Code, and other MCP-compatible clients.
-
-### Structure
-
-```
-mcp/
-├── src/index.ts        # MCP server entrypoint
-├── src/repomap.ts      # Binary invocation wrapper
-├── src/tools.ts        # MCP tool definitions (overview, query, impact, verify, etc.)
-├── repomap-bin/        # Binary finder + npm binary package
-│   ├── run.js          # CLI wrapper (resolves binary via dist/ -> npm -> PATH)
-│   ├── index.js        # Programmatic API for getBinaryPath()
-│   └── package.json    # npm package metadata + optionalDependencies
-├── package.json        # MCP server package (depends on repomap-bin)
-└── tsconfig.json
-```
-
-### Binary resolution order
-
-`repomap-bin/run.js` searches for the repomap binary in this order:
-1. `../../dist/repomap` — local repo build (development)
-2. `node_modules/<platform-package>/repomap` — resolved via `createRequire` (handles hoisted, npx, yarn, pnpm)
-3. `repomap` on PATH — system install
-
-### Building the MCP server
-
-```bash
-cd mcp
-npm install
-npm run build     # compiles TypeScript → dist/
-```
-
-### Testing MCP tools locally
-
-```bash
-cd mcp
-npm run build
-node dist/index.js   # starts MCP server on stdio
-```
-
-### Publishing to npm
-
-Publishing is handled by GitHub Actions after `main` is pushed. The workflow publishes platform binary packages first, then `repomap-bin`, then `repomap-mcp-server`.
-
-### MCP version sync
-
-When the CLI binary is updated (`src/` changes, binary rebuilt):
-- Bump `mcp/package.json` version to match
-- Bump `mcp/repomap-bin/package.json` version to match
-- Rebuild MCP: `cd mcp && npm run build`
-- Push `main` and the release tag; GitHub Actions publishes npm packages
 
 ## Distribution Policies
 
-- **npm only**: All distribution is via npm. No PyPI, no GitHub Release binaries, no manual binary downloads.
-- **No binaries in git**: `dist/repomap` and `mcp/repomap-bin/platforms/*/repomap` are gitignored. Build artifacts stay local.
+- **No binaries in git**: `dist/repomap` is gitignored. Build artifacts stay local.
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
-- **Version bump**: When bumping version, update ALL 8 locations in one commit:
-  - `pyproject.toml`
-  - `mcp/package.json` + `mcp/repomap-bin/package.json` (version + optionalDependencies)
-  - `mcp/repomap-bin/platforms/repomap-bin-linux-x64/package.json`
-  - `mcp/repomap-bin/platforms/repomap-bin-darwin-arm64/package.json`
-  - `mcp/repomap-bin/platforms/repomap-bin-windows-x64/package.json`
-  - `mcp/src/index.ts` (hardcoded version string in `McpServer` constructor)
-- **CI publish**: CI builds platform binaries on ubuntu/macos/windows, publishes platform packages to npm if the version doesn't already exist, then publishes `repomap-bin` and `repomap-mcp-server` from the linux-x64 job.
-  - Docs-only changes (`**/*.md`, `docs/**`, `skills/**`) are ignored by `build-binaries`; use `workflow_dispatch` if a documentation-only commit intentionally needs a build.
-  - Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release verification.
-  - After CI succeeds, verify all 5 packages match the new version via `npm view <pkg> version`.
+- **Version bump**: When bumping version, update `pyproject.toml`.
+- **CI build**: CI builds the binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.
 
 ## Release Automation Rules
 
 When the user asks to release a new version, follow this automated flow. **No manual checkpoints — every step completes before the next begins. If a step requires waiting (CI), poll automatically and report progress.**
 
 ### Release Quality Gates
-- Treat release as a full contract, not a version bump: local tests, rebuilt binary, npm package contents, CI, npm versions, and GitHub Release must all be verified.
-- Keep one version chain: Python package, MCP server, `repomap-bin`, platform packages, lockfile, and hardcoded MCP server version must be updated together.
-- Preserve npm publish order: platform packages first, `repomap-bin` second, `repomap-mcp-server` last. Never publish a wrapper that depends on a platform version that is not published.
+- Treat release as a full contract, not a version bump: local tests, rebuilt binary, CI, and GitHub Release must all be verified.
+- Keep one version chain: Python package version in `pyproject.toml` is the single source of truth.
 - Update the source of truth when behavior or distribution changes: workflow files, README files, CLAUDE.md, and SKILL.md must not describe conflicting release paths.
 - Treat `skipped`, `unknown`, and missing diagnostics as incomplete evidence. Explain why they are expected and cover the gap with real tests, binary smoke tests, or CI evidence.
 - For bug fixes, add or update a regression test that would have failed before the fix unless the change is documentation-only.
-- Before publishing, verify package contents with `npm pack --dry-run --json` for packages touched by the release.
-- Verify real binary entrypoints, not only source CLI: `dist/repomap`, platform package binary, and `node mcp/repomap-bin/run.js`.
-- Keep public and local skills byte-identical: the repository skill is the public distribution source; the local skill must be an exact copy.
 - Before push or release, confirm clean git status, target remote, branch, tag target commit, and CI target branch.
 
 ### Version Decision
@@ -334,13 +240,6 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - Key commands to verify: `overview`, `query`, `file-detail --with-lsp`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
 - If any command fails, fix before proceeding with the release
 - If any test, diagnostic, or verify step is skipped/unknown, document why it is acceptable and which non-skipped evidence covers the same risk.
-
-### MCP Sync
-- After ANY CLI command change (add/remove/rename), update `mcp/src/tools.ts`
-- Delete tools for removed CLI commands, add tools for new CLI commands
-- Update parameter schemas for commands with new options
-- Rebuild MCP: `cd mcp && npm run build && cd ..`
-- MCP version must ALWAYS match CLI version
 
 ### GitHub Release Format
 - **Bilingual, independent sections**: English first, then Chinese. Two complete, independent sections separated by `---`. Do NOT interleave languages within sections.
@@ -379,43 +278,11 @@ When the user asks to release a new version, follow this automated flow. **No ma
 1. After `git push`, immediately poll CI status.
 2. If CI is `in_progress` or `queued`: wait 60s, poll again. Report "CI 运行中…" to the user.
 3. If CI completes but `conclusion=failure`: report the failure and stop.
-4. If CI completes and `conclusion=success`: proceed to npm package verification.
-
-### npm Publish Verification
-After CI publish, run this verification command:
-```bash
-for pkg in repomap-bin repomap-mcp-server repomap-bin-linux-x64 repomap-bin-darwin-arm64 repomap-bin-windows-x64; do
-  ver=$(npm view "$pkg" version 2>/dev/null || echo "N/A")
-  echo "$pkg: $ver"
-done
-```
-All 5 packages MUST show the same new version. Report any mismatch.
+4. If CI completes and `conclusion=success`: proceed to GitHub Release.
 
 ### Completion Report
 After release is fully done, report:
 - Git tag and commit hash
 - GitHub Release URL
-- All 5 npm package versions
 - CI run URL
 
-## Skill Sync Rules
-
-After modifying repomap source code or skill files, sync between skill directories:
-
-| Path | Role |
-|------|------|
-| `skills/repomap/` | Source of truth — edit here first |
-| `~/.agents/skills/repomap/` | Local deployment — sync from source |
-
-**Sync procedure**:
-
-```bash
-# All files must be byte-identical
-cp -r skills/repomap/references/* ~/.agents/skills/repomap/references/
-cp -r skills/repomap/scripts/* ~/.agents/skills/repomap/scripts/
-cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-```
-
-**Consistency rules**:
-- `references/`, `scripts/`, and `SKILL.md`: all byte-identical at all times
-- After changes, verify with `diff -r skills/repomap/ ~/.agents/skills/repomap/`

@@ -56,7 +56,7 @@ DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=CLI_NAME,
-        description="Standalone RepoMap CLI. Former MCP capabilities are exposed as direct subcommands.",
+        description="RepoMap CLI — repository intelligence for AI agents.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
