@@ -115,7 +115,7 @@ dist/repomap               # Local build output (CI builds Linux/macOS/Windows v
 | Call Graph | `uv run python -m pytest tests/test_callgraph.py -v` |
 | Type Inference | `uv run python -m pytest tests/test_type_inference.py -v` |
 | Binary E2E | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v` |
-| Full | `uv run python -m unittest discover -s tests -v` |
+| Full | `uv run python -m unittest discover -s tests -v && uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q` |
 | Smoke | `repomap doctor && repomap overview --project . && repomap verify --project . --quick` |
 
 ## README Maintenance
@@ -152,7 +152,7 @@ When using `repomap`, AI agents encounter tool boundaries that specs don't cover
 
 ## Skill Distribution
 
-The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The local copy (`~/.agents/skills/repomap/SKILL.md`) must be byte-identical to the open-source version. Neither may include:
+The open-source skill directory (`skills/repomap/`) is distributed to users. The entire local copy (`~/.agents/skills/repomap/`) — including SKILL.md, references/, and scripts/ — must be byte-identical to the open-source version. Neither may include:
 - Any references to local file paths (e.g., absolute paths on maintainer's machine)
 - Any maintainer-specific workflow or feedback mechanisms
 
@@ -165,8 +165,10 @@ The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The l
 After any code change to `src/`, work through these steps. **Every step must complete before moving to the next. When a step depends on an external async process (CI), wait for completion automatically — poll every 60s with `gh run list`, do not ask the user to wait.**
 
 ```bash
-# 1. Run ALL tests
+
+# 1. Run ALL tests (core unittest + new pytest-based tests)
 uv run python -m unittest discover -s tests -v
+uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q
 
 # 2. Rebuild binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
@@ -187,6 +189,9 @@ repomap overview --project .
 #    - New limitations discovered → update Boundaries section
 #    See skills/repomap/SKILL.md
 
+
+# 4.5. Sync local skill directory to ~/.agents/skills/repomap/
+#      cp -r skills/repomap/* ~/.agents/skills/repomap/
 # 5. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
 #    - New repomap commands → update Section 8.1 command lists
 #    - Changed distribution method → update availability description
