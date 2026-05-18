@@ -29,7 +29,8 @@ rm -rf /tmp/repomap-install
 
 
 # 2. Install CLI
-npm install -g @gjczone/repomap-linux-x64
+
+npm install -g repomap-bin
 # or: pip install repomap-cli
 # or: uv tool install repomap
 
@@ -45,7 +46,8 @@ Install the CLI tool directly for manual use or integration with any workflow:
 
 ```bash
 
-npm install -g @gjczone/repomap-linux-x64
+
+npm install -g repomap-bin
 # or: pip install repomap-cli
 
 # Verify

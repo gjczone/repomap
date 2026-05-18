@@ -28,7 +28,8 @@ cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
 # 2. 安装 CLI
-npm install -g @gjczone/repomap-linux-x64
+
+npm install -g repomap-bin
 # 或：pip install repomap-cli
 
 # 3. 验证
@@ -43,7 +44,8 @@ repomap doctor
 
 ```bash
 
-npm install -g @gjczone/repomap-linux-x64
+
+npm install -g repomap-bin
 # 或：pip install repomap-cli
 
 # 验证
