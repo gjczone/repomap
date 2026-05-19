@@ -124,7 +124,9 @@ def _scan_rust_state(defn: StateDefinition, sym, content: str, lines: list[str],
             elif ch == "}":
                 brace_depth -= 1
                 if brace_depth == 0:
-                    return
+                    break
+        if in_enum and brace_depth == 0:
+            break
         if brace_depth == 1:
             m = re.match(r"^\s*(\w+)\s*(?:=|,)", line)
             if m and m.group(1) not in ("pub", "use", "where", "impl"):
@@ -154,10 +156,12 @@ def _scan_ts_state(defn: StateDefinition, sym, content: str, lines: list[str], e
                     brace_depth = 1
                 continue
             for ch in line:
-                if ch == "{": brace_depth += 1
+                if ch == "{":
+                    brace_depth += 1
                 elif ch == "}":
                     brace_depth -= 1
-                    if brace_depth == 0: return
+                    if brace_depth == 0:
+                        return
             if brace_depth == 1:
                 m = re.match(r"^\s*(\w+)\s*[=,]", line)
                 if m:
@@ -218,4 +222,3 @@ def _scan_go_state(defn: StateDefinition, sym, content: str, lines: list[str], e
                         defn.values.append(StateValue(name=name, file=defn.file, line=j + 1))
                 j += 1
             break
-

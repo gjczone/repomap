@@ -292,9 +292,6 @@ class RepoMapEngine:
         else:
             logger.info("".join(summary_parts))
 
-    def is_scanned(self) -> bool:
-        return self.scan_state == "scanned"
-
     # ── 增量扫描辅助 ─────────────────────────────────────────────────────────
 
     def _load_incremental_cache_if_valid(self) -> Any | None:

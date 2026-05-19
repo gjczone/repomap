@@ -330,40 +330,6 @@ def _inc_cache_to_dict(cache: IncrementalCache) -> dict:
     }
 
 
-def _symbol_to_dict(s: Symbol) -> dict:
-    """Symbol 转 dict（兼容 dataclass）"""
-    if hasattr(s, '__dataclass_fields__'):
-        return asdict(s)
-    return {
-        'id': s.id,
-        'name': s.name,
-        'kind': s.kind,
-        'file': s.file,
-        'line': s.line,
-        'col': s.col,
-        'visibility': s.visibility,
-        'signature': getattr(s, 'signature', ''),
-        'docstring': getattr(s, 'docstring', ''),
-        'pagerank': getattr(s, 'pagerank', 0.0),
-    }
-
-
-def _edge_to_dict(e: Edge) -> dict:
-    """Edge 转 dict"""
-    if hasattr(e, '__dataclass_fields__'):
-        return asdict(e)
-    return {
-        'source': getattr(e, 'source', None),
-        'target': getattr(e, 'target', None),
-        'weight': getattr(e, 'weight', 0.0),
-        'kind': getattr(e, 'kind', 'call'),
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 功能 1: 变更检测 (Diff)
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def diff_project(project_path: str) -> dict:
     """对比上次缓存与当前状态"""
     current_symbols, current_edges = scan_project(project_path)
@@ -384,24 +350,6 @@ def diff_project(project_path: str) -> dict:
         **comparison,
     }
 
-
-def _symbol_info(sid: str, symbol_map: dict) -> dict:
-    """获取符号简要信息"""
-    s = symbol_map.get(sid)
-    if s:
-        return {
-            'id': sid,
-            'name': s.name,
-            'kind': s.kind,
-            'file': s.file,
-            'line': s.line,
-        }
-    return {'id': sid}
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 功能 2: Git 历史关联
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
     """获取符号的 Git 历史信息"""
@@ -789,6 +737,3 @@ def main():
         else:
             print("\n✅ 未发现明显死代码")
 
-
-if __name__ == '__main__':
-    main()

@@ -534,7 +534,7 @@ class GraphAnalyzer:
             return "(root)"
         if len(parts) == 1:
             return "(root)"
-        if parts[0] in {"src", "app", "apps", "packages", "services", "modules", "libs", "lib"}:
+        if parts[0] in {"src", "app", "apps", "packages", "services", "modules", "libs", "lib", "crates"}:
             return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
         return parts[0]
 

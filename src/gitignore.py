@@ -118,7 +118,7 @@ class GitignoreParser:
                 continue
             if d.name == ".git":
                 continue
-            self._scan_dir(d.path, child_rel)
+            self._scan_dir(Path(d.path), child_rel)
 
     def _load_gitignore(self, path: Path, rel_dir: Path) -> None:
         try:
@@ -141,7 +141,8 @@ class GitignoreParser:
         for rel_dir, spec in self._specs:
             if not self._is_ancestor(rel_dir, path):
                 continue
-            if self._match_spec(spec, path_str):
+            spec_path = path.relative_to(rel_dir).as_posix() if rel_dir.as_posix() != "." else path_str
+            if self._match_spec(spec, spec_path):
                 return True
         return False
 

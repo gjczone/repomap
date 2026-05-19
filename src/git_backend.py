@@ -88,6 +88,8 @@ class SubprocessBackend:
         try:
             args = ["diff", "--name-only"]
             if since:
+                if since.startswith("-"):
+                    return []
                 args += [since, "HEAD"]
             r = SubprocessBackend._run_git(args, project_root)
             return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []

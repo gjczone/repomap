@@ -47,7 +47,7 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
 
     def test_binary_doctor_runs(self) -> None:
         result = subprocess.run(
-            [str(self.binary_path), "doctor"],
+            [str(self.binary_path), "doctor", "--project", str(self.repo_root)],
             cwd=self.repo_root,
             capture_output=True,
             encoding="utf-8",

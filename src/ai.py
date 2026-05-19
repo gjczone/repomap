@@ -1079,63 +1079,6 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     return _truncate_output("\n".join(lines), max_chars)
 
 
-def render_diff_risk_report(
-    engine: "RepoMapEngine",
-    changed_files: list[str],
-    affected_files: list[tuple[str, str, str]],
-    tests: list[TestMatch],
-    risk_level: str,
-    risk_reasons: list[str],
-    missing_checks: list[str],
-    max_chars: int = 8000,
-) -> str:
-    lines: list[str] = []
-    lines.append("# Diff Risk Report\n")
-
-    lines.append("## Changed Files\n")
-    for f in changed_files:
-        role = classify_file_role(f, engine.graph)
-        lines.append(f"- `{f}` ({role})")
-    lines.append("")
-
-    areas = _extract_impact_areas(changed_files, affected_files)
-    if areas:
-        lines.append("## Changed Areas\n")
-        for area in areas:
-            lines.append(f"- {area}")
-        lines.append("")
-
-    lines.append(f"## Risk Level\n{risk_level.upper()}\n")
-
-    if risk_reasons:
-        lines.append("## Why\n")
-        for reason in risk_reasons:
-            lines.append(f"- {reason}")
-        lines.append("")
-
-    if tests:
-        lines.append("## Suggested Tests\n")
-        test_cmds = _test_commands_for_files(tests)
-        for cmd in test_cmds:
-            lines.append(f"- `{cmd}`")
-        lines.append("")
-
-    manual = _suggest_manual_verification(changed_files, risk_level)
-    if manual:
-        lines.append("## Manual Verification\n")
-        for item in manual:
-            lines.append(f"- {item}")
-        lines.append("")
-
-    if missing_checks:
-        lines.append("## Potentially Missing Checks\n")
-        for check in missing_checks:
-            lines.append(f"- {check}")
-        lines.append("")
-
-    return _truncate_output("\n".join(lines), max_chars)
-
-
 def _test_commands_for_files(tests: list[TestMatch]) -> list[str]:
     commands: list[str] = []
     seen: set[str] = set()
@@ -1153,20 +1096,6 @@ def _test_commands_for_files(tests: list[TestMatch]) -> list[str]:
             else:
                 commands.append(f"# run tests in {t.test_file}")
     return commands[:10]
-
-
-def _suggest_manual_verification(changed_files: list[str], risk_level: str) -> list[str]:
-    items: list[str] = []
-    all_paths = " ".join(changed_files).lower()
-    if any(kw in all_paths for kw in ["terminal", "cli", "tui", "input"]):
-        items.append("Run common terminal commands to verify I/O correctness")
-    if any(kw in all_paths for kw in ["auth", "login", "token", "session"]):
-        items.append("Verify login/logout flow works correctly")
-    if any(kw in all_paths for kw in ["ui", "component", "page", "view"]):
-        items.append("Check page rendering and interactions in browser")
-    if risk_level == "high":
-        items.append("Consider a full regression test in staging environment")
-    return items[:5]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

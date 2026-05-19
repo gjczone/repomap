@@ -2,26 +2,25 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path  # kept: Path used in _add_project_args
 from typing import Sequence
 
 from .handlers import CLI_NAME
 
 
-# _SCAN_CACHE is now in handlers.py; re-exported below
-# 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
-SESSION_CACHE_VERSION = 7
-DEFAULT_OVERVIEW_MAX_CHARS = 16000
-DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
-DEFAULT_CALL_CHAIN_MAX_CHARS = 4000
-DEFAULT_FILE_DETAIL_MAX_CHARS = 6000
-DEFAULT_FILE_DETAIL_MAX_SYMBOLS = 12
-DEFAULT_OVERVIEW_JSON_HOTSPOTS = 8
-DEFAULT_OVERVIEW_JSON_READING_ORDER = 6
-DEFAULT_OVERVIEW_JSON_MODULES = 6
-DEFAULT_OVERVIEW_JSON_SUMMARY_FILES = 4
-DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE = 3
-DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
+from .. import (
+    DEFAULT_CALL_CHAIN_MAX_CHARS,
+    DEFAULT_FILE_DETAIL_MAX_CHARS,
+    DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
+    DEFAULT_OVERVIEW_JSON_HOTSPOTS,
+    DEFAULT_OVERVIEW_JSON_MODULES,
+    DEFAULT_OVERVIEW_JSON_READING_ORDER,
+    DEFAULT_OVERVIEW_JSON_SUMMARY_FILES,
+    DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES,
+    DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
+    DEFAULT_OVERVIEW_MAX_CHARS,
+    DEFAULT_QUERY_SYMBOL_MAX_CHARS,
+    SESSION_CACHE_VERSION,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,12 +74,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_QUERY_SYMBOL_MAX_CHARS,
         help="Maximum text output size.",
     )
-    query_parser.add_argument("--with-lsp", action="store_true", help="Also query local LSP definition/reference evidence for the best match.")
+    _add_lsp_args(query_parser, "Also query local LSP definition/reference evidence for the best match.")
     query_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     # ── 新增: query（主题关键词搜索）──────────────────────────────────────────
     topic_query_parser = subparsers.add_parser("query", help="Search repository by topic keyword.")
-    topic_query_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    topic_query_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     topic_query_parser.add_argument("--query", "-q", required=True, help="Topic keyword.")
     topic_query_parser.add_argument("--max-files", type=int, default=20, help="Max result files (default 20).")
     topic_query_parser.add_argument("--max-symbols", type=int, default=40, help="Max result symbols (default 40).")
@@ -92,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
     impact_parser = subparsers.add_parser("impact", help="Analyze file-level change impact.")
-    impact_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    impact_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     impact_parser.add_argument("--files", required=True, nargs="+", help="Files to analyze (one or more).")
     impact_parser.add_argument("--json", action="store_true")
     impact_parser.add_argument("--max-files", type=int, default=20, help="Max affected files to show.")
@@ -100,12 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
     impact_parser.add_argument("--depth", type=int, default=1, help="Transitive impact depth (default 1=direct, 2=one hop out).")
 
     verify_parser = subparsers.add_parser("verify", help="Aggregate post-edit evidence before final handoff.")
-    verify_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    verify_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     verify_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     verify_parser.add_argument("--types", nargs="*", choices=["typescript", "rust", "python", "go", "javascript"], help="Explicit project types to check.")
     verify_parser.add_argument("--max-issues", type=int, default=50, help="Maximum issues per tool.")
     verify_parser.add_argument("--no-symbols", action="store_true", help="Skip scan-based symbol resolution for diagnostics.")
-    verify_parser.add_argument("--with-lsp", action="store_true", help="Include focused LSP diagnostics for changed files.")
+    _add_lsp_args(verify_parser, "Include focused LSP diagnostics for changed files.")
     verify_parser.add_argument("--no-incremental", action="store_true", help="Force full scan instead of incremental.")
     verify_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     verify_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum changed files to open through LSP.")
@@ -127,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FILE_DETAIL_MAX_CHARS,
         help="Maximum text output size.",
     )
-    file_parser.add_argument("--with-lsp", action="store_true", help="Include LSP symbol tree in file detail output.")
+    _add_lsp_args(file_parser, "Include LSP symbol tree in file detail output.")
     file_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     hotspots_parser = subparsers.add_parser("hotspots", help="Scan a repository and print hotspot files.")
@@ -136,10 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     cache_parser = subparsers.add_parser("cache", help="Prepare a graph baseline before the target edits.")
     cache_parser.add_argument("action", choices=["save"], help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.")
-    cache_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    cache_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
 
     diff_parser = subparsers.add_parser("diff", help="Advanced graph-only comparison against a baseline saved before the target edits.")
-    diff_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    diff_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     diff_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
 
     refs_parser = subparsers.add_parser("refs", help="Scan a repository and analyze references.")
@@ -147,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument("--symbol", help="Optional symbol name.")
     refs_parser.add_argument("--file-path", help="Disambiguate symbol analysis by relative file path.")
     refs_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
-    refs_parser.add_argument("--with-lsp", action="store_true", help="Also query local LSP definition/reference evidence for the selected symbol.")
+    _add_lsp_args(refs_parser, "Also query local LSP definition/reference evidence for the selected symbol.")
     refs_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
     orphan_parser = subparsers.add_parser("orphan", help="Scan a repository and find orphaned symbols.")
@@ -157,7 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
     orphan_parser.add_argument("--min-confidence", type=int, default=0, help="Minimum confidence score 0-100 to include in output (default 0).")
 
     check_parser = subparsers.add_parser("check", help="Run compiler/static analysis diagnostics.")
-    check_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    check_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     check_parser.add_argument(
         "--types",
         nargs="*",
@@ -168,17 +167,17 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument("--since-commit", help="Only check files changed since the given commit.")
     check_parser.add_argument("--modified-file", action="append", dest="modified_files", metavar="PATH", help="Explicit modified file path.")
     check_parser.add_argument("--no-symbols", action="store_true", help="Skip scan-based symbol resolution.")
-    check_parser.add_argument("--with-lsp", action="store_true", help="Also collect diagnostics from local LSP servers for explicit files.")
+    _add_lsp_args(check_parser, "Also collect diagnostics from local LSP servers for explicit files.")
     check_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
     check_parser.add_argument("--lsp-max-files", type=int, default=20, help="Maximum explicit files to open through LSP.")
 
     lsp_parser = subparsers.add_parser("lsp", help="Inspect local LSP server availability.")
     lsp_subparsers = lsp_parser.add_subparsers(dest="lsp_command", required=True)
     lsp_doctor_parser = lsp_subparsers.add_parser("doctor", help="Detect local LSP servers without starting analysis.")
-    lsp_doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    lsp_doctor_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     lsp_doctor_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     lsp_setup_parser = lsp_subparsers.add_parser("setup", help="Auto-install recommended LSP servers for detected project languages.")
-    lsp_setup_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    lsp_setup_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     lsp_setup_parser.add_argument("--languages", nargs="*", default=None, help="Languages to install servers for (default: auto-detect).")
     lsp_setup_parser.add_argument("--dry-run", action="store_true", help="Show what would be installed without doing it.")
 
@@ -188,7 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     routes_parser.add_argument("--with-consumers", action="store_true", help="Scan for frontend/client consumers of each route.")
 
     doctor_parser = subparsers.add_parser("doctor", help="Validate runtime, prerequisites, and LSP server availability.")
-    doctor_parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    doctor_parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     doctor_parser.add_argument("--lsp", action="store_true", help="Also check LSP server availability and suggest install commands.")
 
     state_map_parser = subparsers.add_parser("state-map", help="Map state values, writers, and readers for an enum/type.")
@@ -210,8 +209,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_project_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--project", "-p", default=None, help="Project root path. Defaults to the current working directory.")
+    parser.add_argument("--project", "-p", required=True, help="Project root path (absolute path recommended).")
     parser.add_argument("--max-files", type=int, default=8000, help="Maximum number of files to scan.")
+
+
+def _add_lsp_args(parser: argparse.ArgumentParser, help_text: str) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--with-lsp", dest="with_lsp", action="store_true", default=True, help=f"{help_text} Enabled by default.")
+    group.add_argument("--no-lsp", dest="with_lsp", action="store_false", help="Disable local LSP evidence and diagnostics.")
 
 
 def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:

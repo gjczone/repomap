@@ -7,11 +7,11 @@ description: "MUST invoke this skill for any coding task — before reading, edi
 
 `repomap` is a CLI binary on `PATH` that builds a codebase graph (tree-sitter AST → symbols → dependencies → PageRank) and answers structural questions faster than grep + raw reads. It does not run or replace tests, linters, or compilers — it tells you *where* to look and *what depends on what*.
 
-Always pass `--project` as an absolute path. Do not rely on the subprocess cwd — it may be the user's home directory.
+`--project` is a **required** argument for every command (except `build-binary`). Always pass it as an absolute path. Do not rely on the subprocess cwd — it may be the user's home directory.
 
 ## Core rules
 
-- **LSP is not optional when available.** Run `repomap doctor --lsp --project <project>` early in every project. When a language server is detected, add `--with-lsp` to `query-symbol`, `refs`, `file-detail`, `verify`, and `check`. It is the highest-precision signal repomap can provide.
+- **LSP is not optional when available.** Run `repomap doctor --lsp --project <project>` early in every project. `query-symbol`, `refs`, `file-detail`, `verify`, and `check` use LSP by default; use `--no-lsp` only when a slow or broken server blocks progress. It is the highest-precision signal repomap can provide.
 - **Read files before editing.** RepoMap output tells you which files matter — it does not replace reading them.
 - **Run only the command the current step needs.** Do not chain `scan` → `overview` → `hotspots` mechanically.
 - **`verify` is the default post-edit gate.** It aggregates changed-files, risk, contract warnings, and diagnostics. It does not run project tests — run those separately.
@@ -24,15 +24,15 @@ Always pass `--project` as an absolute path. Do not rely on the subprocess cwd �
 | First repository overview | `repomap overview --project <project>` | Need modules, entrypoints, reading order, hotspots; add `--with-heat`/`--with-co-change` only when needed. |
 | Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact files; supports `--paths`, `--exclude`, `--no-tests`, `--json`. |
 | Symbol search (BM25) | `repomap search --project <project> --query <text>` | Natural-language symbol search; uses BM25 with keyword fallback; supports `--top-k`. |
-| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading/editing one file; add `--with-lsp` for hierarchical symbol tree. |
-| Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous, `--with-lsp`. |
+| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading/editing one file; includes LSP hierarchical symbol tree when available. |
+| Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous; LSP evidence is default when available. |
 | Call flow | `repomap call-chain --project <project> --symbol <name>` | Need callers/callees before behavior change; supports `--direction`, `--depth`, `--json`. |
-| References | `repomap refs --project <project> --symbol <name>` | Need all references; add `--file-path` if ambiguous, `--with-lsp`. |
+| References | `repomap refs --project <project> --symbol <name>` | Need all references; add `--file-path` if ambiguous; LSP evidence is default when available. |
 | Edit planning | `repomap impact --project <project> --files <file...> --with-symbols` | Best default before non-trivial edits: key symbols, read-next, affected files, tests, risk. |
 | Compact file impact | `repomap impact --project <project> --files <file...>` | Only need affected files/tests/risk (no edit-plan sections). |
 | Final post-edit evidence | `repomap verify --project <project>` | Default after edits; aggregates changes, risk, tests, contract warnings, diagnostics. |
 | Quick change risk | `repomap verify --project <project> --quick` | Only git-changed files + risk (skips compiler/LSP). |
-| Diagnostics | `repomap check --project <project>` | Compiler/static-analysis; add `--with-lsp`; use `--modified-file`/`--since-commit` for incremental. |
+| Diagnostics | `repomap check --project <project>` | Compiler/static-analysis plus LSP by default; use `--modified-file`/`--since-commit` for incremental. |
 | LSP availability | `repomap doctor --lsp --project <project>` | Check installed servers, get install suggestions. |
 | LSP auto-install | `repomap lsp setup --project <project>` | Install missing servers; supports `--languages`, `--dry-run`. |
 | API routes | `repomap routes --project <project> --json` | HTTP/API route inventory; add `--with-consumers` to find frontend callers. |
@@ -57,12 +57,12 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 **Known file, non-trivial edit:**
 1. `file-detail --file-path <file>`
 2. `impact --files <file> --with-symbols` → read the "Read Next" files
-3. Edit, then `verify --with-lsp`
+3. Edit, then `verify`
 
 **Known symbol, changing behavior:**
 1. `query-symbol --symbol <name> --file-path <file>` (if ambiguous)
 2. `call-chain --symbol <name>` + `refs --symbol <name>` → understand impact
-3. Edit, then `verify --with-lsp`
+3. Edit, then `verify`
 
 **Bug investigation:**
 1. `query --query <error/domain>` → find suspects
@@ -74,7 +74,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 2. `routes --with-consumers` → frontend callers
 3. `impact --files <route-file> --with-symbols` before editing
 4. `refs --symbol <handler>` → all references
-5. Edit, then `verify --with-lsp`
+5. Edit, then `verify`
 
 **State/lifecycle change:**
 1. `state-map --symbol <EnumName>` → values, writers, readers
@@ -102,7 +102,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 - **Type inference**: extracts return types and parameters for 10 languages (Python, TS/TSX, Go, Rust, Java, Kotlin, Swift, C#, C++).
 - **Git backend**: pygit2 (libgit2 C binding) when available, subprocess git fallback. Both produce consistent output.
 - **Search**: BM25 ranking (rank-bm25) with keyword fallback. Symbol documents include name tokens, signature, docstring, return_type, params.
-- **LSP**: opt-in, local-only. Checks project-local executables, PATH, and trusted tool directories. Does not use plugin/MCP, install servers, bundle servers, or run a daemon.
+- **LSP**: default-on when available, local-only. Checks project-local executables, PATH, and trusted tool directories. Does not use plugin/MCP, install servers, bundle servers, or run a daemon.
 
 ## Boundaries
 

@@ -73,10 +73,6 @@ class SymbolSearchIndex:
                 self._built = True
             except Exception as exc:
                 logger.debug(f"BM25 index build failed: {exc}")
-    @property
-    def available(self) -> bool:
-        return self._built
-
     def search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
         """
         搜索与 query 最相关的符号。

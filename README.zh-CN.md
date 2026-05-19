@@ -54,7 +54,7 @@ repomap doctor
 
 ---
 
-### LSP 设置（可选）
+### LSP 设置
 
 为符号查找提供编译器级精度。代理自动处理：
 
@@ -79,7 +79,7 @@ repomap lsp setup                    # 安装缺失的服务器
 | Swift | `sourcekit-lsp` | Xcode / Swift toolchain 自带 |
 | Kotlin | `kotlin-language-server` | mason 或手动安装 |
 
-所有命令无需 LSP 即可工作——LSP 是可选的精度增强层。
+支持 LSP 的命令会在服务器可用时默认使用本地 LSP。所有命令在没有 LSP 时仍可工作；缺失服务器会显示为 skipped，需要时可用 `--no-lsp` 关闭 LSP 证据。
 
 ---
 
@@ -90,15 +90,15 @@ repomap lsp setup                    # 安装缺失的服务器
 | `overview` | 项目地图：入口点、热点、关键符号（PageRank）、阅读顺序 |
 | `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行 |
 | `search --query <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数 |
-| `file-detail --file-path <文件>` | 文件符号 + 签名；`--with-lsp` 查看分级符号树 |
+| `file-detail --file-path <文件>` | 文件符号 + 签名；可用时默认展示 LSP 分级符号树 |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
 | `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度 |
-| `query-symbol --symbol <名称>` | 精确/模糊符号查找；`--with-lsp` 获取 hover + 定义/引用证据 |
-| `refs --symbol <名称>` | 符号的所有引用；`--with-lsp` 获取精确跨文件结果 |
+| `query-symbol --symbol <名称>` | 精确/模糊符号查找；默认获取 LSP hover + 定义/引用证据 |
+| `refs --symbol <名称>` | 符号的所有引用；可用时默认获取 LSP 精确跨文件结果 |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
 | `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
-| `verify [--quick] [--with-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断 |
-| `check [--with-lsp]` | 编译器/类型/lint 诊断（tsc、ruff、cargo check、go vet） |
+| `verify [--quick] [--no-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断 |
+| `check [--no-lsp]` | 编译器/类型/lint 诊断（tsc、mypy、ruff、cargo check、go vet） |
 | `orphan [--json]` | 死代码候选发现，含置信度分级 |
 | `hotspots` | 按复杂度排名的高密度文件 |
 | `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
@@ -120,7 +120,7 @@ repomap routes --project . --with-consumers           # API 消费者映射
 repomap call-chain --project . --symbol refreshToken
 
 # 编辑后
-repomap verify --project . --with-lsp                 # 完整证据门
+repomap verify --project .                            # 完整证据门；可用时默认运行 LSP
 repomap check --project .                             # 编译器诊断
 repomap orphan --project . --min-confidence 70        # 死代码检查
 ```

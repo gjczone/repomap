@@ -1549,25 +1549,6 @@ class TreeSitterAdapter:
                 pairs.append((source_name, exported_name))
         return pairs
 
-    def _parse_commonjs_object_clause(self, text: str) -> list[tuple[str, str]]:
-        pairs: list[tuple[str, str]] = []
-        for raw_item in text.split(","):
-            item = raw_item.strip()
-            if not item:
-                continue
-            parts = [part.strip() for part in item.split(":", 1)]
-            if len(parts) == 2:
-                source_name, local_name = parts
-            else:
-                source_name = local_name = parts[0]
-            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(r"[A-Za-z_$][\w$]*", local_name):
-                pairs.append((source_name, local_name))
-        return pairs
-
-    @staticmethod
-    def _line_number(text: str, offset: int) -> int:
-        return text.count("\n", 0, offset) + 1
-
     # ── 内部辅助 ────────────────────────────────────────────────────────────────
 
     def _run_query(self, query: Any, root: Any) -> list[tuple[str, Any]]:

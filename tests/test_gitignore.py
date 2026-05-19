@@ -1,4 +1,3 @@
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,6 +71,14 @@ class GitignoreParserTest(unittest.TestCase):
         self.assertTrue(p.is_ignored("src/cache.tmp"))
         self.assertFalse(p.is_ignored("tests/cache.tmp"))
         self.assertFalse(p.is_ignored("src/main.py"))
+
+    def test_subdirectory_gitignore_anchored_pattern_matches_from_that_directory(self):
+        self._write("src/.gitignore", "/generated/\n")
+        self._write("src/generated/foo.py")
+        self._write("generated/foo.py")
+        p = GitignoreParser(self.root)
+        self.assertTrue(p.is_ignored("src/generated/foo.py"))
+        self.assertFalse(p.is_ignored("generated/foo.py"))
 
     def test_gitignore_cache(self):
         self._write(".gitignore", "*.log\n")

@@ -22,11 +22,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from .parser import TreeSitterAdapter
+
 logger = logging.getLogger("repomap.callgraph")
 
-
-def _node_text(node: Any) -> str:
-    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
+_node_text = TreeSitterAdapter._text
 
 
 def _find_child_by_type(node: Any, child_type: str) -> Any | None:

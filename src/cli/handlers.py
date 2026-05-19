@@ -16,14 +16,26 @@ from typing import Any
 from .. import json_dumps, json_dump, json_loads
 
 from .. import (Edge, HttpRoute, RepoGraph, ScanStats, Symbol,
+    call_reference_parts,
     get_session_cache_path,
-    serialize_edge, serialize_symbol)
+    serialize_edge, serialize_symbol,
+    SESSION_CACHE_VERSION,
+    DEFAULT_OVERVIEW_JSON_HOTSPOTS,
+    DEFAULT_OVERVIEW_JSON_MODULES,
+    DEFAULT_OVERVIEW_JSON_READING_ORDER,
+    DEFAULT_OVERVIEW_JSON_SUMMARY_FILES,
+    DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES,
+    DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
+    DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
+)
 from ..ai import (_build_query_reading_order, _get_hot_files, _rank_symbols_for_file,
-    render_impact_report, render_query_report, render_routes_report, render_verify_report)
+    _truncate_output, render_impact_report, render_query_report, render_routes_report,
+    render_verify_report)
 from ..check import RepoMapChecker
 from ..core import RepoMapEngine
 from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
+from ..ranking import GraphAnalyzer
 from ..toolkit import diff_project, save_cache, scan_project
 from ..topic import (FileMatch, TestMatch, classify_file_role, compute_keyword_weights,
     expand_keywords, find_related_tests, find_untested_symbols, is_test_like_file,
@@ -43,27 +55,19 @@ PYINSTALLER_BINDINGS = [
 ]
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
-SESSION_CACHE_VERSION = 7
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INVALID_ARGS = 2
 EXIT_NO_RESULTS = 3
-DEFAULT_OVERVIEW_JSON_HOTSPOTS = 8
-DEFAULT_OVERVIEW_JSON_READING_ORDER = 6
-DEFAULT_OVERVIEW_JSON_MODULES = 6
-DEFAULT_OVERVIEW_JSON_SUMMARY_FILES = 4
-DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE = 3
-DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
-DEFAULT_FILE_DETAIL_MAX_SYMBOLS = 12
 
 
-def _resolve_project(project: str | None) -> str:
-    project_path = Path.cwd().resolve() if project is None else Path(project).expanduser().resolve()
+def _resolve_project(project: str) -> str:
+    project_path = Path(project).expanduser().resolve()
     if not project_path.is_dir():
         raise ValueError(f"project path is not a directory: {project_path}")
-    if project is None and project_path == Path.home().resolve():
+    if project_path == Path.home().resolve():
         print(
-            f"[{CLI_NAME}] warning: default project root is your home directory: {project_path}. "
+            f"[{CLI_NAME}] warning: project root is your home directory: {project_path}. "
             "Run from the intended project directory or pass --project explicitly.",
             file=sys.stderr,
         )
@@ -157,7 +161,7 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
     return digest.hexdigest()
 
 
-def _scan_engine(project: str | None, max_files: int, incremental: bool = False) -> RepoMapEngine:
+def _scan_engine(project: str, max_files: int, incremental: bool = False) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (
         resolved_project,
@@ -219,8 +223,7 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             for file_path, imports in engine.graph.file_imports.items()
         },
         "file_calls": {
-            file_path: [[c[0], c[1], c[2]] if len(c) >= 3 else [c[0], c[1], "direct"]
-                        for c in calls]
+            file_path: [list(call_reference_parts(c)) for c in calls]
             for file_path, calls in engine.graph.file_calls.items()
         },
         "file_import_bindings": {
@@ -346,6 +349,7 @@ def _save_session_engine(project_root: str, fingerprint: str, engine: RepoMapEng
     cache_path = get_session_cache_path(project_root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = _engine_to_session_payload(project_root, fingerprint, engine)
+    tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -360,7 +364,7 @@ def _save_session_engine(project_root: str, fingerprint: str, engine: RepoMapEng
         tmp_path.replace(cache_path)
     except Exception:
         try:
-            if "tmp_path" in locals() and tmp_path.exists():
+            if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink()
         except OSError:
             pass
@@ -476,11 +480,6 @@ def _render_selected_call_chain(engine: RepoMapEngine, symbol: Any, depth: int) 
     return "\n".join(lines)
 
 
-def _truncate_output(text: str, max_chars: int) -> str:
-    if max_chars <= 0 or len(text) <= max_chars:
-        return text
-    return text[:max_chars] + "\n\n[output truncated]"
-
 
 def run_scan(project: str, max_files: int) -> int:
     try:
@@ -581,7 +580,7 @@ def run_call_chain(
             return 1
         assert selected is not None
         if as_json:
-            chain = engine.call_chain(selected.id, "both", depth)
+            chain = engine.call_chain(selected.id, direction, depth)
             payload = {
                 "symbol": {
                     "id": selected.id,
@@ -1170,8 +1169,8 @@ def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[
     suggested: list[str] = []
     if available and target_files:
         files_arg = " ".join(target_files)
-        suggested.append(f"repomap check --project {project_root} --with-lsp --modified-file {files_arg}")
-        suggested.append(f"repomap refs --project {project_root} --symbol <symbol> --file-path <file> --with-lsp")
+        suggested.append(f"repomap check --project {project_root} --modified-file {files_arg}")
+        suggested.append(f"repomap refs --project {project_root} --symbol <symbol> --file-path <file>")
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 
 
@@ -1398,9 +1397,12 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
     for line in output.splitlines():
         if not line:
             continue
-        if len(line) < 4:
+        if len(line) >= 3 and line[2] == " ":
+            path = line[3:]
+        elif len(line) >= 2 and line[1] == " ":
+            path = line[2:]
+        else:
             continue
-        path = line[3:]
         if " -> " in path:
             path = path.split(" -> ")[-1]
         path = path.strip()
@@ -1409,22 +1411,45 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
     return paths
 
 
+def _child_git_project_candidates(project_path: Path, limit: int = 8) -> list[Path]:
+    candidates: list[Path] = []
+    try:
+        children = sorted(project_path.iterdir(), key=lambda path: path.name.lower())
+    except OSError:
+        return []
+    for child in children:
+        if not child.is_dir():
+            continue
+        if (child / ".git").exists():
+            candidates.append(child.resolve())
+            if len(candidates) >= limit:
+                break
+    return candidates
+
+
 def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | None]:
     from ..git_backend import GitBackend
     project_path = Path(project_root).resolve()
     git = GitBackend(str(project_path))
     git_root = git.show_toplevel()
     if not git_root:
-        return [], "not a git repository"
+        message = (
+            f"not a git repository: {project_path}. "
+            "Run from the intended project directory or pass --project explicitly."
+        )
+        candidates = _child_git_project_candidates(project_path)
+        if candidates:
+            candidate_lines = "\n".join(f"- --project {candidate}" for candidate in candidates)
+            message = (
+                f"{message}\n"
+                "LLM action: select the intended project root, then re-run the same repomap command with exactly one --project argument.\n"
+                f"Candidate --project arguments:\n{candidate_lines}"
+            )
+        return [], message
 
     status_lines = git.status_porcelain()
     changed_files: list[str] = []
-    for line in status_lines:
-        stripped = line[3:] if len(line) > 3 else line
-        if not stripped:
-            continue
-        if " -> " in stripped:
-            stripped = stripped.split(" -> ", 1)[-1]
+    for stripped in _parse_git_status_porcelain_paths("\n".join(status_lines)):
         abs_path = Path(git_root, stripped).resolve()
         try:
             changed_files.append(abs_path.relative_to(project_path).as_posix())
@@ -2048,15 +2073,7 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
             lines.append(f"Confidence threshold: {min_confidence} (low-confidence items filtered)")
         lines.append("")
 
-        def _module_for_file(file_path: str) -> str:
-            parts = [p for p in PurePosixPath(file_path).parts if p not in ("", ".")]
-            if not parts:
-                return "(root)"
-            if len(parts) == 1:
-                return "(root)"
-            if parts[0] in {"src", "app", "apps", "packages", "services", "modules", "libs", "lib", "crates"}:
-                return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
-            return parts[0]
+        _module_for_file = GraphAnalyzer._module_bucket_for_file
 
         def _render_tier(title: str, emoji: str, items: list[dict], max_items: int):
             if not items:
@@ -2157,7 +2174,7 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
         return 1
 
 
-def run_lsp_setup(project: str | None, languages: list[str] | None, dry_run: bool) -> int:
+def run_lsp_setup(project: str, languages: list[str] | None, dry_run: bool) -> int:
     try:
         project_root = _resolve_project(project)
         from ..lsp import detect_lsp_server, detect_lsp_servers, LSP_INSTALL_STRATEGIES
@@ -2333,7 +2350,7 @@ def _module_origin(module_name: str) -> str:
     return spec.origin or "built-in"
 
 
-def run_doctor(project: str | None = None, show_lsp: bool = False) -> int:
+def run_doctor(project: str, show_lsp: bool = False) -> int:
     from ..parser import TreeSitterAdapter
 
     if project:

@@ -103,6 +103,38 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertEqual(json.loads(stdout.getvalue())["result"]["status"], "failed")
 
+    def test_verify_non_git_error_names_resolved_project(self) -> None:
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["verify", "--project", project_root])
+
+        self.assertEqual(exit_code, 1)
+        message = stderr.getvalue()
+        self.assertIn(f"not a git repository: {Path(project_root).resolve()}", message)
+        self.assertIn("pass --project explicitly", message)
+
+    def test_verify_non_git_error_lists_child_git_project_candidates(self) -> None:
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as workspace_root:
+            Path(workspace_root, "alpha", ".git").mkdir(parents=True)
+            Path(workspace_root, "beta", ".git").mkdir(parents=True)
+            Path(workspace_root, "notes").mkdir()
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                exit_code = main(["verify", "--project", workspace_root])
+
+        self.assertEqual(exit_code, 1)
+        message = stderr.getvalue()
+        self.assertIn("LLM action: select the intended project root, then re-run the same repomap command with exactly one --project argument.", message)
+        self.assertIn("Candidate --project arguments:", message)
+        self.assertIn(f"--project {Path(workspace_root, 'alpha').resolve()}", message)
+        self.assertIn(f"--project {Path(workspace_root, 'beta').resolve()}", message)
+        self.assertNotIn("notes", message)
+
     def test_verify_high_impact_passes_when_evidence_is_clean(self) -> None:
         from src.cli.handlers import _overall_verify_status
 
@@ -301,6 +333,128 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertTrue(captured["with_lsp"])
         self.assertEqual(captured["lsp_timeout"], 1.5)
         self.assertEqual(captured["lsp_max_files"], 3)
+
+    def test_check_enables_lsp_by_default_and_no_lsp_disables_it(self) -> None:
+        from src.cli import main
+
+        captured = []
+
+        def fake_check(self, **kwargs):
+            captured.append(kwargs)
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/demo",
+                "status": "passed",
+                "types": ["python"],
+                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "runs": [],
+                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "errors_by_file": {},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "print('hi')\n")
+            with patch.object(RepoMapChecker, "check", fake_check):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    default_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py"])
+                    disabled_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py", "--no-lsp"])
+
+        self.assertEqual(default_code, 0)
+        self.assertEqual(disabled_code, 0)
+        self.assertTrue(captured[0]["with_lsp"])
+        self.assertFalse(captured[1]["with_lsp"])
+
+    def test_lsp_aware_commands_enable_lsp_by_default(self) -> None:
+        from src.cli import main
+
+        captured = {}
+
+        def fake_run_query_symbol(*args):
+            captured["query-symbol"] = args
+            return 0
+
+        def fake_run_file_detail(*args):
+            captured["file-detail"] = args
+            return 0
+
+        def fake_run_refs(*args):
+            captured["refs"] = args
+            return 0
+
+        with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["query-symbol", "--project", ".", "--symbol", "target"]), 0)
+        with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0)
+        with patch("src.cli.handlers.run_refs", fake_run_refs):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["refs", "--project", ".", "--symbol", "target"]), 0)
+
+        self.assertTrue(captured["query-symbol"][5])
+        self.assertTrue(captured["file-detail"][5])
+        self.assertTrue(captured["refs"][5])
+
+    def test_no_lsp_disables_lsp_aware_commands(self) -> None:
+        from src.cli import main
+
+        captured = {}
+
+        def fake_run_query_symbol(*args):
+            captured["query-symbol"] = args
+            return 0
+
+        def fake_run_file_detail(*args):
+            captured["file-detail"] = args
+            return 0
+
+        def fake_run_refs(*args):
+            captured["refs"] = args
+            return 0
+
+        with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["query-symbol", "--project", ".", "--symbol", "target", "--no-lsp"]), 0)
+        with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["file-detail", "--project", ".", "--file-path", "main.py", "--no-lsp"]), 0)
+        with patch("src.cli.handlers.run_refs", fake_run_refs):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["refs", "--project", ".", "--symbol", "target", "--no-lsp"]), 0)
+
+        self.assertFalse(captured["query-symbol"][5])
+        self.assertFalse(captured["file-detail"][5])
+        self.assertFalse(captured["refs"][5])
+
+    def test_verify_enables_lsp_by_default_and_no_lsp_disables_it(self) -> None:
+        from src.cli import main
+
+        captured = []
+
+        def fake_run_verify(**kwargs):
+            captured.append(kwargs)
+            return 0
+
+        with patch("src.cli.handlers.run_verify", fake_run_verify):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["verify", "--project", "."]), 0)
+                self.assertEqual(main(["verify", "--project", ".", "--no-lsp"]), 0)
+
+        self.assertTrue(captured[0]["with_lsp"])
+        self.assertFalse(captured[1]["with_lsp"])
+
+    def test_python_check_runs_mypy_and_ruff_by_default(self) -> None:
+        from src.check import DiagnosticResult, DiagnosticRunner
+
+        with tempfile.TemporaryDirectory() as project_root:
+            runner = DiagnosticRunner(Path(project_root))
+            with patch.object(runner, "_run_mypy", return_value=DiagnosticResult(tool="mypy", command="mypy", exit_code=0, duration_ms=1)) as mypy_mock:
+                with patch.object(runner, "_run_ruff", return_value=DiagnosticResult(tool="ruff", command="ruff", exit_code=0, duration_ms=1)) as ruff_mock:
+                    results = runner.run_all(["python"])
+
+        self.assertEqual([result.tool for result in results], ["mypy", "ruff"])
+        mypy_mock.assert_called_once()
+        ruff_mock.assert_called_once()
 
     def test_invalid_project_path_fails_clearly(self) -> None:
         from src.cli import main
@@ -571,16 +725,17 @@ class RepoMapCliTests(unittest.TestCase):
             _parse_git_status_porcelain_paths(
                 " M todo.md\n"
                 "M  src/app.ts\n"
+                "M pyproject.toml\n"
                 "?? new file.ts\n"
                 "R  old.ts -> src/new.ts\n"
             ),
-            ["todo.md", "src/app.ts", "new file.ts", "src/new.ts"],
+            ["todo.md", "src/app.ts", "pyproject.toml", "new file.ts", "src/new.ts"],
         )
 
     def test_script_entrypoint_runs_without_package_context(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
-            [sys.executable, "src/cli/__main__.py", "doctor"],
+            [sys.executable, "src/cli/__main__.py", "doctor", "--project", str(repo_root)],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -924,7 +1079,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["file-detail", "--project", project_root, "--file-path", "main.py"])
+                exit_code = main(["file-detail", "--project", project_root, "--file-path", "main.py", "--no-lsp"])
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
@@ -973,6 +1128,32 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(payload["direction"], "both")
             self.assertTrue(any(item["name"] == "caller" for item in payload["callers"]))
 
+    def test_call_chain_json_respects_direction_filter(self) -> None:
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
+            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main([
+                    "call-chain",
+                    "--project",
+                    project_root,
+                    "--symbol",
+                    "helper",
+                    "--direction",
+                    "callees",
+                    "--json",
+                ])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["direction"], "callees")
+            self.assertEqual(payload["callers"], [])
+            self.assertEqual(payload["callees"], [])
+
     def test_scan_cache_reuses_engine_for_identical_project_state(self) -> None:
         import src.cli.cli as cli_mod
         from src.cli import main
@@ -992,35 +1173,24 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 1)
 
-    def test_default_project_resolves_to_current_working_directory(self) -> None:
-        import src.cli.cli as cli_mod
+    def test_project_resolves_given_absolute_path(self) -> None:
+        import src.cli.handlers as handlers_mod
 
-        old_cwd = os.getcwd()
         with tempfile.TemporaryDirectory() as project_root:
-            try:
-                os.chdir(project_root)
-                resolved = cli_mod._resolve_project(None)
-            finally:
-                os.chdir(old_cwd)
+            resolved = handlers_mod._resolve_project(str(Path(project_root).resolve()))
+            self.assertEqual(resolved, str(Path(project_root).resolve()))
 
-        self.assertEqual(resolved, str(Path(project_root).resolve()))
+    def test_project_warns_when_resolved_path_is_home(self) -> None:
+        import src.cli.handlers as handlers_mod
 
-    def test_default_project_warns_when_current_working_directory_is_home(self) -> None:
-        import src.cli.cli as cli_mod
-
-        old_cwd = os.getcwd()
         with tempfile.TemporaryDirectory() as home_dir:
-            try:
-                os.chdir(home_dir)
-                stderr = io.StringIO()
-                with patch.object(cli_mod.Path, "home", return_value=Path(home_dir).resolve()):
-                    with redirect_stderr(stderr):
-                        resolved = cli_mod._resolve_project(None)
-            finally:
-                os.chdir(old_cwd)
+            stderr = io.StringIO()
+            with patch.object(handlers_mod.Path, "home", return_value=Path(home_dir).resolve()):
+                with redirect_stderr(stderr):
+                    resolved = handlers_mod._resolve_project(str(Path(home_dir).resolve()))
 
         self.assertEqual(resolved, str(Path(home_dir).resolve()))
-        self.assertIn("warning: default project root is your home directory", stderr.getvalue())
+        self.assertIn("warning: project root is your home directory", stderr.getvalue())
 
     def test_cache_paths_canonicalize_project_path(self) -> None:
         from src import get_session_cache_path

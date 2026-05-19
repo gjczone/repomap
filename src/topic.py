@@ -641,10 +641,3 @@ def find_untested_symbols(
 
     untested.sort(key=lambda x: -x["risk_score"])
     return untested[:max_results]
-
-
-def fuzzy_symbol_suggest(query: str, graph: "RepoGraph", limit: int = 5) -> list[str]:
-    """用编辑距离找最接近的符号名，用于 query 无结果时的友好建议。"""
-    import difflib
-    all_names = sorted({s.name for s in graph.symbols.values() if len(s.name) >= 3})
-    return difflib.get_close_matches(query, all_names, n=limit, cutoff=0.5)

@@ -56,7 +56,7 @@ repomap doctor
 
 ---
 
-### LSP Setup (optional)
+### LSP Setup
 
 Adds compiler-grade precision for symbol lookups. The agent handles this automatically:
 
@@ -81,7 +81,7 @@ repomap lsp setup                    # install missing servers
 | Swift | `sourcekit-lsp` | bundled with Xcode / Swift toolchain |
 | Kotlin | `kotlin-language-server` | mason or manual |
 
-All commands work without LSP — it's an opt-in precision layer.
+LSP-backed commands use local LSP servers by default when available. All commands still work without LSP; missing servers are reported as skipped, and `--no-lsp` disables LSP evidence when needed.
 
 ---
 
@@ -92,15 +92,15 @@ All commands work without LSP — it's an opt-in precision layer.
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order |
 | `query --query <keywords>` | Topic search with synonym expansion; `--context-lines <N>` for matched code |
 | `search --query <text>` | BM25 semantic symbol search; `--top-k <N>` for result count |
-| `file-detail --file-path <f>` | File symbols + signatures; `--with-lsp` for hierarchical symbol tree |
+| `file-detail --file-path <f>` | File symbols + signatures; LSP symbol tree by default when available |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
 | `call-chain --symbol <name>` | Callers and callees with configurable depth |
-| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; `--with-lsp` for hover + definition/reference evidence |
-| `refs --symbol <name>` | All references to a symbol; `--with-lsp` for precise cross-file results |
+| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference evidence by default |
+| `refs --symbol <name>` | All references to a symbol; LSP precision by default when available |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `state-map --symbol <name>` | Enum/const state values, writers, readers |
-| `verify [--quick] [--with-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics |
-| `check [--with-lsp]` | Compiler/type/lint diagnostics (tsc, ruff, cargo check, go vet) |
+| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics |
+| `check [--no-lsp]` | Compiler/type/lint diagnostics (tsc, mypy, ruff, cargo check, go vet) |
 | `orphan [--json]` | Dead-code candidates with confidence tiers |
 | `hotspots` | High-density files ranked by complexity |
 | `doctor [--lsp]` | Health check: parsers, runtime, LSP availability |
@@ -122,7 +122,7 @@ repomap routes --project . --with-consumers           # API consumer map
 repomap call-chain --project . --symbol refreshToken
 
 # After editing
-repomap verify --project . --with-lsp                 # full evidence gate
+repomap verify --project .                            # full evidence gate; LSP runs by default when available
 repomap check --project .                             # compiler diagnostics
 repomap orphan --project . --min-confidence 70        # dead code check
 ```

@@ -398,12 +398,18 @@ def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
         if ":" in text:
             key, value = text.split(":", 1)
             headers[key.lower()] = value.strip()
-    length = int(headers.get("content-length", "0"))
+    try:
+        length = int(headers.get("content-length", "0"))
+    except (ValueError, TypeError):
+        return None
     if length <= 0:
         return None
-    body = stream.read(length)
-    if not body:
-        return None
+    body = b""
+    while len(body) < length:
+        chunk = stream.read(length - len(body))
+        if not chunk:
+            return None
+        body += chunk
     return json_loads(body.decode("utf-8"))
 
 
@@ -416,6 +422,7 @@ class StdioLspClient:
         self._next_id = 1
         self._messages: queue.Queue[dict[str, Any]] = queue.Queue()
         self._reader: threading.Thread | None = None
+        self._stop_reader = False
 
     def __enter__(self) -> "StdioLspClient":
         self.start()
@@ -432,12 +439,12 @@ class StdioLspClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader = threading.Thread(target=self._read_loop, daemon=False)
         self._reader.start()
 
     def _read_loop(self) -> None:
         assert self.process is not None and self.process.stdout is not None
-        while True:
+        while not self._stop_reader:
             try:
                 message = _read_lsp_message(self.process.stdout)
             except Exception as exc:
@@ -584,6 +591,7 @@ class StdioLspClient:
         if self.process is None:
             return
         process = self.process
+        self._stop_reader = True
         try:
             if process.poll() is None:
                 try:
@@ -607,6 +615,8 @@ class StdioLspClient:
                     stream.close()
                 except Exception:
                     pass
+            if self._reader is not None and self._reader.is_alive():
+                self._reader.join(timeout=3)
             self.process = None
 
 
