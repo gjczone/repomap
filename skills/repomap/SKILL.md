@@ -1,8 +1,7 @@
 ---
 name: repomap
-description: "MUST invoke this skill for any coding task — before reading, editing, searching, debugging, refactoring, navigating, or understanding code. Before every find, every grep, every file read, every edit, every symbol lookup, every impact check. After every edit. The only exceptions: single-character typo fixes and purely non-coding conversations."
+description: "MUST invoke this skill for ANY task that touches code — before reading, editing, searching, debugging, refactoring, navigating, understanding, deleting, renaming, or moving code. Before every grep, every find, every file read, every edit, every symbol lookup, every impact check, every dependency question. After every edit for verification. Also invoke for: investigating bugs, planning features, reviewing PRs, assessing dead code, mapping API routes, tracing call chains, checking diagnostics, auditing state machines. The only exceptions: single-character typo fixes, pure prose/doc edits with zero code impact, and purely non-coding conversations. When in doubt whether to invoke, invoke it."
 ---
-
 # repomap
 
 `repomap` is a CLI binary on `PATH` that builds a codebase graph (tree-sitter AST → symbols → dependencies → PageRank) and answers structural questions faster than grep + raw reads. It does not run or replace tests, linters, or compilers — it tells you *where* to look and *what depends on what*.
@@ -11,39 +10,40 @@ description: "MUST invoke this skill for any coding task — before reading, edi
 
 ## Core rules
 
+- **Repomap first, grep later.** Before running `grep`, `find`, `rg`, `ls`, or reading a file you haven't seen before, ask: can a repomap command answer this faster and with more context? `query` beats grep for topic search. `query-symbol` beats grep for symbol lookup. `file-detail` beats `cat` for understanding a file's structure. `refs` beats grep for finding all callers. The answer is almost always yes.
 - **LSP is not optional when available.** Run `repomap doctor --lsp --project <project>` early in every project. `query-symbol`, `refs`, `file-detail`, `verify`, and `check` use LSP by default; use `--no-lsp` only when a slow or broken server blocks progress. It is the highest-precision signal repomap can provide.
 - **Read files before editing.** RepoMap output tells you which files matter — it does not replace reading them.
-- **Run only the command the current step needs.** Do not chain `scan` → `overview` → `hotspots` mechanically.
-- **`verify` is the default post-edit gate.** It aggregates changed-files, risk, contract warnings, and diagnostics. It does not run project tests — run those separately.
+- **`verify` is the default post-edit gate.** Run it after every non-trivial code change. It aggregates changed-files, risk, contract warnings, and diagnostics. It does not run project tests — run those separately.
+- **`impact` before editing, not after.** For any edit that touches more than a few lines, run `impact --files <file> --with-symbols` first. It tells you what else might break.
 - **Orphan is a candidate list, not a deletion license.** Verify every high-confidence (≥70) candidate with `refs` before deleting. Check for dynamic references the graph cannot see: string dispatch, reflection, macros, config-driven routing.
 
 ## Command selection
 
+Every row is a situation you WILL encounter. Use the command. Do not default to grep/read/find.
+
 | Agent situation | Command | Use when |
 |---|---|---|
-| First repository overview | `repomap overview --project <project>` | Need modules, entrypoints, reading order, hotspots; add `--with-heat`/`--with-co-change` only when needed. |
-| Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact files; supports `--paths`, `--exclude`, `--no-tests`, `--json`. |
-| Symbol search (BM25) | `repomap search --project <project> --query <text>` | Natural-language symbol search; uses BM25 with keyword fallback; supports `--top-k`. |
-| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading/editing one file; includes LSP hierarchical symbol tree when available; supports `--json`. |
-| Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous; LSP evidence is default when available; supports `--json`. |
-| Call flow | `repomap call-chain --project <project> --symbol <name>` | Need callers/callees before behavior change; supports `--direction`, `--depth`, `--json`. |
-| References | `repomap refs --project <project> --symbol <name>` | Need all references; add `--file-path` if ambiguous; LSP evidence is default when available. |
-| Edit planning | `repomap impact --project <project> --files <file...> --with-symbols` | Best default before non-trivial edits: key symbols, read-next, affected files, tests, risk. |
-| Compact file impact | `repomap impact --project <project> --files <file...>` | Only need affected files/tests/risk (no edit-plan sections). |
-| Final post-edit evidence | `repomap verify --project <project>` | Default after edits; aggregates changes, risk, tests, contract warnings, diagnostics. |
-| Quick change risk | `repomap verify --project <project> --quick` | Only git-changed files + risk (skips compiler/LSP). |
-| Diagnostics | `repomap check --project <project>` | Compiler/static-analysis plus LSP by default; use `--modified-file`/`--since-commit` for incremental. |
-| LSP availability | `repomap doctor --lsp --project <project>` | Check installed servers, get install suggestions. |
-| LSP auto-install | `repomap lsp setup --project <project>` | Install missing servers; supports `--languages`, `--dry-run`. |
-| API routes | `repomap routes --project <project> --json` | HTTP/API route inventory; add `--with-consumers` to find frontend callers. |
-| Hot files | `repomap hotspots --project <project>` | Need dense/complex files first; use sparingly. |
-| Orphan candidates | `repomap orphan --project <project>` | Dead-code discovery; use `--min-confidence 70` to filter noise; always verify before deleting. |
-| State/enum map | `repomap state-map --project <project> --symbol <name>` | Need state values, writers, readers before lifecycle changes. |
-| Graph baseline | `repomap cache save --project <project>` | Pre-edit snapshot for later `verify --with-diff`. |
-| Graph diff | `repomap diff --project <project>` | Compare against baseline; prefer `verify --with-diff`. |
-| Runtime sanity | `repomap doctor` | Suspect stale binary or PATH mismatch. |
-| Project scan summary | `repomap scan --project <project>` | Need counts/entrypoints; usually secondary to `overview`. |
-| Build repomap itself | `repomap build-binary --output <dir>` | Only when maintaining repomap; run tests + `doctor` first. |
+| First repository overview | `repomap overview --project <project>` | ALWAYS at the start of any project. Gives you modules, entrypoints, reading order, hotspots. |
+| Reading a file for the first time | `repomap file-detail --project <project> --file-path <file>` | ALWAYS before opening a file you haven't read. Shows symbols, signatures, called-by, and LSP tree. |
+| Finding where something is defined | `repomap query-symbol --project <project> --symbol <name>` | ALWAYS instead of grep for symbol lookup. LSP precision by default. Add `--file-path` to narrow. |
+| Finding all callers of a function | `repomap refs --project <project> --symbol <name>` | ALWAYS before changing a function signature or behavior. Shows every reference. |
+| Understanding call flow | `repomap call-chain --project <project> --symbol <name>` | ALWAYS before changing logic in a function. Shows callers AND callees. `--direction callers`/`callees` to filter. |
+| Topic/feature search | `repomap query --project <project> --query <keyword>` | When you know the business domain but not the exact files. Like grep but with synonym expansion and relevance ranking. |
+| Symbol search (BM25) | `repomap search --project <project> --query <text>` | When you have a natural-language description of what you're looking for. |
+| Before editing any file | `repomap impact --project <project> --files <file...> --with-symbols` | ALWAYS before non-trivial edits. Shows key symbols, affected files, suggested tests, risk level, and "Read Next" files. |
+| After editing any file | `repomap verify --project <project>` | ALWAYS after edits. Aggregates git changes, risk, contract warnings, diagnostics, and test suggestions. |
+| Quick post-edit check | `repomap verify --project <project> --quick` | After small changes; git-changed files + risk only (skips compiler/LSP). |
+| Compiler/lint diagnostics | `repomap check --project <project>` | When you need to know if the code compiles or has lint errors. Use `--modified-file` for focused checks. |
+| Before deleting anything | `repomap orphan --project <project>` | ALWAYS before deleting code. Finds dead-code candidates. Verify ≥70 confidence with `refs` first. |
+| Finding API routes | `repomap routes --project <project> --json` | When working with HTTP/API endpoints. Add `--with-consumers` to find frontend callers. |
+| Changing state/enum logic | `repomap state-map --project <project> --symbol <EnumName>` | ALWAYS before modifying enums, constants, or state machines. Shows all values, writers, and readers. |
+| Identifying complex files | `repomap hotspots --project <project>` | When you need to know which files are the densest/most complex. |
+| Checking LSP availability | `repomap doctor --lsp --project <project>` | Early in every project. Shows installed LSP servers and install suggestions. |
+| Installing LSP servers | `repomap lsp setup --project <project>` | When doctor shows missing servers. Use `--dry-run` first. |
+| Pre-edit baseline | `repomap cache save --project <project>` | Before major edits; enables `verify --with-diff` for contract change detection. |
+| Graph comparison | `repomap diff --project <project>` | Compare current graph against baseline. Prefer `verify --with-diff` for integrated view. |
+| Quick project scan | `repomap scan --project <project>` | When you only need file/symbol counts and entrypoints. Usually `overview` is better. |
+| Binary health check | `repomap doctor --project <project>` | When suspecting stale binary or PATH issues. |
 
 ## Workflow recipes
 
@@ -51,40 +51,65 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 
 **New / unfamiliar repo:**
 1. `overview` → grasp structure
-2. `query --query <topic>` → find relevant files
-3. `file-detail --file-path <top-candidate>` → understand before reading
+2. `doctor --lsp` → check LSP availability
+3. `query --query <topic>` → find relevant files
+4. `file-detail --file-path <top-candidate>` → understand before reading
+
+**Reading a file:**
+1. `file-detail --file-path <file>` → understand symbols, structure, callers
+2. THEN read the file itself
 
 **Known file, non-trivial edit:**
-1. `file-detail --file-path <file>`
+1. `file-detail --file-path <file>` → understand before touching
 2. `impact --files <file> --with-symbols` → read the "Read Next" files
-3. Edit, then `verify`
+3. Edit
+4. `verify` → evidence gate
 
 **Known symbol, changing behavior:**
-1. `query-symbol --symbol <name> --file-path <file>` (if ambiguous)
-2. `call-chain --symbol <name>` + `refs --symbol <name>` → understand impact
-3. Edit, then `verify`
+1. `query-symbol --symbol <name>` → find definition
+2. `call-chain --symbol <name>` → understand call flow
+3. `refs --symbol <name>` → all references
+4. Edit
+5. `verify`
 
 **Bug investigation:**
 1. `query --query <error/domain>` → find suspects
 2. `query-symbol --symbol <name>` / `call-chain --symbol <name>` → trace logic
-3. Fix, then `check` or `verify`
+3. `check --modified-file <fixed-file>` → verify no regressions
+4. `verify`
 
 **API/endpoint change:**
 1. `routes --json` → full route inventory
 2. `routes --with-consumers` → frontend callers
 3. `impact --files <route-file> --with-symbols` before editing
 4. `refs --symbol <handler>` → all references
-5. Edit, then `verify`
+5. Edit
+6. `verify`
 
 **State/lifecycle change:**
 1. `state-map --symbol <EnumName>` → values, writers, readers
 2. `refs --symbol <EnumName>` → all references
-3. Edit, re-run `state-map` to confirm coverage
+3. Edit
+4. Re-run `state-map` to confirm coverage
 
-**Dead-code check:**
+**Dead-code check before deletion:**
 1. `orphan` → scan candidates
-2. Focus on ≥70 confidence; verify each with `refs`
-3. Check for dynamic references before any deletion
+2. Focus on ≥70 confidence
+3. `refs --symbol <candidate>` → verify each one
+4. Check for dynamic references (string dispatch, reflection, macros)
+5. Only then delete
+
+**PR review / assessing someone else's changes:**
+1. `overview` → refresh project map
+2. `impact --files <changed-files...> --with-symbols` → blast radius
+3. `check --modified-file <file>` → focused diagnostics
+4. `verify` → aggregate evidence
+
+**Simple grep/read replacement:**
+- Instead of `grep -r "functionName"` → `query-symbol --symbol functionName`
+- Instead of `grep -r "keyword" src/` → `query --query "keyword"`
+- Instead of `cat file.py | head` → `file-detail --file-path file.py`
+- Instead of `grep -r "caller of X"` → `refs --symbol X`
 
 ## Critical traps
 
@@ -95,6 +120,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 - **`verify` reports contract risk warnings** → address each one before claiming completion. They flag API/signature/state mismatches the graph detected.
 - **Orphan high-confidence (≥70)** → still requires `refs` verification. The graph cannot see string dispatch, reflection, macros, or config-driven routing.
 - **`cache save` must run *before* target edits** — `diff`/`verify --with-diff` need a pre-edit baseline. Missing baseline is not proof of safety.
+- **Skipping repomap for "simple" tasks** → a "simple read" becomes a "simple edit" becomes a multi-file change. `file-detail` + `impact` cost seconds and prevent hours of debugging. When in doubt, run it.
 
 ## Capabilities
 

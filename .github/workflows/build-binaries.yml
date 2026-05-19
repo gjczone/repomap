@@ -87,10 +87,20 @@ jobs:
           node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
 
-      - name: Publish to npm
+      - name: Publish platform package to npm
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           cd npm/platforms/${{ matrix.platform }}
           npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
           npm publish --access public 2>&1 || echo "npm publish skipped (version may already exist)"
+
+      - name: Sync and publish wrapper package (linux only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          cd npm/wrapper
+          node -e "const p=require('./package.json');p.version='$VERSION';const deps=p.optionalDependencies||{};for(const k of Object.keys(deps))deps[k]='$VERSION';p.optionalDependencies=deps;require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
+          npm publish 2>&1 || echo "npm publish skipped (version may already exist)"

@@ -886,7 +886,7 @@ wheels = [
 
 [[package]]
 name = "repomap-cli"
-version = "2.4.4"
+version = "2.4.6"
 source = { editable = "." }
 dependencies = [
     { name = "pathspec", extra = ["re2"] },
