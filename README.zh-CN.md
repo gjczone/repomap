@@ -16,41 +16,25 @@
 
 ## 快速开始
 
-### 方案一：CLI + Skill
-
-Skill 文件告诉代理*何时*调用每个命令。适用于任何支持自定义 skill 的编程代理。
+一条命令安装全部。Skill 告诉代理*何时*调用每个 repomap 命令；CLI 负责实际执行。
 
 ```bash
-# 1. 克隆 skill
+# 1. 安装 skill（代理决策流程）
 mkdir -p ~/.claude/skills
 git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. 安装 CLI
-
+# 2. 安装 CLI（跨平台：Linux / macOS / Windows）
 npm install -g repomap-bin
-# 或：pip install repomap-cli
 
 # 3. 验证
-repomap doctor
+repomap doctor --project .
 ```
 
-**效果**：代理读取 `~/.claude/skills/repomap/SKILL.md`，在恰当的时机自动调用 `repomap overview`、`repomap impact`、`repomap verify`。Skill 包含决策规则和强制使用模式。
+**效果**：代理读取 `~/.claude/skills/repomap/SKILL.md`，在恰当的时机自动调用 `repomap overview`、`repomap impact`、`repomap verify`。也可以直接使用 CLI 进行手动分析。
 
-### 方案二：仅 CLI
-
-直接安装 CLI 工具，用于手动使用或集成到任何工作流：
-
-```bash
-
-
-npm install -g repomap-bin
-# 或：pip install repomap-cli
-
-# 验证
-repomap doctor
-```
+> **注意**：`--project` 是所有命令的必传参数（`build-binary` 除外），请始终传入绝对路径。
 
 ---
 
@@ -59,9 +43,9 @@ repomap doctor
 为符号查找提供编译器级精度。代理自动处理：
 
 ```bash
-repomap doctor --lsp                 # 检查可用服务器
-repomap lsp setup --dry-run          # 预览安装计划
-repomap lsp setup                    # 安装缺失的服务器
+repomap doctor --lsp --project .          # 检查可用服务器
+repomap lsp setup --dry-run --project .   # 预览安装计划
+repomap lsp setup --project .             # 安装缺失的服务器
 ```
 
 | 语言 | 服务器 | 安装 |
@@ -88,13 +72,13 @@ repomap lsp setup                    # 安装缺失的服务器
 | 命令 | 功能 |
 |------|------|
 | `overview` | 项目地图：入口点、热点、关键符号（PageRank）、阅读顺序 |
-| `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行 |
+| `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行；`--json` |
 | `search --query <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数 |
-| `file-detail --file-path <文件>` | 文件符号 + 签名；可用时默认展示 LSP 分级符号树 |
+| `file-detail --file-path <文件>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
-| `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度 |
-| `query-symbol --symbol <名称>` | 精确/模糊符号查找；默认获取 LSP hover + 定义/引用证据 |
-| `refs --symbol <名称>` | 符号的所有引用；可用时默认获取 LSP 精确跨文件结果 |
+| `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度；`--direction`；`--json` |
+| `query-symbol --symbol <名称>` | 精确/模糊符号查找；默认获取 LSP hover + 定义/引用证据；`--json` |
+| `refs --symbol <名称>` | 符号的所有引用；默认获取 LSP 精确跨文件结果；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
 | `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
 | `verify [--quick] [--no-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断 |
@@ -120,7 +104,7 @@ repomap routes --project . --with-consumers           # API 消费者映射
 repomap call-chain --project . --symbol refreshToken
 
 # 编辑后
-repomap verify --project .                            # 完整证据门；可用时默认运行 LSP
+repomap verify --project .                            # 完整证据门；默认运行 LSP
 repomap check --project .                             # 编译器诊断
 repomap orphan --project . --min-confidence 70        # 死代码检查
 ```

@@ -16,43 +16,25 @@
 
 ## Quick Start
 
-### Option 1: CLI + Skill
-
-The skill file tells the agent *when* to call each command. Works with any coding agent that supports custom skills.
+One command installs everything. The skill tells agents *when* to call each repomap command; the CLI does the actual work.
 
 ```bash
-# 1. Clone the skill
+# 1. Install skill (agent decision procedure)
 mkdir -p ~/.claude/skills
 git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-
-# 2. Install CLI
-
+# 2. Install CLI (cross-platform: Linux / macOS / Windows)
 npm install -g repomap-bin
-# or: pip install repomap-cli
-# or: uv tool install repomap
 
 # 3. Verify
-repomap doctor
+repomap doctor --project .
 ```
 
-**Result**: The agent reads `~/.claude/skills/repomap/SKILL.md` and automatically calls `repomap overview`, `repomap impact`, `repomap verify` at the right moments. The skill includes decision rules and mandatory usage patterns.
+**Result**: The agent reads `~/.claude/skills/repomap/SKILL.md` and automatically calls `repomap overview`, `repomap impact`, `repomap verify` at the right moments. Use the CLI directly for manual analysis.
 
-### Option 2: CLI Only
-
-Install the CLI tool directly for manual use or integration with any workflow:
-
-```bash
-
-
-npm install -g repomap-bin
-# or: pip install repomap-cli
-
-# Verify
-repomap doctor
-```
+> **Note**: `--project` is a required argument for all commands (except `build-binary`). Always pass it as an absolute path.
 
 ---
 
@@ -61,9 +43,9 @@ repomap doctor
 Adds compiler-grade precision for symbol lookups. The agent handles this automatically:
 
 ```bash
-repomap doctor --lsp                 # check available servers
-repomap lsp setup --dry-run          # preview install plan
-repomap lsp setup                    # install missing servers
+repomap doctor --lsp --project .          # check available servers
+repomap lsp setup --dry-run --project .   # preview install plan
+repomap lsp setup --project .             # install missing servers
 ```
 
 | Language | Server | Install |
@@ -90,13 +72,13 @@ LSP-backed commands use local LSP servers by default when available. All command
 | Command | Purpose |
 |---------|---------|
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order |
-| `query --query <keywords>` | Topic search with synonym expansion; `--context-lines <N>` for matched code |
+| `query --query <keywords>` | Topic search with synonym expansion; `--context-lines <N>` for matched code; `--json` |
 | `search --query <text>` | BM25 semantic symbol search; `--top-k <N>` for result count |
-| `file-detail --file-path <f>` | File symbols + signatures; LSP symbol tree by default when available |
+| `file-detail --file-path <f>` | File symbols + signatures + callers; LSP symbol tree by default; `--json` |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
-| `call-chain --symbol <name>` | Callers and callees with configurable depth |
-| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference evidence by default |
-| `refs --symbol <name>` | All references to a symbol; LSP precision by default when available |
+| `call-chain --symbol <name>` | Callers and callees with configurable depth; `--direction`; `--json` |
+| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference evidence by default; `--json` |
+| `refs --symbol <name>` | All references to a symbol; LSP precision by default; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `state-map --symbol <name>` | Enum/const state values, writers, readers |
 | `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics |
@@ -122,7 +104,7 @@ repomap routes --project . --with-consumers           # API consumer map
 repomap call-chain --project . --symbol refreshToken
 
 # After editing
-repomap verify --project .                            # full evidence gate; LSP runs by default when available
+repomap verify --project .                            # full evidence gate; LSP runs by default
 repomap check --project .                             # compiler diagnostics
 repomap orphan --project . --min-confidence 70        # dead code check
 ```
