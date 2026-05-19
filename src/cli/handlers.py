@@ -663,6 +663,7 @@ def run_query_symbol(
     max_chars: int,
     with_lsp: bool = False,
     lsp_timeout: float = 8.0,
+    as_json: bool = False,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -670,9 +671,37 @@ def run_query_symbol(
         if file_path:
             results = [item for item in results if item.file == file_path]
         if not results:
+            if as_json:
+                print(json_dumps({"matches": [], "query": symbol, "file_filter": file_path}, ensure_ascii=False))
+                return 0
             print(f"> No matches found for `{symbol}`", file=sys.stderr)
             return EXIT_NO_RESULTS
         exact_matches, fuzzy_matches = _group_symbol_matches(results, symbol)
+
+        if as_json:
+            def _symbol_item(item):
+                d = {"name": item.name, "kind": item.kind, "file": item.file, "line": item.line,
+                     "pagerank": item.pagerank}
+                if item.signature:
+                    d["signature"] = item.signature
+                if item.return_type:
+                    d["return_type"] = item.return_type
+                if item.params:
+                    d["params"] = item.params
+                return d
+            payload = {
+                "query": symbol,
+                "total_results": len(results),
+                "exact_matches": [_symbol_item(item) for item in exact_matches[:20]],
+                "fuzzy_matches": [_symbol_item(item) for item in fuzzy_matches[:20]],
+            }
+            if file_path:
+                payload["file_filter"] = file_path
+            if with_lsp and (exact_matches or results):
+                selected = (exact_matches or results)[0]
+                payload["lsp"] = _collect_lsp_evidence_for_symbol(engine, selected, lsp_timeout)
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            return 0
 
         lines = [f"Found {len(results)} matching results.\n"]
         if file_path:
@@ -717,7 +746,7 @@ def run_query_symbol(
 
 
 def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: int, max_chars: int,
-                    with_lsp: bool = False, lsp_timeout: float = 8.0) -> int:
+                    with_lsp: bool = False, lsp_timeout: float = 8.0, as_json: bool = False) -> int:
     try:
         engine = _scan_engine(project, max_files)
         normalized_file_path = _normalize_project_relative_path(engine.project_root, file_path, must_exist=True)
@@ -728,6 +757,38 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
                 max_symbols = min(file_symbol_count, 50)
             elif file_symbol_count > 20:
                 max_symbols = file_symbol_count
+
+        if as_json:
+            symbols = []
+            for sid in engine.graph.file_symbols.get(normalized_file_path, []):
+                sym = engine.graph.symbols.get(sid)
+                if not sym:
+                    continue
+                s = {"name": sym.name, "kind": sym.kind, "line": sym.line, "pagerank": sym.pagerank}
+                if sym.signature:
+                    s["signature"] = sym.signature
+                if sym.return_type:
+                    s["return_type"] = sym.return_type
+                if sym.params:
+                    s["params"] = sym.params
+                symbols.append(s)
+            payload = {
+                "file": normalized_file_path,
+                "symbol_count": len(symbols),
+                "symbols": sorted(symbols, key=lambda x: x.get("pagerank", 0), reverse=True)[:max_symbols],
+                "imports": engine.graph.file_imports.get(normalized_file_path, []),
+                "calls": [list(c) for c in engine.graph.file_calls.get(normalized_file_path, [])],
+            }
+            if with_lsp:
+                from dataclasses import asdict as dc_asdict
+                from ..lsp import collect_lsp_symbol_tree
+                lsp_tree = collect_lsp_symbol_tree(engine.project_root, normalized_file_path, timeout=lsp_timeout)
+                if lsp_tree:
+                    payload["lsp_symbol_tree"] = [dc_asdict(item) for item in lsp_tree]
+                else:
+                    payload["lsp_symbol_tree"] = []
+            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            return 0
 
         lsp_tree = None
         if with_lsp:

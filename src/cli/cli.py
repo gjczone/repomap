@@ -74,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_QUERY_SYMBOL_MAX_CHARS,
         help="Maximum text output size.",
     )
+    query_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     _add_lsp_args(query_parser, "Also query local LSP definition/reference evidence for the best match.")
     query_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
@@ -126,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FILE_DETAIL_MAX_CHARS,
         help="Maximum text output size.",
     )
+    file_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     _add_lsp_args(file_parser, "Include LSP symbol tree in file detail output.")
     file_parser.add_argument("--lsp-timeout", type=float, default=8.0, help="Seconds to wait for LSP responses.")
 
@@ -271,7 +273,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.json,
         )
     if command == "query-symbol":
-        return run_query_symbol(args.project, args.max_files, args.symbol, args.file_path, args.max_chars, args.with_lsp, args.lsp_timeout)
+        return run_query_symbol(args.project, args.max_files, args.symbol, args.file_path, args.max_chars, args.with_lsp, args.lsp_timeout, args.json)
     if command == "query":
         return run_query(
             args.project, 8000, args.query,
@@ -302,7 +304,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if command == "file-detail":
         return run_file_detail(args.project, args.max_files, args.file_path, args.max_symbols, args.max_chars,
-                              getattr(args, "with_lsp", False), getattr(args, "lsp_timeout", 8.0))
+                              getattr(args, "with_lsp", False), getattr(args, "lsp_timeout", 8.0), args.json)
     if command == "hotspots":
         return run_hotspots(args.project, args.max_files, args.limit)
     if command == "cache":

@@ -211,7 +211,7 @@ repomap overview --project .
 ## Distribution Policies
 
 - **No binaries in git**: `dist/repomap` and `npm/platforms/*/repomap*` are gitignored. Build artifacts stay local.
-- **npm distribution**: Primary user-facing package: `repomap-bin` (install: `npm install -g repomap-bin`). CI also publishes platform-specific packages (`@gjczone/repomap-linux-x64`, `@gjczone/repomap-darwin-arm64`, `@gjczone/repomap-windows-x64`). npm version is synced from `pyproject.toml` during CI build.
+- **npm distribution**: Single package: `repomap-bin` (install: `npm install -g repomap-bin`). All three platforms (linux-x64, darwin-arm64, windows-x64) publish to the same `repomap-bin` name, distinguished by `os`/`cpu` fields in `package.json`. npm automatically selects the correct platform binary. npm version is synced from `pyproject.toml` during CI build.
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
 - **Version bump**: When bumping version, update `pyproject.toml`.
 - **CI build**: CI builds the binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.
@@ -285,6 +285,34 @@ When the user asks to release a new version, follow this automated flow. **No ma
 2. If CI is `in_progress` or `queued`: wait 60s, poll again. Report "CI 运行中…" to the user.
 3. If CI completes but `conclusion=failure`: report the failure and stop.
 4. If CI completes and `conclusion=success`: proceed to GitHub Release.
+
+### CI Breakage Prevention（铁律）
+
+**修改以下内容时必须同步更新 CI 配置，否则 CI 必然失败：**
+
+1. **CLI 参数变更**（如新增/删除必传参数、重命名参数）→ 更新 `.github/workflows/build-binaries.yml` 中 smoke test 的命令行
+2. **新增/删除 Python 依赖** → 更新 `.github/workflows/build-binaries.yml` 中 `uv run --with ...` 的参数列表
+3. **`install.js` 或 npm `package.json` 变更** → 本地验证 `npm install -g` 后 binary 可执行
+
+**每次提交前必须执行的预检：**
+```bash
+# 1. 确认 smoke test 命令行与当前 CLI 签名一致
+grep "repomap " .github/workflows/build-binaries.yml
+
+# 2. 确认没有遗漏 --project 参数（所有命令除 build-binary 外都需 --project）
+grep -E "repomap (doctor|overview|verify|check)" .github/workflows/build-binaries.yml | grep -v "\-\-project"
+
+# 3. 确认 npm 三个 platform 包名一致（都是 repomap-bin）
+grep '"name"' npm/platforms/*/package.json
+```
+
+### npm 包发布规则
+
+- **所有平台发布到同一个包名 `repomap-bin`**，通过 `os`/`cpu` 字段区分平台
+- 不得使用 scoped 包名（`@gjczone/repomap-*`）
+- 三个平台的 `package.json` 必须除 `os`、`cpu`、`bin` 外完全一致
+- CI 中 `npm publish` 不需要 `--access public`（unscoped package 默认为 public）
+- 若某平台 npm publish 因"version already exists"失败，检查上游版本是否冲突；不得依赖 `|| echo` 静默跳过
 
 ### Completion Report
 After release is fully done, report:

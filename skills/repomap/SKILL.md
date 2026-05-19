@@ -24,8 +24,8 @@ description: "MUST invoke this skill for any coding task — before reading, edi
 | First repository overview | `repomap overview --project <project>` | Need modules, entrypoints, reading order, hotspots; add `--with-heat`/`--with-co-change` only when needed. |
 | Topic/feature search | `repomap query --project <project> --query <keyword>` | Know the area but not exact files; supports `--paths`, `--exclude`, `--no-tests`, `--json`. |
 | Symbol search (BM25) | `repomap search --project <project> --query <text>` | Natural-language symbol search; uses BM25 with keyword fallback; supports `--top-k`. |
-| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading/editing one file; includes LSP hierarchical symbol tree when available. |
-| Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous; LSP evidence is default when available. |
+| Dense known file | `repomap file-detail --project <project> --file-path <file>` | Before reading/editing one file; includes LSP hierarchical symbol tree when available; supports `--json`. |
+| Known symbol lookup | `repomap query-symbol --project <project> --symbol <name>` | Need definition candidates; add `--file-path` if ambiguous; LSP evidence is default when available; supports `--json`. |
 | Call flow | `repomap call-chain --project <project> --symbol <name>` | Need callers/callees before behavior change; supports `--direction`, `--depth`, `--json`. |
 | References | `repomap refs --project <project> --symbol <name>` | Need all references; add `--file-path` if ambiguous; LSP evidence is default when available. |
 | Edit planning | `repomap impact --project <project> --files <file...> --with-symbols` | Best default before non-trivial edits: key symbols, read-next, affected files, tests, risk. |

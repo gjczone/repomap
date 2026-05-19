@@ -1,7 +1,7 @@
 {
-  "name": "@gjczone/repomap-darwin-arm64",
+  "name": "repomap-bin",
   "version": "2.4.2",
-  "description": "RepoMap CLI binary for macOS ARM64 — repository intelligence for AI agents",
+  "description": "Standalone repomap binary — tree-sitter AST code intelligence CLI",
   "bin": {
     "repomap": "repomap"
   },
@@ -20,11 +20,9 @@
   ],
   "keywords": [
     "repomap",
-    "codebase",
-    "repository",
-    "ai-agent",
     "tree-sitter",
-    "lsp",
+    "ast",
+    "code-analysis",
     "cli"
   ],
   "author": "gjczone",
@@ -32,8 +30,5 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/gjczone/repomap"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }
