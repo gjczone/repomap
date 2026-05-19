@@ -234,8 +234,19 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - **Breaking changes or major rework**: major bump (X.y.z)
 - When in doubt, ask the user; default to minor for feature work.
 
+### Version Alignment（铁律）
+
+**`pyproject.toml` 是版本号的唯一真相来源。** 发布时的 commit message、git tag、GitHub Release 和 npm publish 的版本号必须与 `pyproject.toml` 中的 `version` 字段严格一致。
+
+- Bump 版本时，**只改 `pyproject.toml`** 一处，其余全部由 CI 自动同步
+- Commit message 中的版本号必须与 `pyproject.toml` 一致
+- 创建 GitHub Release 时使用的 tag 名必须与 `pyproject.toml` 一致
+- **绝不允许** commit message 写 v2.6.0 但 `pyproject.toml` 是 2.4.6 这种不一致
+- 推送前执行 `grep '^version = ' pyproject.toml` 确认当前版本，再据此撰写 commit message
+
 ### Commit Message
 - Format: `[release]: vX.Y.Z — English summary of primary change`
+- Version number in message MUST match `pyproject.toml` version exactly.
 - The description should capture the primary change in English (5-10 words).
 - Example: `[release]: v2.3.0 — LSP 13 languages + gitignore parsing + search format`
 - Type tag `[release]` is always in English; the summary after `—` is also in English.
