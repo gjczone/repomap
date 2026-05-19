@@ -211,7 +211,7 @@ repomap overview --project .
 ## Distribution Policies
 
 - **No binaries in git**: `dist/repomap` and `npm/platforms/*/repomap*` are gitignored. Build artifacts stay local.
-- **npm distribution**: Single package: `repomap-bin` (install: `npm install -g repomap-bin`). All three platforms (linux-x64, darwin-arm64, windows-x64) publish to the same `repomap-bin` name, distinguished by `os`/`cpu` fields in `package.json`. npm automatically selects the correct platform binary. npm version is synced from `pyproject.toml` during CI build.
+- **npm distribution**: Primary user-facing package: `repomap-bin` (linux-x64). Install: `npm install -g repomap-bin`. macOS ARM64: `@gjczone/repomap-darwin-arm64`. Windows x64: `@gjczone/repomap-windows-x64`. npm 不支持同一包名+版本号多次发布时合并 `os`/`cpu` 字段，因此不同平台需用不同包名（这是 esbuild、swc 等主流工具的通用做法）。所有包版本由 CI 自动从 `pyproject.toml` 同步。
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
 - **Version bump**: When bumping version, update `pyproject.toml`.
 - **CI build**: CI builds the binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.
@@ -302,16 +302,18 @@ grep "repomap " .github/workflows/build-binaries.yml
 # 2. 确认没有遗漏 --project 参数（所有命令除 build-binary 外都需 --project）
 grep -E "repomap (doctor|overview|verify|check)" .github/workflows/build-binaries.yml | grep -v "\-\-project"
 
-# 3. 确认 npm 三个 platform 包名一致（都是 repomap-bin）
+# 3. 确认 npm 三个 platform 包名正确（repomap-bin + @gjczone/*）
 grep '"name"' npm/platforms/*/package.json
+# 期望输出: linux-x64 -> repomap-bin, darwin-arm64 -> @gjczone/repomap-darwin-arm64, windows-x64 -> @gjczone/repomap-windows-x64
 ```
 
 ### npm 包发布规则
 
-- **所有平台发布到同一个包名 `repomap-bin`**，通过 `os`/`cpu` 字段区分平台
-- 不得使用 scoped 包名（`@gjczone/repomap-*`）
-- 三个平台的 `package.json` 必须除 `os`、`cpu`、`bin` 外完全一致
-- CI 中 `npm publish` 不需要 `--access public`（unscoped package 默认为 public）
+- **Linux x64**: `repomap-bin`（主包，`npm install -g repomap-bin`）
+- **macOS ARM64**: `@gjczone/repomap-darwin-arm64`（scoped 包，需 `--access public`）
+- **Windows x64**: `@gjczone/repomap-windows-x64`（scoped 包，需 `--access public`）
+- npm registry 不支持同一包名+同一版本号多次发布时合并 `os`/`cpu` 元数据，因此不同平台需用不同包名
+- 所有包的版本号在 CI 中自动从 `pyproject.toml` 同步
 - 若某平台 npm publish 因"version already exists"失败，检查上游版本是否冲突；不得依赖 `|| echo` 静默跳过
 
 ### Completion Report

@@ -1,7 +1,7 @@
 {
-  "name": "repomap-bin",
+  "name": "@gjczone/repomap-windows-x64",
   "version": "2.4.2",
-  "description": "Standalone repomap binary — tree-sitter AST code intelligence CLI",
+  "description": "RepoMap CLI binary for Windows x64 — repository intelligence for AI agents",
   "bin": {
     "repomap": "repomap.exe"
   },
@@ -20,9 +20,11 @@
   ],
   "keywords": [
     "repomap",
+    "codebase",
+    "repository",
+    "ai-agent",
     "tree-sitter",
-    "ast",
-    "code-analysis",
+    "lsp",
     "cli"
   ],
   "author": "gjczone",
@@ -30,5 +32,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/gjczone/repomap"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
