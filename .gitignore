@@ -8,3 +8,4 @@ dist/repomap.exe
 npm/platforms/*/repomap
 npm/platforms/*/repomap.exe
 docs/
+.qoder/
