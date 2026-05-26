@@ -3,12 +3,6 @@ name: CI
 on:
    push:
       branches: [main]
-      paths:
-         - "src/**"
-         - "tests/**"
-         - "pyproject.toml"
-         - "uv.lock"
-         - ".github/workflows/ci.yml"
    pull_request:
       branches: [main]
    workflow_dispatch:
@@ -24,11 +18,11 @@ jobs:
       runs-on: ubuntu-latest
       timeout-minutes: 10
       steps:
-         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
            with:
               enable-cache: true
 
@@ -41,20 +35,16 @@ jobs:
          - name: Ruff lint
            run: uv run ruff check .
 
-         # Pyright has 43 pre-existing type errors — re-enable once fixed.
-         # - name: Pyright type check
-         #   run: uv run pyright .
-
    test:
       needs: lint
       runs-on: ubuntu-latest
       timeout-minutes: 15
       steps:
-         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
            with:
               enable-cache: true
 
@@ -69,11 +59,11 @@ jobs:
       runs-on: ubuntu-latest
       timeout-minutes: 10
       steps:
-         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+         - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+         - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
            with:
               enable-cache: true
 
