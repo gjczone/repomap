@@ -3492,7 +3492,6 @@ def run_fix(project: str, dry_run: bool = False) -> int:
 def run_ready(project: str) -> int:
     """Quick readiness check: verify --quick + check + ruff format --check."""
     try:
-
         project_root = _resolve_project(project)
 
         print("=" * 60)
