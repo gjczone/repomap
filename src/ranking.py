@@ -89,6 +89,9 @@ class GraphAnalyzer:
         for s, score in pr.items():
             self.graph.symbols[s].pagerank = score
 
+        # PageRank 更新后清除文件分析缓存，避免返回过期数据
+        self._file_analysis_cache = None
+
     def query_symbol(self, name: str, query_context: str | None = None) -> list[Symbol]:
         """按名称模糊查找符号，按 PageRank 降序返回。
 
@@ -768,6 +771,8 @@ def detect_file_clusters(
     Returns dict mapping file_path -> cluster_id.
     Clusters are numbered 0..N-1 by size (largest first).
     """
+    import random
+
     files = sorted(graph.file_symbols.keys())
     if len(files) < 3:
         return {f: 0 for f in files}
@@ -794,7 +799,9 @@ def detect_file_clusters(
     labels: dict[str, int] = {}
     for f in files:
         # Use top-2 directory levels as initial label
-        parts = PurePosixPath(f).parts
+        # Normalize ./file.txt to file.txt for correct classification
+        normalized = f.lstrip("./")
+        parts = PurePosixPath(normalized).parts
         if len(parts) >= 2:
             d = f"{parts[0]}/{parts[1]}"
         elif len(parts) == 1 and parts[0] != f:
@@ -807,13 +814,12 @@ def detect_file_clusters(
         labels[f] = dir_labels[d]
 
     # Label propagation
+    rng = random.Random(42)  # 固定 seed 保证聚类结果确定性
     for _ in range(max_iterations):
         changed = 0
         # Randomize order each iteration for stability
-        import random
-
         order = list(files)
-        random.shuffle(order)
+        rng.shuffle(order)
         for f in order:
             if not neighbors[f]:
                 continue

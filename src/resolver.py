@@ -186,6 +186,13 @@ class ImportResolver:
         # sym_id -> file
         self._sym_file: dict[str, str] = {}
 
+        # 预计算项目中实际存在的文件扩展名集合，避免遍历所有 30+ 扩展名
+        self._project_extensions: set[str] = set()
+        for file_path in graph.file_symbols:
+            ext = Path(file_path).suffix.lower()
+            if ext:
+                self._project_extensions.add(ext)
+
         # 导入解析缓存：(source_file, imp) -> target_files，避免同一模块被反复解析
         self._resolve_cache: dict[tuple[str, str], list[str]] = {}
 
@@ -274,7 +281,11 @@ class ImportResolver:
                 logger.debug(f"Failed to parse package.json: {e}")
 
         # 解析子包的 package.json（monorepo 场景），跳过依赖和构建目录，避免读取海量无关 package。
+        packages_found = 0
+        max_packages = 100  # 限制扫描的 package.json 数量，防止大型 monorepo 性能问题
         for root, dir_names, file_names in os.walk(self.project_root):
+            if packages_found >= max_packages:
+                break
             dir_names[:] = [
                 n
                 for n in dir_names
@@ -284,6 +295,7 @@ class ImportResolver:
             ]
             if "package.json" not in file_names:
                 continue
+            packages_found += 1
             sub_package_path = Path(root) / "package.json"
             if sub_package_path == package_json_path:
                 continue
@@ -502,7 +514,8 @@ class ImportResolver:
             source_file = str(resolved.with_suffix(source_ext))
             if source_file in self.graph.file_symbols:
                 matches.append(source_file)
-        for ext in EXT_TO_LANG:
+        # 只遍历项目中实际存在的扩展名，避免遍历所有 30+ 扩展名
+        for ext in self._project_extensions:
             direct = resolved_str + ext
             index_file = str(resolved / f"index{ext}")
             if direct in self.graph.file_symbols:
@@ -588,9 +601,10 @@ class ImportResolver:
         prefix, suffix = alias_pattern.split("*", 1)
         if not import_path.startswith(prefix) or not import_path.endswith(suffix):
             return None
-        return import_path[
-            len(prefix) : len(import_path) - len(suffix) if suffix else None
-        ]
+        # 提取通配符匹配的部分
+        start = len(prefix)
+        end = len(import_path) - len(suffix) if suffix else len(import_path)
+        return import_path[start:end]
 
     @staticmethod
     def _apply_alias_target(target_pattern: str, wildcard_value: str) -> str | None:

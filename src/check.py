@@ -177,7 +177,7 @@ class DiagnosticRunner:
 
     def _normalize_safe_path(self, file_path: str) -> str | None:
         """将工具或 CLI 传入的文件路径归一为项目内相对路径；非法路径返回 None。"""
-        if not file_path or file_path.startswith("-"):
+        if not file_path or not file_path.strip() or file_path.startswith("-"):
             return None
         dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "\x00"]
         if any(c in file_path for c in dangerous_chars):
@@ -731,7 +731,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Go files",
                 )
-            cmd = ["go", "vet"] + target_files
+            cmd = ["go", "vet", "--", *target_files]
         else:
             cmd = ["go", "vet", "./..."]
 
@@ -775,17 +775,17 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Go files",
                 )
-            # go build 需要包路径，这里简化处理，检查整个项目但过滤错误
-            cmd = ["go", "build", "./..."]
+            # 将文件路径转换为 Go 包路径（取目录部分）
+            packages = sorted(set(
+                f"./{Path(f).parent}" if Path(f).parent != Path(".") else "."
+                for f in target_files
+            ))
+            cmd = ["go", "build", *packages]
         else:
             cmd = ["go", "build", "./..."]
 
         exit_code, output, duration = self._run_command(cmd, tool)
         errors, _ = self._parse_go_output(output)
-
-        # 增量检查：过滤错误
-        if self.modified_files:
-            errors = [e for e in errors if self._should_check_file(e.file)]
 
         return DiagnosticResult(
             tool=tool,

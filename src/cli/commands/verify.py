@@ -563,7 +563,7 @@ def run_verify(
                 max_issues=max_issues,
                 modified_files=changed_files,
                 resolve_symbols=resolve_symbols,
-                with_lsp=False,
+                with_lsp=with_lsp,
                 lsp_timeout=lsp_timeout,
                 lsp_max_files=lsp_max_files,
             )
@@ -953,13 +953,19 @@ def run_check(
 def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     lines = ["## Compiler/Static Analysis Diagnostics\n"]
     lines.append(f"**Project**: `{result['project_root']}`")
-    status_label = {
-        "passed": "✅ Passed",
-        "warning": "⚠️ Warnings",
-        "unknown": "ℹ️ No diagnostic tools ran"
-        if result.get("message")
-        else "ℹ️ No supported types detected",
-    }.get(result["status"], "❌ Errors")
+    status = result["status"]
+    if status == "passed":
+        status_label = "✅ Passed"
+    elif status == "warning":
+        status_label = "⚠️ Warnings"
+    elif status == "unknown":
+        status_label = (
+            "ℹ️ No diagnostic tools ran"
+            if result.get("message")
+            else "ℹ️ No supported types detected"
+        )
+    else:
+        status_label = "❌ Errors"
     lines.append(f"**Status**: {status_label}")
     if result.get("message"):
         lines.append(f"**Message**: {result['message']}")

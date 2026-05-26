@@ -128,7 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--query", "-q", required=True, help="Topic keyword."
     )
     topic_query_parser.add_argument(
-        "--max-files", type=int, default=20, help="Max result files (default 20)."
+        "--max-result-files", type=int, default=20, help="Max result files (default 20)."
     )
     topic_query_parser.add_argument(
         "--max-symbols", type=int, default=40, help="Max result symbols (default 40)."
@@ -626,7 +626,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.project,
             8000,
             args.query,
-            getattr(args, "max_files", 20),
+            getattr(args, "max_result_files", 20),
             getattr(args, "max_symbols", 40),
             args.no_tests,
             args.json,
@@ -666,7 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.file_path,
             args.max_symbols,
             args.max_chars,
-            getattr(args, "with_lsp", False),
+            getattr(args, "with_lsp", True),
             getattr(args, "lsp_timeout", 8.0),
             args.json,
         )

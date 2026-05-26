@@ -87,7 +87,9 @@ def run_call_chain(
         if error:
             print(error, file=sys.stderr)
             return 1
-        assert selected is not None
+        if selected is None:
+            print(f"[{CLI_NAME}] symbol not found: {symbol}", file=sys.stderr)
+            return 1
         if as_json:
             chain = engine.call_chain(selected.id, direction, depth)
             payload = {
@@ -363,7 +365,9 @@ def run_refs(
             if error:
                 print(error, file=sys.stderr)
                 return 1
-            assert selected is not None
+            if selected is None:
+                print(f"[{CLI_NAME}] symbol not found: {symbol}", file=sys.stderr)
+                return 1
             sid = selected.id
             target = engine.graph.symbols[sid]
             payload = {

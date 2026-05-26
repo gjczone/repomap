@@ -20,10 +20,22 @@ from __future__ import annotations
 import os
 import logging
 import subprocess
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("repomap.git_backend")
+
+
+def _format_git_timestamp(timestamp: int) -> str:
+    """将 Unix 时间戳格式化为与 git --format=%ad 默认格式一致的字符串。
+
+    例如: "Thu Jan  6 09:32:07 2022 -0500"
+    """
+    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    # 转换为本地时区以匹配 git 默认行为
+    local_dt = dt.astimezone()
+    return local_dt.strftime("%a %b %d %H:%M:%S %Y %z")
 
 _HAS_PYGIT2 = False
 try:
@@ -289,7 +301,8 @@ class SubprocessBackend:
                                 }
                             )
             return commits
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"log_file_commits failed for {file_path}: {exc}")
             return []
 
     @staticmethod
@@ -310,7 +323,8 @@ class SubprocessBackend:
                     if len(parts) == 2:
                         authors.append(parts[1])
             return authors
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"file_authors failed for {file_path}: {exc}")
             return []
 
 
@@ -603,7 +617,7 @@ class Pygit2Backend:
                                 {
                                     "hash": str(commit.id)[:8],
                                     "author": commit.author.name,
-                                    "date": commit.commit_time,
+                                    "date": _format_git_timestamp(commit.commit_time),
                                     "message": commit.message.split("\n")[0],
                                 }
                             )
@@ -620,7 +634,7 @@ class Pygit2Backend:
                                     {
                                         "hash": str(commit.id)[:8],
                                         "author": commit.author.name,
-                                        "date": commit.commit_time,
+                                        "date": _format_git_timestamp(commit.commit_time),
                                         "message": commit.message.split("\n")[0],
                                     }
                                 )
@@ -629,18 +643,27 @@ class Pygit2Backend:
                             continue
                         break
             return commits
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"log_file_commits failed for {file_path}: {exc}")
             return []
 
     @staticmethod
-    def file_authors(project_root: str, file_path: str) -> list[str]:
+    def file_authors(project_root: str, file_path: str, since_days: int = 365) -> list[str]:
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
         try:
+            from datetime import datetime, timezone, timedelta
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+            cutoff_timestamp = int(cutoff.timestamp())
+
             author_counts: dict[str, int] = {}
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for commit in walker:
+                # 超过时间限制则停止遍历
+                if commit.commit_time < cutoff_timestamp:
+                    break
                 touched = False
                 if not commit.parents:
                     diff = commit.tree.diff_to_tree(swap=True)
@@ -657,7 +680,8 @@ class Pygit2Backend:
                 author_counts.items(), key=lambda x: x[1], reverse=True
             )
             return [a[0] for a in sorted_authors]
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"file_authors failed for {file_path}: {exc}")
             return []
 
 

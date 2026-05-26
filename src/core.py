@@ -53,6 +53,17 @@ DEFAULT_MAX_FILE_BYTES = 512 * 1024
 
 # 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
 # 保留仅为向后兼容导出。新增忽略规则请修改 src/gitignore.py 的 BUILTIN_IGNORE_PATTERNS。
+# TODO: 在下一个主版本中移除这些常量
+import warnings as _warnings
+
+def _deprecated_skip_names():
+    _warnings.warn(
+        "SKIP_DIR_NAMES and SKIP_FILE_NAMES are deprecated. "
+        "Use GitignoreParser instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
 SKIP_DIR_NAMES = {
     ".cache",
     ".git",
@@ -195,6 +206,20 @@ def _read_file_with_encoding_fallback(raw_bytes: bytes) -> tuple[bytes, str | No
     text = raw_bytes.decode("utf-8", errors="replace")
     logger.warning("Using UTF-8 with replacement chars as last resort")
     return text.encode("utf-8"), "utf-8-replace"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 工具函数
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _mtime_matches(a: float, b: float, tol: float = 0.001) -> bool:
+    """比较两个 mtime 是否在容差范围内相等。
+
+    业务目的：FAT32/NFS/overlay 文件系统的时间戳精度不同，
+    精确浮点比较会导致缓存失效。统一使用容差比较避免此问题。
+    """
+    return abs(a - b) <= tol
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -419,7 +444,7 @@ class RepoMapEngine:
         if not full.exists():
             return False
         actual_mtime = full.stat().st_mtime
-        if abs(actual_mtime - entry.mtime) > 0.001:
+        if not _mtime_matches(actual_mtime, entry.mtime):
             return False
 
         # 还原符号
@@ -479,7 +504,12 @@ class RepoMapEngine:
             (c["name"], c["line"], c.get("kind", "direct")) for c in entry.calls_json
         ]
 
-        self.routes.extend(HttpRoute(**r) for r in entry.routes_json)
+        # 还原 routes（单个畸形条目不崩溃整个扫描）
+        for r in entry.routes_json:
+            try:
+                self.routes.append(HttpRoute(**r))
+            except Exception as exc:
+                logger.warning(f"Skipping malformed route entry: {exc}")
 
         # 更新 mtime 缓存
         self._cache[file_path] = entry.mtime
@@ -685,7 +715,7 @@ class RepoMapEngine:
 
         mtime = path.stat().st_mtime
         cached_mtime = self._cache.get(file)
-        if cached_mtime == mtime:
+        if cached_mtime is not None and _mtime_matches(cached_mtime, mtime):
             self.scan_stats.skipped_files += 1
             return  # 未变更，复用缓存
 
@@ -702,11 +732,9 @@ class RepoMapEngine:
         if not tree:
             return
 
-        symbols = self.ts.extract_symbols(tree, lang, file, content)
-        self.graph.file_symbols.setdefault(file, [])
-        for sym in symbols:
-            self.graph.symbols[sym.id] = sym
-            self.graph.file_symbols[file].append(sym.id)
+        # 先收集所有数据到本地变量，最后一次性原子提交到图中
+        # 避免异常时图处于不完整状态（有符号无边连接）
+        new_symbols = self.ts.extract_symbols(tree, lang, file, content)
 
         if lang in (
             "python",
@@ -730,19 +758,27 @@ class RepoMapEngine:
         import_modules.update(
             binding.module for binding in import_bindings if binding.module
         )
-        self.graph.file_imports[file] = sorted(import_modules)
-        self.graph.file_import_bindings[file] = import_bindings
-        self.graph.file_exports[file] = self.ts.extract_js_ts_export_bindings(
+        new_imports = sorted(import_modules)
+        new_exports = self.ts.extract_js_ts_export_bindings(
             content, lang, tree=tree
         )
+        new_calls = self.ts.extract_calls(tree, lang)
+        new_routes = self.ts.extract_http_routes(tree, lang, file)
+
+        # 原子提交：所有数据收集完成后一次性写入图
+        self.graph.file_symbols.setdefault(file, [])
+        for sym in new_symbols:
+            self.graph.symbols[sym.id] = sym
+            self.graph.file_symbols[file].append(sym.id)
+
+        self.graph.file_imports[file] = new_imports
+        self.graph.file_import_bindings[file] = import_bindings
+        self.graph.file_exports[file] = new_exports
         self._mark_exported_symbols(file)
+        self.graph.file_calls[file] = new_calls
 
-        self.graph.file_calls[file] = self.ts.extract_calls(tree, lang)
-
-        # 提取 HTTP 路由（Python/JS/TS/Rust）
-        routes = self.ts.extract_http_routes(tree, lang, file)
-        if routes:
-            self.routes.extend(routes)
+        if new_routes:
+            self.routes.extend(new_routes)
 
         # 立即释放 tree 对象以避免内存泄漏，只缓存 mtime
         del tree

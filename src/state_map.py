@@ -238,9 +238,10 @@ def _scan_go_state(defn: StateDefinition, sym, content: str, lines: list[str], e
     for i, line in enumerate(lines[sym.line - 1 :], sym.line):
         stripped = line.strip()
         if stripped.startswith("const ("):
-            # Read until )
+            # Read until )，最多扫描 200 行防止缺失闭合括号时无限循环
             j = i
-            while j < len(lines) and ")" not in lines[j]:
+            max_lines = min(i + 200, len(lines))
+            while j < max_lines and ")" not in lines[j]:
                 ct = lines[j].strip()
                 if "=" in ct or not ct.startswith("//"):
                     name = ct.split()[0] if ct and not ct.startswith("//") else ""

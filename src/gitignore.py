@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from collections import OrderedDict
 from pathlib import Path
 
 import pathspec
 
-# 模块级缓存：project_root → GitignoreParser
-_cache: dict[str, "GitignoreParser"] = {}
+# 模块级缓存：project_root → GitignoreParser（LRU 淘汰，最多 128 个条目）
+_cache: OrderedDict[str, "GitignoreParser"] = OrderedDict()
+_MAX_CACHE_SIZE = 128
 
 
 def get_gitignore(
@@ -14,8 +16,12 @@ def get_gitignore(
 ) -> "GitignoreParser":
     root = str(Path(project_root).resolve())
     key = f"{root}\x00{tuple(extra_patterns or [])}"
-    if key not in _cache:
-        _cache[key] = GitignoreParser(root, extra_patterns=extra_patterns)
+    if key in _cache:
+        _cache.move_to_end(key)
+        return _cache[key]
+    if len(_cache) >= _MAX_CACHE_SIZE:
+        _cache.popitem(last=False)
+    _cache[key] = GitignoreParser(root, extra_patterns=extra_patterns)
     return _cache[key]
 
 

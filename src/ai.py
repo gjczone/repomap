@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -7,6 +8,8 @@ if TYPE_CHECKING:
     from .core import RepoMapEngine
 
 from .topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
+
+logger = logging.getLogger("repomap")
 
 
 RISK_MARK = {"high": "[high]", "medium": "[medium]", "low": "[low]"}
@@ -33,14 +36,16 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
     try:
         git = GitBackend(project_root)
         git_root = git.show_toplevel()
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"Git init failed for hot files: {exc}")
         return set()
     if not git_root:
         return set()
 
     try:
         changed = git.diff_name_only_since(days)
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"Git diff failed for hot files: {exc}")
         return set()
 
     hot_files: set[str] = set()
@@ -256,7 +261,8 @@ def _render_co_change_section(
     try:
         git = GitBackend(project_root)
         git_root = git.show_toplevel()
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"Git init failed for co-change: {exc}")
         return []
     if not git_root:
         return []

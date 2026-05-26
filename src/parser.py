@@ -411,6 +411,7 @@ class TreeSitterAdapter:
         self.parsers: dict[str, Any] = {}
         # lang -> query_type -> compiled Query
         self._queries: dict[str, dict[str, Any]] = {}
+        self._query_error_logged = False  # 首次查询失败用 warning，后续用 debug
         self._init_parsers()
 
     # ── 初始化 ─────────────────────────────────────────────────────────────────
@@ -1477,10 +1478,11 @@ class TreeSitterAdapter:
             return node.text.decode("utf-8")
         return None
 
-    def _walk_tree(self, root: Any) -> list[Any]:
+    def _walk_tree(self, root: Any, max_nodes: int = 500_000) -> list[Any]:
+        """BFS 遍历 AST 节点，限制最大节点数防止 OOM。"""
         nodes = [root]
         result: list[Any] = []
-        while nodes:
+        while nodes and len(result) < max_nodes:
             current = nodes.pop()
             result.append(current)
             nodes.extend(reversed(current.children))
@@ -1797,7 +1799,11 @@ class TreeSitterAdapter:
                         pairs.append((cap_name, node))
             return pairs
         except Exception as e:
-            logger.debug(f"Query run error: {e}")
+            if not self._query_error_logged:
+                logger.warning(f"Query run error (first occurrence): {e}")
+                self._query_error_logged = True
+            else:
+                logger.debug(f"Query run error: {e}")
             return []
 
     @staticmethod
@@ -1825,8 +1831,8 @@ class TreeSitterAdapter:
                 prev = getattr(node, "prev_sibling", None)
                 if prev and "comment" in prev.type:
                     return self._text(prev).lstrip("/* \n").rstrip("*/ \n")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"Docstring extraction error: {exc}")
         return ""
 
     def _signature(self, node: Any, lang: str) -> str:
@@ -1846,6 +1852,6 @@ class TreeSitterAdapter:
                 m = re.search(pat, first_line)
                 if m:
                     return m.group(0).strip()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"Signature extraction error: {exc}")
         return ""

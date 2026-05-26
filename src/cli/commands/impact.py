@@ -110,7 +110,7 @@ def _impact_lsp_hint(
     available = any(server.get("status") == "available" for server in servers)
     suggested: list[str] = []
     if available and target_files:
-        files_arg = " ".join(target_files)
+        files_arg = " ".join(f'"{f}"' for f in target_files)
         suggested.append(
             f"repomap check --project {project_root} --modified-file {files_arg}"
         )
@@ -282,20 +282,12 @@ def run_impact(
         type_impacts = _impact_type_level(engine, target_files)
 
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
-        # 按影响严重程度排序：受影响文件中符号的外部调用者越多越靠前
+        # 按影响严重程度排序：置信度高→严重度高→文件路径（tiebreaker）
         affected_list.sort(
-            key=lambda x: (
-                {"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
-                -_affected_severity(x[0], engine),
-                x[0],
-            ),
-            reverse=True,
-        )
-        affected_list = sorted(
-            affected_list,
             key=lambda x: (
                 -{"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
                 -_affected_severity(x[0], engine),
+                x[0],
             ),
         )
         affected_list = affected_list[:max_affected_files]

@@ -459,7 +459,7 @@ def find_related_tests(
                     break
             else:
                 # 策略5: git 共变更历史（medium confidence）
-                co_score = _get_co_change_score(project_root, test_file, target)
+                co_score = get_co_change_score(project_root, test_file, target)
                 if co_score >= 3:
                     results.append(
                         TestMatch(
@@ -555,7 +555,10 @@ def _file_to_module_path(file_path: str) -> str:
 # Git 共变更热度
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_co_change_cache: dict[str, dict[tuple[str, str], int]] = {}
+from collections import OrderedDict
+
+_co_change_cache: OrderedDict[str, dict[tuple[str, str], int]] = OrderedDict()
+_MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
 
 
 def get_co_change_score(
@@ -563,15 +566,15 @@ def get_co_change_score(
 ) -> int:
     """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
     cache = _co_change_cache.get(project_root)
-    if cache is None:
+    if cache is not None:
+        _co_change_cache.move_to_end(project_root)
+    else:
+        if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
+            _co_change_cache.popitem(last=False)
         cache = _load_co_change_scores(project_root, since_days=since_days)
         _co_change_cache[project_root] = cache
     a, b = sorted([file_a, file_b])
     return cache.get((a, b), 0)
-
-
-# 向后兼容别名
-_get_co_change_score = get_co_change_score
 
 
 def get_co_change_neighbors(
@@ -586,7 +589,11 @@ def get_co_change_neighbors(
     即使代码上没有显式依赖，也可能存在隐含关联。
     """
     cache = _co_change_cache.get(project_root)
-    if cache is None:
+    if cache is not None:
+        _co_change_cache.move_to_end(project_root)
+    else:
+        if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
+            _co_change_cache.popitem(last=False)
         cache = _load_co_change_scores(project_root, since_days=since_days)
         _co_change_cache[project_root] = cache
     neighbors: dict[str, int] = {}

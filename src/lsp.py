@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import shutil
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from . import json_dumps, json_loads
+
+logger = logging.getLogger("repomap.lsp")
 
 
 @dataclass(frozen=True)
@@ -312,10 +315,14 @@ def _candidate_is_executable(path: Path) -> bool:
 
 
 def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    """去重路径列表，使用 resolve() 解析 symlink 以正确去重。"""
     result: list[Path] = []
     seen: set[str] = set()
     for path in paths:
-        key = str(path.expanduser())
+        try:
+            key = str(path.expanduser().resolve())
+        except OSError:
+            key = str(path.expanduser())
         if key in seen:
             continue
         seen.add(key)
@@ -512,7 +519,7 @@ class StdioLspClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._reader = threading.Thread(target=self._read_loop, daemon=False)
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
 
     def _read_loop(self) -> None:
@@ -557,7 +564,8 @@ class StdioLspClient:
                 return message
             # 请求期间可能收到 diagnostics 等通知；缓冲到 _notifications 列表
             if "id" not in message:
-                self._notifications.append(message)
+                if len(self._notifications) < 500:  # 防止异常 LSP 服务器导致内存无限增长
+                    self._notifications.append(message)
                 continue
             # 非目标响应消息放回队列（可能是并发请求的响应）
             self._messages.put(message)
@@ -1146,7 +1154,8 @@ def collect_lsp_symbol_tree(
         for node in _walk_symbol_tree(tree):
             node.file = file_path
         return tree
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"LSP symbol collection failed for {file_path}: {exc}")
         return []
 
 

@@ -118,7 +118,6 @@ class SymbolSearchIndex:
         return results
 
     def _fallback_search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
-        query_lower = query.lower()
         query_tokens = set(_tokenize(query))
         results: list[tuple[str, float]] = []
         for i, sym_id in enumerate(self._symbol_ids):

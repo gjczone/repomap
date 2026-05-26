@@ -6,16 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from ... import json_dumps
-from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
     _resolve_project,
 )
-
-
-def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
-    symbol = engine.graph.symbols[sid]
-    return {"name": symbol.name, "file": symbol.file, "line": symbol.line}
 
 
 def run_lsp_doctor(project: str, as_json: bool = False) -> int:

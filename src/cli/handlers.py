@@ -594,6 +594,8 @@ def _assess_risk(
     total_score += structural_risk
 
     # 第2层：领域关键词风险
+    import re
+
     domain_risk = 0
     risk_keywords_high = [
         "auth",
@@ -618,10 +620,10 @@ def _assess_risk(
     ]
     all_paths = " ".join(target_files + list(affected_files)).lower()
     for kw in risk_keywords_high:
-        if kw in all_paths:
+        if re.search(rf"\b{re.escape(kw)}\b", all_paths):
             domain_risk += 3
     for kw in risk_keywords_medium:
-        if kw in all_paths:
+        if re.search(rf"\b{re.escape(kw)}\b", all_paths):
             domain_risk += 1
     if domain_risk >= 6:
         risk_notes.append("touches high-risk domain (auth/security/data persistence)")
