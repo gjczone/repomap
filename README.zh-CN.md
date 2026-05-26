@@ -66,6 +66,7 @@ uv run --with pyinstaller python -m src.cli build-binary --output dist
 ```
 
 也可以不构建，直接用源码运行：`uv run repomap <command> --project <path>`
+
 ### LSP 设置
 
 为符号查找提供编译器级精度。代理自动处理：

@@ -66,6 +66,7 @@ uv run --with pyinstaller python -m src.cli build-binary --output dist
 ```
 
 Or run from source without building: `uv run repomap <command> --project <path>`
+
 ### LSP Setup
 
 Adds compiler-grade precision for symbol lookups. The agent handles this automatically:
