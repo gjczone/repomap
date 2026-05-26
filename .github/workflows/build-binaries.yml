@@ -83,7 +83,7 @@ jobs:
               npm publish --access public 2>&1 | tee /tmp/npm-publish.log
               EXIT_CODE=${PIPESTATUS[0]}
               if [ $EXIT_CODE -ne 0 ]; then
-                if grep -q "E409\|already exists\|previously published" /tmp/npm-publish.log; then
+                if grep -q "E409\|already exists\|previously published\|E403.*publish over" /tmp/npm-publish.log; then
                   echo "npm publish: version already exists, skipping"
                 else
                   echo "npm publish failed with exit code $EXIT_CODE"
@@ -102,7 +102,7 @@ jobs:
               npm publish 2>&1 | tee /tmp/npm-publish-wrapper.log
               EXIT_CODE=${PIPESTATUS[0]}
               if [ $EXIT_CODE -ne 0 ]; then
-                if grep -q "E409\|already exists\|previously published" /tmp/npm-publish-wrapper.log; then
+                if grep -q "E409\|already exists\|previously published\|E403.*publish over" /tmp/npm-publish-wrapper.log; then
                   echo "npm publish: version already exists, skipping"
                 else
                   echo "npm publish failed with exit code $EXIT_CODE"
