@@ -185,7 +185,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertNotIn("notes", message)
 
     def test_verify_high_impact_passes_when_evidence_is_clean(self) -> None:
-        from src.cli.handlers import _overall_verify_status
+        from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
@@ -199,7 +199,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(status, "passed")
 
     def test_verify_breaking_graph_change_warns(self) -> None:
-        from src.cli.handlers import _overall_verify_status
+        from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
@@ -216,7 +216,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(status, "warning")
 
     def test_verify_unknown_check_passes_when_lsp_is_clean(self) -> None:
-        from src.cli.handlers import _overall_verify_status
+        from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
@@ -230,7 +230,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(status, "passed")
 
     def test_verify_unknown_check_warns_without_lsp_evidence(self) -> None:
-        from src.cli.handlers import _overall_verify_status
+        from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
@@ -286,7 +286,7 @@ class RepoMapCliTests(unittest.TestCase):
                     fake_git_status_porcelain,
                 ):
                     with patch(
-                        "src.cli.handlers.diff_project",
+                        "src.cli.commands.verify.diff_project",
                         return_value={
                             "error": "No cache found; run cache --save first"
                         },
@@ -548,17 +548,17 @@ class RepoMapCliTests(unittest.TestCase):
             captured["refs"] = args
             return 0
 
-        with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
+        with patch("src.cli.commands.symbol.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(["query-symbol", "--project", ".", "--symbol", "target"]), 0
                 )
-        with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
+        with patch("src.cli.commands.symbol.run_file_detail", fake_run_file_detail):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0
                 )
-        with patch("src.cli.handlers.run_refs", fake_run_refs):
+        with patch("src.cli.commands.symbol.run_refs", fake_run_refs):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(["refs", "--project", ".", "--symbol", "target"]), 0
@@ -585,7 +585,7 @@ class RepoMapCliTests(unittest.TestCase):
             captured["refs"] = args
             return 0
 
-        with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
+        with patch("src.cli.commands.symbol.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(
@@ -600,7 +600,7 @@ class RepoMapCliTests(unittest.TestCase):
                     ),
                     0,
                 )
-        with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
+        with patch("src.cli.commands.symbol.run_file_detail", fake_run_file_detail):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(
@@ -615,7 +615,7 @@ class RepoMapCliTests(unittest.TestCase):
                     ),
                     0,
                 )
-        with patch("src.cli.handlers.run_refs", fake_run_refs):
+        with patch("src.cli.commands.symbol.run_refs", fake_run_refs):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
                     main(["refs", "--project", ".", "--symbol", "target", "--no-lsp"]),
@@ -635,7 +635,7 @@ class RepoMapCliTests(unittest.TestCase):
             captured.append(kwargs)
             return 0
 
-        with patch("src.cli.handlers.run_verify", fake_run_verify):
+        with patch("src.cli.commands.verify.run_verify", fake_run_verify):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(main(["verify", "--project", "."]), 0)
                 self.assertEqual(main(["verify", "--project", ".", "--no-lsp"]), 0)
@@ -1048,7 +1048,7 @@ class RepoMapCliTests(unittest.TestCase):
             with patch("src.check.subprocess.run", side_effect=FileNotFoundError()):
                 self.assertFalse(ProjectDetector._has_js_files(Path(project_root)))
 
-        from src.cli.cli import _parse_git_status_porcelain_paths
+        from src.cli.commands.verify import _parse_git_status_porcelain_paths
 
         self.assertEqual(
             _parse_git_status_porcelain_paths(
@@ -1178,7 +1178,7 @@ class RepoMapCliTests(unittest.TestCase):
             )
             stdout = io.StringIO()
             with patch(
-                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                "src.cli.commands.symbol._collect_lsp_evidence_for_symbol",
                 return_value=fake_run,
             ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
@@ -1228,7 +1228,7 @@ class RepoMapCliTests(unittest.TestCase):
             )
             stdout = io.StringIO()
             with patch(
-                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                "src.cli.commands.symbol._collect_lsp_evidence_for_symbol",
                 return_value=fake_run,
             ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
@@ -1283,7 +1283,7 @@ class RepoMapCliTests(unittest.TestCase):
             stdout = io.StringIO()
             stderr = io.StringIO()
 
-            with patch("src.cli.handlers.subprocess.run") as run_mock:
+            with patch("src.cli.commands.build.subprocess.run") as run_mock:
                 run_mock.return_value.returncode = 0
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     exit_code = main(["build-binary", "--output", output_dir])

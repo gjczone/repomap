@@ -566,31 +566,18 @@ def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    from .handlers import (  # noqa: PLC0415
-        run_scan,
-        run_overview,
-        run_call_chain,
-        run_query_symbol,
-        run_file_detail,
-        run_routes,
-        run_hotspots,
-        run_cache,
-        run_diff,
-        run_query,
-        run_impact,
-        run_verify,
-        run_refs,
-        run_orphan,
-        run_lsp_doctor,
-        run_lsp_setup,
-        run_check,
-        run_doctor,
-        run_state_map,
-        run_build_binary,
-        run_search,
-        run_fix,
-        run_ready,
-    )
+    from .commands.overview import run_overview, run_scan  # noqa: PLC0415
+    from .commands.overview import run_hotspots  # noqa: PLC0415
+    from .commands.symbol import run_call_chain, run_query_symbol  # noqa: PLC0415
+    from .commands.symbol import run_file_detail, run_refs, run_state_map  # noqa: PLC0415
+    from .commands.query import run_query, run_search  # noqa: PLC0415
+    from .commands.impact import run_impact  # noqa: PLC0415
+    from .commands.verify import run_verify, run_check, run_orphan  # noqa: PLC0415
+    from .commands.cache import run_cache, run_diff  # noqa: PLC0415
+    from .commands.routes import run_routes  # noqa: PLC0415
+    from .commands.fix import run_fix, run_ready  # noqa: PLC0415
+    from .commands.doctor import run_doctor, run_lsp_doctor, run_lsp_setup  # noqa: PLC0415
+    from .commands.build import run_build_binary  # noqa: PLC0415
 
     parser = build_parser()
     try:
@@ -746,5 +733,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 from ..core import RepoMapEngine  # noqa: E402, F401
 from .handlers import _resolve_project  # noqa: E402, F401
 from .handlers import _scan_engine  # noqa: E402, F401
-from .handlers import _parse_git_status_porcelain_paths  # noqa: E402, F401
 from .handlers import _SCAN_CACHE  # noqa: E402, F401
