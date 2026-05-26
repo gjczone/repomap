@@ -2,19 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 import sys
-from typing import Any
 
 from ... import json_dumps
-from ... import (
-    Edge,
-    Symbol,
-)
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
     _resolve_project,
-    _scan_engine,
 )
 from ...toolkit import diff_project, save_cache, scan_project
 

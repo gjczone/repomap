@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 import importlib.util as importlib_util
-import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 from ..handlers import (
     CLI_NAME,
     PACKAGE_ROOT,
     PROJECT_ROOT,
     PYINSTALLER_BINDINGS,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
 )
 
 

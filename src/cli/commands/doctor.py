@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import importlib.util as importlib_util
-import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,20 +9,8 @@ from ... import json_dumps
 from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
     _resolve_project,
-    _scan_engine,
-    _select_symbol_match,
 )
-from ...lsp import (
-    detect_lsp_server,
-    language_for_file,
-    LSP_INSTALL_STRATEGIES,
-    detect_lsp_servers,
-    detection_to_dict,
-)
-from ...parser import EXT_TO_LANG
 
 
 def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:

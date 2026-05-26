@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
-from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ... import json_dumps
 from ... import (
     Symbol,
-    get_session_cache_path,
 )
 from ...ai import render_verify_report
 from ...check import RepoMapChecker
@@ -19,18 +14,13 @@ from ...core import RepoMapEngine
 from ...git_backend import GitBackend
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
-    EXIT_INVALID_ARGS,
     _resolve_project,
     _scan_engine,
     _scan_stats_payload,
-    _select_symbol_match,
     _sym_name,
     _assess_risk,
     _normalize_project_relative_paths,
 )
-from ...lsp import collect_lsp_diagnostics
 from ...ranking import GraphAnalyzer
 from ...toolkit import diff_project, scan_project
 from ...topic import (
@@ -111,7 +101,6 @@ def _child_git_project_candidates(project_path: Path, limit: int = 8) -> list[Pa
 
 
 def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | None]:
-    from ...git_backend import GitBackend
 
     project_path = Path(project_root).resolve()
     git = GitBackend(str(project_path))

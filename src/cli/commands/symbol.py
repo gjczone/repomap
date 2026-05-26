@@ -1,23 +1,17 @@
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
 from typing import Any
 
 from ... import json_dumps
 from ... import (
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
-    get_session_cache_path,
 )
 from ...ai import _truncate_output
 from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
-    EXIT_ERROR,
     EXIT_NO_RESULTS,
-    EXIT_SUCCESS,
-    _resolve_project,
     _scan_engine,
     _normalize_project_relative_path,
     _collect_lsp_evidence_for_symbol,
@@ -25,7 +19,6 @@ from ..handlers import (
     _format_symbol_ref,
     _select_symbol_match,
 )
-from ...lsp import collect_lsp_symbol_evidence, collect_lsp_symbol_tree
 from ...state_map import find_state_definitions
 
 
@@ -464,7 +457,6 @@ def run_refs(
 def run_state_map(
     project: str, max_files: int, symbol: str | None, query: str | None, as_json: bool
 ) -> int:
-    from ...state_map import find_state_definitions
 
     if not symbol and not query:
         print(f"[{CLI_NAME}] state-map requires --symbol or --query", file=sys.stderr)

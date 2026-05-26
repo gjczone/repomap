@@ -1,35 +1,23 @@
 from __future__ import annotations
 
-import os
 import sys
-from collections import defaultdict
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from ... import json_dumps
-from ... import (
-    Symbol,
-    get_session_cache_path,
-)
 from ...ai import render_impact_report
 from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
-    _resolve_project,
     _scan_engine,
     _normalize_project_relative_paths,
     _scan_stats_payload,
-    _select_symbol_match,
     _sym_name,
     _assess_risk,
 )
-from ...lsp import detect_lsp_server
 from ...topic import (
     TestMatch,
     find_related_tests,
-    is_test_like_file,
 )
 
 
@@ -396,86 +384,3 @@ def _affected_severity(file_path: str, engine: RepoMapEngine) -> int:
     return total
 
 
-def _assess_risk(
-    target_files: list[str],
-    affected_files: set[str],
-    engine: RepoMapEngine,
-) -> tuple[str, list[str]]:
-    """三层风险评估模型。返回 (risk_level, risk_notes)。"""
-    risk_notes: list[str] = []
-    total_score = 0
-
-    # 第1层：结构风险
-    analysis = engine.file_analysis()
-    structural_risk = 0
-    for f in target_files:
-        file_data = analysis.get(f, {})
-        nc = file_data.get("neighbor_count", 0)
-        if nc >= 10:
-            structural_risk += 4
-            risk_notes.append(
-                f"`{f}` associated with {nc} files, very high blast radius"
-            )
-        elif nc >= 5:
-            structural_risk += 3
-            risk_notes.append(f"`{f}` associated with {nc} files, high blast radius")
-        for sid in engine.graph.file_symbols.get(f, []):
-            sym = engine.graph.symbols.get(sid)
-            if sym and sym.pagerank > 0.01:
-                structural_risk += 1
-                break
-    total_score += structural_risk
-
-    # 第2层：领域关键词风险
-    domain_risk = 0
-    risk_keywords_high = [
-        "auth",
-        "token",
-        "session",
-        "password",
-        "security",
-        "migration",
-        "database",
-        "schema",
-        "persistence",
-    ]
-    risk_keywords_medium = [
-        "terminal",
-        "websocket",
-        "pty",
-        "input",
-        "config",
-        "build",
-        "deploy",
-        "ci",
-    ]
-    all_paths = " ".join(target_files + list(affected_files)).lower()
-    for kw in risk_keywords_high:
-        if kw in all_paths:
-            domain_risk += 3
-    for kw in risk_keywords_medium:
-        if kw in all_paths:
-            domain_risk += 1
-    if domain_risk >= 6:
-        risk_notes.append("touches high-risk domain (auth/security/data persistence)")
-    elif domain_risk >= 3:
-        risk_notes.append("touches medium-risk domain (terminal/config/build)")
-    total_score += domain_risk
-
-    # 第3层：变更类型风险
-    change_type_risk = 0
-    for f in target_files:
-        if is_test_like_file(f):
-            pass  # 只改测试不改实现，低风险
-        elif any(
-            f.endswith(ext) for ext in [".config.ts", ".config.js", "package.json"]
-        ):
-            change_type_risk += 2
-            risk_notes.append(f"`{f}` is a config file change with global impact")
-        elif "types" in PurePosixPath(f).parts or f.endswith(".d.ts"):
-            change_type_risk += 1
-            risk_notes.append(f"`{f}` is a type definition change with wide impact")
-    total_score += change_type_risk
-
-    level = "high" if total_score >= 6 else "medium" if total_score >= 3 else "low"
-    return level, risk_notes

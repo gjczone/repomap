@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
-from typing import Any
 
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
     _resolve_project,
-    _scan_engine,
 )
+from .verify import run_verify, run_check
 
 
 def run_fix(project: str, dry_run: bool = False) -> int:

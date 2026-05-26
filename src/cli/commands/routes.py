@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 from ... import json_dumps
 from ...ai import render_routes_report
-from ...consumers import find_route_consumers
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
-    _resolve_project,
     _scan_engine,
     _scan_stats_payload,
     _route_payload,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 from ... import json_dumps
 from ... import (
@@ -13,22 +12,13 @@ from ... import (
     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
 )
 from ...ai import (
-    _build_query_reading_order,
     _get_hot_files,
-    _rank_symbols_for_file,
-    _truncate_output,
 )
-from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
-    _resolve_project,
     _scan_engine,
     _scan_stats_payload,
 )
-from ...ranking import GraphAnalyzer
-from ...topic import classify_file_role
 
 
 def run_scan(project: str, max_files: int) -> int:

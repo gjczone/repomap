@@ -1,35 +1,27 @@
 from __future__ import annotations
 
-import os
 import sys
 from collections import defaultdict
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any
 
 from ... import json_dumps
 from ... import (
     RepoGraph,
-    Symbol,
-    get_session_cache_path,
 )
 from ...ai import (
     _build_query_reading_order,
     _rank_symbols_for_file,
-    _truncate_output,
     render_query_report,
 )
 from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
-    EXIT_SUCCESS,
-    EXIT_ERROR,
     EXIT_NO_RESULTS,
-    _resolve_project,
     _scan_engine,
     _normalize_path_prefix,
     _path_matches_prefix,
     _scan_stats_payload,
-    _select_symbol_match,
 )
 from ...topic import (
     FileMatch,
