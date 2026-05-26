@@ -5,7 +5,7 @@ RepoMap Check — 编译器/静态分析诊断模块
 自动检测项目类型并运行对应诊断工具，将结构化错误信息与符号图结合，
 帮助 AI 在修改代码后快速发现问题并定位到具体符号。
 
-支持：TypeScript (tsc)、Rust (cargo check)、Python (mypy/ruff)、Go (go vet/build)
+支持：TypeScript (tsc)、Rust (cargo check)、Python (pyright/ruff)、Go (go vet/build)
 """
 
 from __future__ import annotations
@@ -228,7 +228,7 @@ class DiagnosticRunner:
             results.append(self._run_cargo_check())
 
         if "python" in types:
-            results.append(self._run_mypy())
+            results.append(self._run_pyright())
             results.append(self._run_ruff())
 
         if "go" in types:
@@ -552,19 +552,19 @@ class DiagnosticRunner:
 
         return errors, warnings
 
-    def _run_mypy(self) -> DiagnosticResult:
-        """运行 mypy 类型检查"""
-        tool = "mypy"
-        cmd_str = "mypy . --show-error-codes --ignore-missing-imports"
+    def _run_pyright(self) -> DiagnosticResult:
+        """运行 pyright 类型检查"""
+        tool = "pyright"
+        cmd_str = "pyright . --outputjson"
 
-        if not self._has_cmd("mypy") and not self._has_cmd("dmypy"):
+        if not self._has_cmd("pyright"):
             return DiagnosticResult(
                 tool=tool,
                 command=cmd_str,
                 exit_code=0,
                 duration_ms=0,
                 skipped=True,
-                skip_reason="mypy/dmypy not found",
+                skip_reason="pyright not found",
             )
 
         # 增量检查：只检查指定文件
@@ -579,42 +579,16 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Python files",
                 )
+            cmd = ["pyright", "--outputjson", "--"] + target_files
         else:
-            target_files = ["."]
-
-        # 优先使用 dmypy daemon 模式（更快）
-        use_daemon = (
-            os.getenv("USE_DAEMON_MYPY", "1") == "1"
-            and self._has_cmd("dmypy")
-            and target_files == ["."]
-        )
-
-        if use_daemon:
-            cmd = [
-                "dmypy",
-                "run",
-                "--",
-                "--show-error-codes",
-                "--hide-error-context",
-                "--no-color-output",
-                "--ignore-missing-imports",
-            ] + target_files
-        else:
-            cmd = [
-                "mypy",
-                "--show-error-codes",
-                "--hide-error-context",
-                "--no-color-output",
-                "--ignore-missing-imports",
-                "--",
-            ] + target_files
+            cmd = ["pyright", ".", "--outputjson"]
 
         exit_code, output, duration = self._run_command(cmd, tool)
-        errors, warnings = self._parse_mypy_output(output)
+        errors, warnings = self._parse_pyright_output(output)
 
         return DiagnosticResult(
             tool=tool,
-            command=" ".join(cmd) if not use_daemon else "dmypy run ...",
+            command=" ".join(cmd[:5]) + "..." if len(cmd) > 5 else " ".join(cmd),
             exit_code=exit_code,
             duration_ms=duration,
             errors=errors[: self.max_items],
@@ -623,40 +597,31 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:30],
         )
 
-    def _parse_mypy_output(
+    def _parse_pyright_output(
         self, output: str
     ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
-        """解析 mypy 输出"""
+        """解析 pyright --outputjson"""
         errors, warnings = [], []
-        # 匹配: file.py:42: error: message [code]
-        pattern = re.compile(r"^(.+\.py):(\d+):\s*(error|warning|note):\s+(.+)$")
+        try:
+            data = json_loads(output) if output.strip() else {}
+        except Exception:
+            return errors, warnings
 
-        for line in output.split("\n"):
-            match = pattern.match(line)
-            if match:
-                msg = match.group(4)
-                code = "mypy"
-                code_match = re.search(r"\[([^\]]+)\]\s*$", msg)
-                if code_match:
-                    code = code_match.group(1)
-
-                severity = match.group(3)
-                if severity == "note":
-                    severity = "info"
-
-                issue = DiagnosticIssue(
-                    tool="mypy",
-                    file=match.group(1),
-                    line=int(match.group(2)),
-                    col=0,
-                    severity=severity,
-                    code=code,
-                    message=msg,
-                )
-                if severity == "error":
-                    errors.append(issue)
-                else:
-                    warnings.append(issue)
+        for diag in data.get("generalDiagnostics", []):
+            severity = diag.get("severity", "error")
+            issue = DiagnosticIssue(
+                tool="pyright",
+                file=diag.get("file", ""),
+                line=diag.get("range", {}).get("start", {}).get("line", 0) + 1,
+                col=diag.get("range", {}).get("start", {}).get("character", 0) + 1,
+                severity=severity,
+                code=diag.get("rule", "pyright"),
+                message=diag.get("message", ""),
+            )
+            if severity == "error":
+                errors.append(issue)
+            else:
+                warnings.append(issue)
 
         return errors, warnings
 

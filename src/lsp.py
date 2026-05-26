@@ -195,6 +195,46 @@ LSP_SPECS: tuple[LspServerSpec, ...] = (
         file_suffixes=(".kt", ".kts"),
         root_markers=("build.gradle", "build.gradle.kts", "settings.gradle.kts"),
     ),
+    LspServerSpec(
+        language="bash",
+        server_name="bash-language-server",
+        command_names=("bash-language-server",),
+        args=("start",),
+        file_suffixes=(".sh", ".bash", ".zsh"),
+        root_markers=(".bashrc", ".zshrc"),
+    ),
+    LspServerSpec(
+        language="css",
+        server_name="vscode-css-language-server",
+        command_names=("vscode-css-language-server",),
+        args=("--stdio",),
+        file_suffixes=(".css", ".scss", ".less"),
+        root_markers=("package.json", "node_modules"),
+    ),
+    LspServerSpec(
+        language="html",
+        server_name="vscode-html-language-server",
+        command_names=("vscode-html-language-server",),
+        args=("--stdio",),
+        file_suffixes=(".html", ".htm"),
+        root_markers=("package.json", "node_modules"),
+    ),
+    LspServerSpec(
+        language="json",
+        server_name="vscode-json-language-server",
+        command_names=("vscode-json-language-server",),
+        args=("--stdio",),
+        file_suffixes=(".json", ".jsonc"),
+        root_markers=("package.json", "node_modules"),
+    ),
+    LspServerSpec(
+        language="yaml",
+        server_name="yaml-language-server",
+        command_names=("yaml-language-server",),
+        args=("--stdio",),
+        file_suffixes=(".yaml", ".yml"),
+        root_markers=("package.json", ".github"),
+    ),
 )
 
 
