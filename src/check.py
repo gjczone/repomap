@@ -776,10 +776,12 @@ class DiagnosticRunner:
                     skip_reason="no modified Go files",
                 )
             # 将文件路径转换为 Go 包路径（取目录部分）
-            packages = sorted(set(
-                f"./{Path(f).parent}" if Path(f).parent != Path(".") else "."
-                for f in target_files
-            ))
+            packages = sorted(
+                set(
+                    f"./{Path(f).parent}" if Path(f).parent != Path(".") else "."
+                    for f in target_files
+                )
+            )
             cmd = ["go", "build", *packages]
         else:
             cmd = ["go", "build", "./..."]

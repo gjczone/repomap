@@ -37,6 +37,7 @@ def _format_git_timestamp(timestamp: int) -> str:
     local_dt = dt.astimezone()
     return local_dt.strftime("%a %b %d %H:%M:%S %Y %z")
 
+
 _HAS_PYGIT2 = False
 try:
     import pygit2
@@ -634,7 +635,9 @@ class Pygit2Backend:
                                     {
                                         "hash": str(commit.id)[:8],
                                         "author": commit.author.name,
-                                        "date": _format_git_timestamp(commit.commit_time),
+                                        "date": _format_git_timestamp(
+                                            commit.commit_time
+                                        ),
                                         "message": commit.message.split("\n")[0],
                                     }
                                 )
@@ -648,7 +651,9 @@ class Pygit2Backend:
             return []
 
     @staticmethod
-    def file_authors(project_root: str, file_path: str, since_days: int = 365) -> list[str]:
+    def file_authors(
+        project_root: str, file_path: str, since_days: int = 365
+    ) -> list[str]:
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []

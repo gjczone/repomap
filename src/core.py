@@ -56,6 +56,7 @@ DEFAULT_MAX_FILE_BYTES = 512 * 1024
 # TODO: 在下一个主版本中移除这些常量
 import warnings as _warnings
 
+
 def _deprecated_skip_names():
     _warnings.warn(
         "SKIP_DIR_NAMES and SKIP_FILE_NAMES are deprecated. "
@@ -63,6 +64,7 @@ def _deprecated_skip_names():
         DeprecationWarning,
         stacklevel=2,
     )
+
 
 SKIP_DIR_NAMES = {
     ".cache",
@@ -759,9 +761,7 @@ class RepoMapEngine:
             binding.module for binding in import_bindings if binding.module
         )
         new_imports = sorted(import_modules)
-        new_exports = self.ts.extract_js_ts_export_bindings(
-            content, lang, tree=tree
-        )
+        new_exports = self.ts.extract_js_ts_export_bindings(content, lang, tree=tree)
         new_calls = self.ts.extract_calls(tree, lang)
         new_routes = self.ts.extract_http_routes(tree, lang, file)
 

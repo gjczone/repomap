@@ -128,7 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--query", "-q", required=True, help="Topic keyword."
     )
     topic_query_parser.add_argument(
-        "--max-result-files", type=int, default=20, help="Max result files (default 20)."
+        "--max-result-files",
+        type=int,
+        default=20,
+        help="Max result files (default 20).",
     )
     topic_query_parser.add_argument(
         "--max-symbols", type=int, default=40, help="Max result symbols (default 40)."

@@ -40,9 +40,7 @@ def run_fix(project: str, dry_run: bool = False) -> int:
             eslint_files: list[str] = []
             for pat in patterns:
                 eslint_files.extend(
-                    glob.glob(
-                        str(project_root) + "/**/" + pat, recursive=True
-                    )
+                    glob.glob(str(project_root) + "/**/" + pat, recursive=True)
                 )
             if eslint_files:
                 result = subprocess.run(

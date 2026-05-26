@@ -564,7 +564,9 @@ class StdioLspClient:
                 return message
             # 请求期间可能收到 diagnostics 等通知；缓冲到 _notifications 列表
             if "id" not in message:
-                if len(self._notifications) < 500:  # 防止异常 LSP 服务器导致内存无限增长
+                if (
+                    len(self._notifications) < 500
+                ):  # 防止异常 LSP 服务器导致内存无限增长
                     self._notifications.append(message)
                 continue
             # 非目标响应消息放回队列（可能是并发请求的响应）
