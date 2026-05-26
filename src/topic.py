@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -554,8 +554,6 @@ def _file_to_module_path(file_path: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Git 共变更热度
 # ═══════════════════════════════════════════════════════════════════════════════
-
-from collections import OrderedDict
 
 _co_change_cache: OrderedDict[str, dict[tuple[str, str], int]] = OrderedDict()
 _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据

@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -54,11 +55,10 @@ DEFAULT_MAX_FILE_BYTES = 512 * 1024
 # 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
 # 保留仅为向后兼容导出。新增忽略规则请修改 src/gitignore.py 的 BUILTIN_IGNORE_PATTERNS。
 # TODO: 在下一个主版本中移除这些常量
-import warnings as _warnings
 
 
 def _deprecated_skip_names():
-    _warnings.warn(
+    warnings.warn(
         "SKIP_DIR_NAMES and SKIP_FILE_NAMES are deprecated. "
         "Use GitignoreParser instead.",
         DeprecationWarning,

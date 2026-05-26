@@ -153,7 +153,7 @@ def run_ready(project: str) -> int:
         print(f"  verify --quick: {'PASS' if verify_ok else 'FAIL'}")
         print(f"  check:         {'PASS' if check_ok else 'FAIL'}")
         if format_ok is None:
-            print(f"  format:        SKIP (ruff not available)")
+            print("  format:        SKIP (ruff not available)")
         else:
             print(f"  format:        {'PASS' if format_ok else 'FAIL'}")
         print(f"\n  Overall: {'READY' if all_ok else 'NOT READY'}")
