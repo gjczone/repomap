@@ -1178,7 +1178,7 @@ class RepoMapCliTests(unittest.TestCase):
             )
             stdout = io.StringIO()
             with patch(
-                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                "src.cli.commands.symbol._collect_lsp_evidence_for_symbol",
                 return_value=fake_run,
             ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
@@ -1228,7 +1228,7 @@ class RepoMapCliTests(unittest.TestCase):
             )
             stdout = io.StringIO()
             with patch(
-                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                "src.cli.commands.symbol._collect_lsp_evidence_for_symbol",
                 return_value=fake_run,
             ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
