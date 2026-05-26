@@ -118,7 +118,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 | Type Inference | `uv run python -m pytest tests/test_type_inference.py -v` |
 | Binary E2E | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v` |
 | Full | `uv run python -m unittest discover -s tests -v && uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q` |
-| Smoke | `repomap doctor && repomap overview --project . && repomap verify --project . --quick` |
+| Smoke | `repomap doctor --project . && repomap overview --project . && repomap verify --project . --quick` |
 
 ## README Maintenance
 
@@ -176,7 +176,7 @@ uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callg
 uv run --with pyinstaller python -m src.cli build-binary --output dist
 
 # 3. Smoke test (current project)
-repomap doctor
+repomap doctor --project .
 repomap overview --project .
 
 # 3.5. Smoke test with local projects (MANDATORY before release)
