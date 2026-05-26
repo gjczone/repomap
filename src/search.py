@@ -27,6 +27,17 @@ except ImportError:
     BM25Okapi = None
 
 
+def _create_chunk_symbol_id(sym_id: str, start_line: int, end_line: int) -> str:
+    """Generate a chunk identifier for a symbol's line-range segment."""
+    return f"{sym_id}#chunk:L{start_line}-L{end_line}"
+
+
+def _symbol_is_large(sym: Any, threshold: int = 100) -> bool:
+    """Check if a symbol's line range exceeds *threshold* lines."""
+    end = max(sym.end_line, sym.line)
+    return (end - sym.line) > threshold
+
+
 def _tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z]+|\d+", text.lower())
     return tokens
@@ -47,6 +58,13 @@ def _symbol_to_document(sym: Any) -> list[str]:
         parts.extend(_tokenize(sym.params))
     if sym.kind:
         parts.append(sym.kind.lower())
+    # Append chunk tokens for large symbols so BM25 can match line-range queries
+    if _symbol_is_large(sym):
+        end = max(sym.end_line, sym.line)
+        for chunk_start in range(sym.line, end, 100):
+            chunk_end = min(chunk_start + 100, end)
+            chunk_id = _create_chunk_symbol_id(sym.id, chunk_start, chunk_end)
+            parts.extend(_tokenize(chunk_id))
     return parts
 
 

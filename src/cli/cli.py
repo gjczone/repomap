@@ -51,7 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-co-change",
         action="store_true",
         default=False,
-        help="Enable Git co-change coupling analysis (expensive: reads 90d git history).",
+        help="Enable Git co-change coupling analysis (expensive: reads git history). Use --co-change-days to control window.",
+    )
+    overview_parser.add_argument(
+        "--co-change-days",
+        type=int,
+        default=30,
+        help="Days of git history for co-change analysis (default 30).",
     )
     overview_parser.add_argument(
         "--granularity",
@@ -382,6 +388,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Maximum explicit files to open through LSP.",
     )
+    fix_parser = subparsers.add_parser(
+        "fix", help="Auto-fix lint issues (ruff --fix, eslint --fix)."
+    )
+    fix_parser.add_argument(
+        "--project",
+        "-p",
+        required=True,
+        help="Project root path (absolute path recommended).",
+    )
+    fix_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be fixed without applying changes.",
+    )
+
+    ready_parser = subparsers.add_parser(
+        "ready", help="Quick readiness check: verify --quick + check + format."
+    )
+    ready_parser.add_argument(
+        "--project",
+        "-p",
+        required=True,
+        help="Project root path (absolute path recommended).",
+    )
 
     lsp_parser = subparsers.add_parser(
         "lsp", help="Inspect local LSP server availability."
@@ -558,6 +588,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_state_map,
         run_build_binary,
         run_search,
+        run_fix,
+        run_ready,
     )
 
     parser = build_parser()
@@ -578,6 +610,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             with_heat=getattr(args, "with_heat", False),
             with_co_change=getattr(args, "with_co_change", False),
             granularity=getattr(args, "granularity", "auto"),
+            co_change_days=getattr(args, "co_change_days", 30),
         )
     if command == "call-chain":
         return run_call_chain(
@@ -699,6 +732,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if command == "search":
         return run_search(args.project, args.max_files, args.query, args.top_k)
+    if command == "fix":
+        return run_fix(args.project, getattr(args, "dry_run", False))
+    if command == "ready":
+        return run_ready(args.project)
     if command == "build-binary":
         return run_build_binary(args.output, args.name)
     parser.error(f"unknown command: {command}")

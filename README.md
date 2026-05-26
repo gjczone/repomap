@@ -1,6 +1,6 @@
 # RepoMap — Codebase Awareness for Coding Agents
 
-> Tree-sitter project maps, 13-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
+> Tree-sitter project maps, 18-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
 >
 > Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with deepseek-v4-pro and glm-5.1.
 
@@ -9,8 +9,11 @@
 **What agents get**: structured repo context instead of grep + raw reads:
 
 - **Where to start**: `overview`, `query` (synonym expansion), `routes`
-- **What will break**: `impact`, `call-chain`, `refs`, `state-map`
-- **What was missed**: `verify` (contract risk warnings), `check`, `orphan`
+- **What will break**: `impact` (incl. type-level), `call-chain`, `refs`, `state-map`
+- **What was missed**: `verify` (contract risk + missed-files), `check`, `orphan`
+- **Auto-fix & ready**: `fix` (ruff + eslint auto-fix), `ready` (pre-commit check)
+- **Encoding auto-detect**: UTF-8 → GBK → GB2312 fallback for legacy projects
+- **Adaptive search**: never returns empty — keyword expansion → hotspot fallback
 
 ---
 
@@ -62,6 +65,11 @@ repomap lsp setup --project .             # install missing servers
 | Ruby | `ruby-lsp` | `gem install ruby-lsp` |
 | Swift | `sourcekit-lsp` | bundled with Xcode / Swift toolchain |
 | Kotlin | `kotlin-language-server` | mason or manual |
+| Bash | `bash-language-server` | `npm install -g bash-language-server` |
+| CSS / SCSS | `vscode-css-language-server` | `npm install -g vscode-langservers-extracted` |
+| HTML | `vscode-html-language-server` | `npm install -g vscode-langservers-extracted` |
+| JSON | `vscode-json-language-server` | `npm install -g vscode-langservers-extracted` |
+| YAML | `yaml-language-server` | `npm install -g yaml-language-server` |
 
 LSP-backed commands use local LSP servers by default when available. All commands still work without LSP; missing servers are reported as skipped, and `--no-lsp` disables LSP evidence when needed.
 
@@ -81,12 +89,14 @@ LSP-backed commands use local LSP servers by default when available. All command
 | `refs --symbol <name>` | All references to a symbol; LSP precision by default; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `state-map --symbol <name>` | Enum/const state values, writers, readers |
-| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics |
+| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, missed-files detection |
 | `check [--no-lsp]` | Compiler/type/lint diagnostics (tsc, mypy, ruff, cargo check, go vet) |
 | `orphan [--json]` | Dead-code candidates with confidence tiers |
 | `hotspots` | High-density files ranked by complexity |
 | `doctor [--lsp]` | Health check: parsers, runtime, LSP availability |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
+| `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |
+| `ready` | Pre-commit readiness: verify + check + format in one command |
 
 ---
 
@@ -104,7 +114,9 @@ repomap routes --project . --with-consumers           # API consumer map
 repomap call-chain --project . --symbol refreshToken
 
 # After editing
-repomap verify --project .                            # full evidence gate; LSP runs by default
+repomap verify --project .                            # full evidence gate (incl. missed-files)
+repomap fix --project .                               # auto-fix lint issues
+repomap ready --project .                             # pre-commit readiness check
 repomap check --project .                             # compiler diagnostics
 repomap orphan --project . --min-confidence 70        # dead code check
 ```

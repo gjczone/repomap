@@ -8,7 +8,7 @@
 
 - **Shape**: Python package (`src/`) with CLI binary
 - **Core capability**: tree-sitter AST → symbol extraction → import resolution → call-chain analysis → AI-friendly reports
-- **Languages**: Python, JS/TS (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, HTML, CSS, JSON
+- **Languages**: Python, JS/TS (including TSX), Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, Lua, HTML, CSS, JSON, YAML, Bash
 - **Distribution**: skill (`skills/repomap/`) + CLI binary (`repomap`)
 - **No server/daemon**: LSP integration is opt-in, local-only, stdio-based
 
@@ -19,22 +19,24 @@ All via `repomap <subcommand> --project <path>`.
 | Command | Purpose |
 |---|---|
 | `overview` | Project map: modules, entry points, reading order, hotspots, key symbols |
-| `query --query "keyword"` | Topic/feature discovery by business words |
+| `query --query "keyword"` | Topic/feature discovery with adaptive fallback (never empty) |
 | `search --query "text"` | BM25 semantic symbol search with keyword fallback |
 | `file-detail --file-path <f>` | Symbols and structure of a known file |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning |
 | `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |
 | `call-chain --symbol <name>` | Caller/callee context |
 | `refs --symbol <name>` | Reference discovery |
-| `verify [--quick] [--with-lsp] [--with-diff]` | Post-edit evidence gate |
+| `verify [--quick] [--with-lsp] [--with-diff]` | Post-edit evidence gate with missed-files detection |
 | `check` | Compiler/type/lint diagnostics |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory + consumer mapping |
 | `state-map --symbol <name>` | Enum/const state values, writers, and readers |
 | `orphan [--json]` | Dead-code candidate discovery |
 | `hotspots` | Dense-file inventory |
 | `cache save` / `diff` | Graph baseline + comparison |
-| `lsp setup` | Auto-install LSP servers for detected languages (supports 13 languages) |
+| `lsp setup` | Auto-install LSP servers for detected languages (supports 18 languages) |
 | `doctor` | Validate runtime + check LSP availability with `--lsp` |
+| `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |
+| `ready` | Pre-commit readiness check (verify + check + format) |
 
 ```bash
 # Run from source

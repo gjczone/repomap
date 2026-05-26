@@ -180,7 +180,7 @@ class SubprocessBackend:
             return []
 
     @staticmethod
-    def log_commits_grouped(project_root: str, since_days: int = 90) -> list[list[str]]:
+    def log_commits_grouped(project_root: str, since_days: int = 30) -> list[list[str]]:
         """返回按 commit 分组的文件列表，用于共变分析。每个子列表是一个 commit 修改的文件。"""
         try:
             r = SubprocessBackend._run_git(
@@ -485,7 +485,7 @@ class Pygit2Backend:
             return []
 
     @staticmethod
-    def log_commits_grouped(project_root: str, since_days: int = 90) -> list[list[str]]:
+    def log_commits_grouped(project_root: str, since_days: int = 30) -> list[list[str]]:
         """返回按 commit 分组的文件列表，用于共变分析。"""
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
@@ -691,5 +691,5 @@ class GitBackend:
     def file_authors(self, file_path: str) -> list[str]:
         return self._backend.file_authors(self.project_root, file_path)
 
-    def log_commits_grouped(self, since_days: int = 90) -> list[list[str]]:
+    def log_commits_grouped(self, since_days: int = 30) -> list[list[str]]:
         return self._backend.log_commits_grouped(self.project_root, since_days)

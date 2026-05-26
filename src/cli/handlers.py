@@ -628,6 +628,7 @@ def run_overview(
     with_heat: bool = False,
     with_co_change: bool = False,
     granularity: str = "auto",
+    co_change_days: int = 30,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -661,6 +662,7 @@ def run_overview(
                 with_heat=with_heat,
                 with_co_change=with_co_change,
                 granularity=granularity,
+                co_change_days=co_change_days,
             )
         )
         return 0
@@ -1124,6 +1126,8 @@ def run_query(
 
         # 过滤搜索范围
         candidate_files = list(engine.graph.file_symbols.keys())
+        allowed: set[str] = set()
+        excluded: set[str] = set()
         if paths:
             allowed = {
                 _normalize_path_prefix(engine.project_root, p)
@@ -1176,6 +1180,82 @@ def run_query(
         )
 
         matches.sort(key=lambda m: (-m.score, m.path))
+
+        # Fallback: expand query keywords if too few direct matches
+        is_fallback = False
+        if len(matches) < 3:
+            words = query.lower().split()
+            expanded_keywords = expand_keywords(words)
+            expanded_terms = [kw for kw, _ in expanded_keywords]
+            if len(expanded_terms) > len(words):
+                expanded_query = " ".join(expanded_terms)
+                expanded_kw_weights = compute_keyword_weights(
+                    expanded_query.lower().split(), candidate_files, engine.graph
+                )
+                expanded_matches: list[FileMatch] = []
+                for file_path in candidate_files:
+                    file_data = analysis.get(file_path, {})
+                    score = topic_score(
+                        expanded_query,
+                        file_path,
+                        file_data,
+                        engine.graph,
+                        keyword_weights=expanded_kw_weights,
+                    )
+                    if score > 0:
+                        role = classify_file_role(file_path, engine.graph)
+                        reasons = _build_match_reasons(
+                            expanded_query,
+                            file_path,
+                            engine.graph,
+                            engine.list_routes(),
+                        )
+                        expanded_matches.append(
+                            FileMatch(
+                                path=file_path, role=role, score=score, reasons=reasons
+                            )
+                        )
+                expanded_matches = _propagate_call_neighbor_scores(
+                    expanded_matches, candidate_files, engine.graph
+                )
+                expanded_matches.sort(key=lambda m: (-m.score, m.path))
+                if len(expanded_matches) > len(matches):
+                    matches = expanded_matches
+                    is_fallback = True
+
+            # If still too few results, fall back to hotspots
+            if len(matches) < 3:
+                hotspot_entries = engine.hotspots(20)
+                hotspot_matches: list[FileMatch] = []
+                for entry in hotspot_entries:
+                    file_path = entry["file"]
+                    # Respect path filters
+                    if allowed and not any(
+                        _path_matches_prefix(file_path, a) for a in allowed
+                    ):
+                        continue
+                    if excluded and any(
+                        _path_matches_prefix(file_path, e) for e in excluded
+                    ):
+                        continue
+                    if no_tests and is_test_like_file(file_path):
+                        continue
+                    hotspot_matches.append(
+                        FileMatch(
+                            path=file_path,
+                            role="hotspot",
+                            score=float(entry.get("symbol_count", 0)),
+                            reasons=["(fallback — no direct matches found)"],
+                        )
+                    )
+                if hotspot_matches:
+                    matches = hotspot_matches
+                    is_fallback = True
+            else:
+                if is_fallback:
+                    for m in matches:
+                        m.reasons.append("(fallback — no direct matches found)")
+
         top_matches = matches[:max_result_files]
 
         # 找相关测试
@@ -1420,15 +1500,19 @@ def _query_symbols_json(
         for sym in _rank_symbols_for_file(engine, m.path):
             if len(result) >= max_symbols:
                 break
-            result.append(
-                {
-                    "name": sym["name"],
-                    "kind": sym["kind"],
-                    "file": m.path,
-                    "line": sym["line"],
-                    "role": classify_file_role(m.path, engine.graph),
-                }
-            )
+            entry: dict[str, Any] = {
+                "name": sym["name"],
+                "kind": sym["kind"],
+                "file": m.path,
+                "line": sym["line"],
+                "role": classify_file_role(m.path, engine.graph),
+            }
+            sym_end = sym.get("end_line", sym["line"])
+            if sym_end > 0:
+                entry["endLine"] = sym_end
+            if (sym_end - sym["line"]) > 100:
+                entry["chunkRange"] = f"L{sym['line']}-L{sym_end}"
+            result.append(entry)
     return result
 
 
@@ -1531,6 +1615,78 @@ def _impact_lsp_hint(
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 
 
+def _impact_type_level(
+    engine: RepoMapEngine,
+    target_files: list[str],
+) -> list[dict[str, Any]]:
+    """Detect type-level impact: return type / parameter type changes for exported symbols."""
+    results: list[dict[str, Any]] = []
+
+    for f in target_files:
+        for sid in engine.graph.file_symbols.get(f, []):
+            sym = engine.graph.symbols.get(sid)
+            if sym is None:
+                continue
+
+            # Check if symbol has callers outside the changed files
+            target_set = set(target_files)
+            external_callers: list[str] = []
+            for edge in engine.graph.incoming.get(sid, []):
+                caller = engine.graph.symbols.get(edge.source)
+                if caller and caller.file not in target_set:
+                    external_callers.append(f"{caller.name} ({caller.file})")
+
+            if not external_callers:
+                continue
+
+            entry: dict[str, Any] = {
+                "symbol": sym.name,
+                "file": sym.file,
+                "line": sym.line,
+                "kind": sym.kind,
+                "affected_callers": external_callers[:10],
+                "return_type_changed": False,
+                "param_type_changed": False,
+                "note": "",
+            }
+
+            # Compare symbol signature with what callers might expect
+            if sym.return_type:
+                for edge in engine.graph.incoming.get(sid, []):
+                    caller = engine.graph.symbols.get(edge.source)
+                    if (
+                        caller
+                        and caller.return_type
+                        and caller.return_type != sym.return_type
+                    ):
+                        entry["return_type_changed"] = True
+                        entry["note"] = (
+                            f"Return type `{sym.return_type}` may not match "
+                            f"caller `{caller.name}` expectation `{caller.return_type}`"
+                        )
+                        break
+
+            if sym.signature:
+                for edge in engine.graph.incoming.get(sid, []):
+                    caller = engine.graph.symbols.get(edge.source)
+                    if (
+                        caller
+                        and caller.signature
+                        and caller.signature != sym.signature
+                    ):
+                        entry["param_type_changed"] = True
+                        if not entry["note"]:
+                            entry["note"] = (
+                                f"Signature `{sym.signature}` may conflict with "
+                                f"caller `{caller.name}` signature `{caller.signature}`"
+                            )
+                        break
+
+            results.append(entry)
+
+    return results
+
+
 def run_impact(
     project: str,
     max_files: int,
@@ -1617,6 +1773,9 @@ def run_impact(
         # 风险评估
         risk_level, risk_notes = _assess_risk(target_files, set(affected_files), engine)
 
+        # Type-level impact analysis
+        type_impacts = _impact_type_level(engine, target_files)
+
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
         # 按影响严重程度排序：受影响文件中符号的外部调用者越多越靠前
         affected_list.sort(
@@ -1667,6 +1826,7 @@ def run_impact(
                     "keySymbols": key_symbols,
                     "readNext": read_next,
                     "lspHint": lsp_hint,
+                    "typeImpacts": type_impacts,
                 },
             }
             print(json_dumps(payload, ensure_ascii=False, indent=2))
@@ -1685,6 +1845,22 @@ def run_impact(
                 lsp_hint=lsp_hint,
             )
         )
+        # Print type-level impacts
+        if type_impacts:
+            print("\n## Type-Level Impact\n")
+            for ti in type_impacts:
+                print(f"- **{ti['symbol']}** (`{ti['file']}:{ti['line']}`)")
+                if ti.get("return_type_changed"):
+                    print("  - Return type may differ from callers' expectations")
+                if ti.get("param_type_changed"):
+                    print("  - Parameter types may differ from callers' expectations")
+                if ti.get("affected_callers"):
+                    print(
+                        f"  - Affected callers: {', '.join(ti['affected_callers'][:5])}"
+                    )
+                if ti.get("note"):
+                    print(f"  - {ti['note']}")
+                print("")
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
@@ -2187,6 +2363,61 @@ def _overall_verify_status(
     return "passed"
 
 
+def _print_missed_files_section(
+    engine: RepoMapEngine,
+    changed_files: list[str],
+) -> None:
+    """Print potentially missed files: callers not in diff + co-change neighbors."""
+    print("\n### Potentially missed files\n")
+
+    # 1. For each changed file's symbols, find callers NOT in the git diff
+    changed_set = set(changed_files)
+    missed_callers: dict[str, list[str]] = {}
+    for f in changed_files:
+        for sid in engine.graph.file_symbols.get(f, []):
+            sym = engine.graph.symbols.get(sid)
+            if sym is None:
+                continue
+            for edge in engine.graph.incoming.get(sid, []):
+                caller = engine.graph.symbols.get(edge.source)
+                if caller and caller.file not in changed_set:
+                    missed_callers.setdefault(caller.file, []).append(
+                        f"{sym.name} (via {caller.name})"
+                    )
+
+    if missed_callers:
+        print("Callers of changed symbols NOT in git diff:")
+        for caller_file, reasons in sorted(missed_callers.items()):
+            unique_reasons = list(dict.fromkeys(reasons))[:3]
+            print(f"  - `{caller_file}` — called by: {', '.join(unique_reasons)}")
+    else:
+        print("  (no callers outside git diff)")
+
+    # 2. Co-change neighbors
+    try:
+        from ..topic import get_co_change_neighbors
+
+        co_change_found = False
+        for f in changed_files:
+            neighbors = get_co_change_neighbors(str(engine.project_root), f, top_n=3)
+            if neighbors:
+                if not co_change_found:
+                    print(
+                        "\nCo-change neighbors (files that frequently change together):"
+                    )
+                    co_change_found = True
+                for neighbor_file, count in neighbors:
+                    if neighbor_file not in changed_set:
+                        print(
+                            f"  - `{neighbor_file}` — co-changed {count} times with `{f}`"
+                        )
+        if not co_change_found:
+            print("\n  (no co-change neighbors found)")
+    except Exception:
+        pass
+    print("")
+
+
 def run_verify(
     project: str,
     as_json: bool,
@@ -2316,6 +2547,10 @@ def run_verify(
                     "> Suggestion: use `repomap overview` for project structure or `repomap check` for compilation checks.",
                     file=sys.stderr,
                 )
+
+        # Potentially missed files section
+        if changed_files and not as_json:
+            _print_missed_files_section(engine, changed_files)
 
         return 1 if status == "failed" else 0
     except Exception as exc:
@@ -3171,18 +3406,33 @@ def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
         engine = _scan_engine(project, max_files)
         results = engine.search_symbols(query, top_k)
         if not results:
+            # Fallback: use hotspots when no symbol matches found
+            hotspot_entries = engine.hotspots(10)
+            if hotspot_entries:
+                lines = ["(fallback — no direct matches found)\n"]
+                lines.append(f"## Hotspot files (no symbol matches for `{query}`)\n")
+                for entry in hotspot_entries:
+                    lines.append(
+                        f"- `{entry['file']}` — {entry['symbol_count']} symbols, "
+                        f"semantic density: {entry['semantic_symbol_count']}"
+                    )
+                print("\n".join(lines))
+                return 0
             print(f"> No symbols found for query: `{query}`")
             return EXIT_NO_RESULTS
 
-        from ..search import _HAS_BM25
+        from ..search import _HAS_BM25, _symbol_is_large
 
         backend = "BM25" if _HAS_BM25 else "keyword"
         lines = [f"Found {len(results)} symbols (backend: {backend})\n"]
         lines.append(f"## Search results for `{query}`\n")
         for sym, score in results:
             pr = sym.pagerank * 1000
+            loc = f"`{sym.file}:{sym.line}`"
+            if _symbol_is_large(sym):
+                loc += f" (L{sym.line}-L{max(sym.end_line, sym.line)})"
             lines.append(
-                f"- **{sym.name}** ({sym.kind}) `{sym.file}:{sym.line}` score={score:.2f} PR={pr:.1f}"
+                f"- **{sym.name}** ({sym.kind}) {loc} score={score:.2f} PR={pr:.1f}"
             )
             if sym.return_type:
                 lines.append(f"  - returns: `{sym.return_type}`")
@@ -3192,4 +3442,137 @@ def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] search failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def run_fix(project: str, dry_run: bool = False) -> int:
+    """Auto-fix: ruff --fix, eslint --fix, etc."""
+    try:
+        project_root = _resolve_project(project)
+
+        fixes_applied: list[str] = []
+
+        # Try ruff
+        try:
+            result = subprocess.run(
+                ["ruff", "check", "--fix", str(project_root)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode == 0:
+                fixes_applied.append("ruff --fix")
+        except Exception:
+            pass
+
+        # Try eslint
+        try:
+            result = subprocess.run(
+                ["eslint", "--fix", f"{project_root}/**/*.{{js,ts,jsx,tsx}}"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                shell=True,
+            )
+            if result.returncode == 0:
+                fixes_applied.append("eslint --fix")
+        except Exception:
+            pass
+
+        if fixes_applied:
+            print(f"Applied: {', '.join(fixes_applied)}")
+        else:
+            print("No auto-fixable issues found.")
+        return 0
+    except Exception as exc:
+        print(f"[{CLI_NAME}] fix failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def run_ready(project: str) -> int:
+    """Quick readiness check: verify --quick + check + ruff format --check."""
+    try:
+        project_root = _resolve_project(project)
+
+        print("=" * 60)
+        print("Ready Check")
+        print("=" * 60)
+
+        # 1. Quick verify (risk-only)
+        print("\n--- Step 1: verify --quick ---")
+        verify_ok = True
+        try:
+            verify_rc = run_verify(
+                project=project_root,
+                as_json=False,
+                types=None,
+                max_issues=50,
+                resolve_symbols=True,
+                with_lsp=False,
+                lsp_timeout=8.0,
+                lsp_max_files=20,
+                with_diff=False,
+                quick=True,
+                incremental=False,
+            )
+            if verify_rc != 0:
+                verify_ok = False
+        except Exception as exc:
+            print(f"  verify skipped: {exc}")
+            verify_ok = False
+
+        # 2. Check (compiler/static analysis)
+        print("\n--- Step 2: check ---")
+        check_ok = True
+        try:
+            check_rc = run_check(
+                project=project_root,
+                types=None,
+                max_issues=50,
+                since_commit=None,
+                modified_files=None,
+                resolve_symbols=True,
+                with_lsp=False,
+                lsp_timeout=8.0,
+                lsp_max_files=20,
+            )
+            if check_rc != 0:
+                check_ok = False
+        except Exception as exc:
+            print(f"  check skipped: {exc}")
+            check_ok = False
+
+        # 3. ruff format --check
+        print("\n--- Step 3: ruff format --check ---")
+        format_ok = True
+        try:
+            result = subprocess.run(
+                ["ruff", "format", "--check", str(project_root)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode == 0:
+                print("  Format check passed.")
+            else:
+                print(
+                    f"  Format check failed. Run `ruff format {project_root}` to fix."
+                )
+                format_ok = False
+        except Exception:
+            print("  ruff not available, skipping format check.")
+
+        # Summary
+        print("\n" + "=" * 60)
+        print("Ready Check Summary")
+        print("=" * 60)
+        all_ok = verify_ok and check_ok and format_ok
+        print(f"  verify --quick: {'PASS' if verify_ok else 'FAIL'}")
+        print(f"  check:         {'PASS' if check_ok else 'FAIL'}")
+        print(f"  format:        {'PASS' if format_ok else 'SKIP/FAIL'}")
+        print(f"\n  Overall: {'READY' if all_ok else 'NOT READY'}")
+
+        return 0 if all_ok else 1
+    except Exception as exc:
+        print(f"[{CLI_NAME}] ready failed: {exc}", file=sys.stderr)
         return 1

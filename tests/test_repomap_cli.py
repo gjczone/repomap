@@ -1417,7 +1417,7 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def run():\n    return 1\n")
 
-            def fake_co_change_section(engine):
+            def fake_co_change_section(engine, co_change_days=30):
                 src.ai.get_co_change_neighbors(str(engine.project_root), "main.py")
                 return ["## Implicit Coupling (Git Co-change)\n"]
 
