@@ -116,9 +116,10 @@ LSP-backed commands use local LSP servers by default when available. All command
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `state-map --symbol <name>` | Enum/const state values, writers, readers |
 | `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, missed-files detection |
-| `check [--no-lsp]` | Compiler/type/lint diagnostics (tsc, mypy, ruff, cargo check, go vet) |
+| `check [--no-lsp]` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
 | `orphan [--json]` | Dead-code candidates with confidence tiers |
 | `hotspots` | High-density files ranked by complexity |
+| `cache save` / `diff` | Graph baseline save + comparison against baseline |
 | `doctor [--lsp]` | Health check: parsers, runtime, LSP availability |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
 | `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |

@@ -121,6 +121,7 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `check [--no-lsp]` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
 | `orphan [--json]` | 死代码候选发现，含置信度分级 |
 | `hotspots` | 按复杂度排名的高密度文件 |
+| `cache save` / `diff` | 图基线保存 + 与基线对比 |
 | `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
 | `lsp setup [--dry-run]` | 自动安装缺失的 LSP 服务器 |
 
