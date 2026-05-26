@@ -147,6 +147,7 @@ def _read_file_with_encoding_fallback(raw_bytes: bytes) -> tuple[bytes, str | No
     Returns (utf8_bytes, detected_encoding) where detected_encoding is None
     if the content was already valid UTF-8 without significant replacement chars.
     """
+
     # Quality helper: count U+FFFD replacement chars
     def _replacement_ratio(text: str) -> float:
         if not text:
@@ -194,6 +195,8 @@ def _read_file_with_encoding_fallback(raw_bytes: bytes) -> tuple[bytes, str | No
     text = raw_bytes.decode("utf-8", errors="replace")
     logger.warning("Using UTF-8 with replacement chars as last resort")
     return text.encode("utf-8"), "utf-8-replace"
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 核心引擎（协调层）
 # ═══════════════════════════════════════════════════════════════════════════════

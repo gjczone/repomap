@@ -558,7 +558,9 @@ def _file_to_module_path(file_path: str) -> str:
 _co_change_cache: dict[str, dict[tuple[str, str], int]] = {}
 
 
-def get_co_change_score(project_root: str, file_a: str, file_b: str, since_days: int = 30) -> int:
+def get_co_change_score(
+    project_root: str, file_a: str, file_b: str, since_days: int = 30
+) -> int:
     """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
     cache = _co_change_cache.get(project_root)
     if cache is None:
@@ -596,7 +598,9 @@ def get_co_change_neighbors(
     return sorted(neighbors.items(), key=lambda x: -x[1])[:top_n]
 
 
-def _load_co_change_scores(project_root: str, since_days: int = 30) -> dict[tuple[str, str], int]:
+def _load_co_change_scores(
+    project_root: str, since_days: int = 30
+) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
     from .git_backend import GitBackend
 

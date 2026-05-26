@@ -1851,9 +1851,9 @@ def run_impact(
             for ti in type_impacts:
                 print(f"- **{ti['symbol']}** (`{ti['file']}:{ti['line']}`)")
                 if ti.get("return_type_changed"):
-                    print(f"  - Return type may differ from callers' expectations")
+                    print("  - Return type may differ from callers' expectations")
                 if ti.get("param_type_changed"):
-                    print(f"  - Parameter types may differ from callers' expectations")
+                    print("  - Parameter types may differ from callers' expectations")
                 if ti.get("affected_callers"):
                     print(
                         f"  - Affected callers: {', '.join(ti['affected_callers'][:5])}"
@@ -3492,7 +3492,6 @@ def run_fix(project: str, dry_run: bool = False) -> int:
 def run_ready(project: str) -> int:
     """Quick readiness check: verify --quick + check + ruff format --check."""
     try:
-        from itertools import chain
 
         project_root = _resolve_project(project)
 
