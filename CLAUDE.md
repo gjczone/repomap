@@ -57,7 +57,18 @@ src/                    # Python package (flat)
 │   ├── __init__.py
 │   ├── __main__.py        # python -m repomap entry
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~410 lines)
-│   └── handlers.py        # All run_* command implementations + shared helpers (~3500 lines)
+│   ├── handlers.py         # Shared helpers: constants, scan engine, session cache, symbol resolution
+│   └── commands/           # Per-command-group implementations (~2900 lines)
+│       ├── overview.py     # run_overview, run_scan, run_hotspots
+│       ├── query.py        # run_query, run_search
+│       ├── symbol.py       # run_call_chain, run_refs, run_query_symbol, run_file_detail, run_state_map
+│       ├── impact.py       # run_impact + edit-planning helpers
+│       ├── verify.py       # run_verify, run_check, run_orphan + evidence-gate helpers
+│       ├── cache.py        # run_cache, run_diff
+│       ├── routes.py       # run_routes
+│       ├── fix.py          # run_fix, run_ready
+│       ├── doctor.py       # run_doctor, run_lsp_doctor, run_lsp_setup
+│       └── build.py        # run_build_binary
 ├── gitignore.py            # GitignoreParser: pathspec-based file filtering
 ├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
@@ -94,7 +105,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Type inference**: `src/type_inference.py` → `query-symbol` return_type/params (10 languages)
 - **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
-- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch) + `src/cli/handlers.py` (run_* implementations) → add subparser in cli.py, implement handler in handlers.py, render via `src/ai.py`
+- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run_* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
