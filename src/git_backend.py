@@ -14,6 +14,7 @@ Git 操作统一后端 — 优先使用 pygit2（libgit2 绑定），fallback �
   - pygit2 未安装：自动 fallback 到 subprocess
   - pygit2 版本不兼容：捕获异常后 fallback
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ logger = logging.getLogger("repomap.git_backend")
 _HAS_PYGIT2 = False
 try:
     import pygit2
+
     _HAS_PYGIT2 = True
 except ImportError:
     pygit2 = None  # type: ignore[assignment]
@@ -36,16 +38,23 @@ class SubprocessBackend:
     """基于 subprocess 的 git 操作后端（原有实现）。"""
 
     @staticmethod
-    def _run_git(args: list[str], cwd: str, timeout: int = 10) -> subprocess.CompletedProcess[str]:
+    def _run_git(
+        args: list[str], cwd: str, timeout: int = 10
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["git"] + args,
-            cwd=cwd, capture_output=True, text=True, timeout=timeout,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     @staticmethod
     def rev_parse_head(project_root: str) -> str | None:
         try:
-            r = SubprocessBackend._run_git(["rev-parse", "HEAD"], project_root, timeout=5)
+            r = SubprocessBackend._run_git(
+                ["rev-parse", "HEAD"], project_root, timeout=5
+            )
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
@@ -53,7 +62,9 @@ class SubprocessBackend:
     @staticmethod
     def show_toplevel(project_root: str) -> str | None:
         try:
-            r = SubprocessBackend._run_git(["rev-parse", "--show-toplevel"], project_root, timeout=5)
+            r = SubprocessBackend._run_git(
+                ["rev-parse", "--show-toplevel"], project_root, timeout=5
+            )
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
@@ -62,13 +73,17 @@ class SubprocessBackend:
     def changed_files(project_root: str) -> list[str]:
         files: list[str] = []
         try:
-            r = SubprocessBackend._run_git(["diff", "--name-only", "HEAD"], project_root)
+            r = SubprocessBackend._run_git(
+                ["diff", "--name-only", "HEAD"], project_root
+            )
             if r.returncode == 0:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
         except Exception:
             pass
         try:
-            r = SubprocessBackend._run_git(["ls-files", "--others", "--exclude-standard"], project_root)
+            r = SubprocessBackend._run_git(
+                ["ls-files", "--others", "--exclude-standard"], project_root
+            )
             if r.returncode == 0:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
         except Exception:
@@ -78,8 +93,14 @@ class SubprocessBackend:
     @staticmethod
     def deleted_files(project_root: str) -> list[str]:
         try:
-            r = SubprocessBackend._run_git(["diff", "--name-only", "--diff-filter=D", "HEAD"], project_root)
-            return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []
+            r = SubprocessBackend._run_git(
+                ["diff", "--name-only", "--diff-filter=D", "HEAD"], project_root
+            )
+            return (
+                [l for l in r.stdout.strip().splitlines() if l]
+                if r.returncode == 0
+                else []
+            )
         except Exception:
             return []
 
@@ -92,15 +113,25 @@ class SubprocessBackend:
                     return []
                 args += [since, "HEAD"]
             r = SubprocessBackend._run_git(args, project_root)
-            return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []
+            return (
+                [l for l in r.stdout.strip().splitlines() if l]
+                if r.returncode == 0
+                else []
+            )
         except Exception:
             return []
 
     @staticmethod
     def diff_cached_name_only(project_root: str) -> list[str]:
         try:
-            r = SubprocessBackend._run_git(["diff", "--cached", "--name-only"], project_root)
-            return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []
+            r = SubprocessBackend._run_git(
+                ["diff", "--cached", "--name-only"], project_root
+            )
+            return (
+                [l for l in r.stdout.strip().splitlines() if l]
+                if r.returncode == 0
+                else []
+            )
         except Exception:
             return []
 
@@ -108,7 +139,11 @@ class SubprocessBackend:
     def status_porcelain(project_root: str) -> list[str]:
         try:
             r = SubprocessBackend._run_git(["status", "--porcelain"], project_root)
-            return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []
+            return (
+                [l for l in r.stdout.strip().splitlines() if l]
+                if r.returncode == 0
+                else []
+            )
         except Exception:
             return []
 
@@ -116,7 +151,14 @@ class SubprocessBackend:
     def log_name_only(project_root: str, since: str = "90.days.ago") -> list[str]:
         try:
             r = SubprocessBackend._run_git(
-                ["log", "--name-only", "--pretty=format:", f"--since={since}", "--", "."],
+                [
+                    "log",
+                    "--name-only",
+                    "--pretty=format:",
+                    f"--since={since}",
+                    "--",
+                    ".",
+                ],
                 project_root,
             )
             return [l for l in r.stdout.strip().splitlines() if l]
@@ -130,7 +172,11 @@ class SubprocessBackend:
                 ["diff", "--name-only", f"HEAD@{{{days}.days ago}}", "HEAD", "--", "."],
                 project_root,
             )
-            return [l for l in r.stdout.strip().splitlines() if l] if r.returncode == 0 else []
+            return (
+                [l for l in r.stdout.strip().splitlines() if l]
+                if r.returncode == 0
+                else []
+            )
         except Exception:
             return []
 
@@ -139,8 +185,16 @@ class SubprocessBackend:
         """返回按 commit 分组的文件列表，用于共变分析。每个子列表是一个 commit 修改的文件。"""
         try:
             r = SubprocessBackend._run_git(
-                ["log", "--name-only", "--pretty=format:", f"--since={since_days}.days.ago", "--", "."],
-                project_root, timeout=30,
+                [
+                    "log",
+                    "--name-only",
+                    "--pretty=format:",
+                    f"--since={since_days}.days.ago",
+                    "--",
+                    ".",
+                ],
+                project_root,
+                timeout=30,
             )
             if r.returncode != 0:
                 return []
@@ -161,11 +215,14 @@ class SubprocessBackend:
             return []
 
     @staticmethod
-    def blame_line(project_root: str, file_path: str, line: int) -> dict[str, str] | None:
+    def blame_line(
+        project_root: str, file_path: str, line: int
+    ) -> dict[str, str] | None:
         try:
             r = SubprocessBackend._run_git(
                 ["blame", "-L", f"{line},{line}", "-p", str(file_path)],
-                project_root, timeout=10,
+                project_root,
+                timeout=10,
             )
             if r.returncode != 0:
                 return None
@@ -176,11 +233,21 @@ class SubprocessBackend:
             return None
 
     @staticmethod
-    def log_file_commits(project_root: str, file_path: str, limit: int = 20) -> list[dict[str, str]]:
+    def log_file_commits(
+        project_root: str, file_path: str, limit: int = 20
+    ) -> list[dict[str, str]]:
         try:
             r = SubprocessBackend._run_git(
-                ["log", "--follow", f"-{limit}", "--format=%H|%an|%ad|%s", "--", str(file_path)],
-                project_root, timeout=10,
+                [
+                    "log",
+                    "--follow",
+                    f"-{limit}",
+                    "--format=%H|%an|%ad|%s",
+                    "--",
+                    str(file_path),
+                ],
+                project_root,
+                timeout=10,
             )
             commits = []
             if r.returncode == 0:
@@ -188,12 +255,14 @@ class SubprocessBackend:
                     if "|" in line:
                         parts = line.split("|", 3)
                         if len(parts) >= 4:
-                            commits.append({
-                                "hash": parts[0][:8],
-                                "author": parts[1],
-                                "date": parts[2],
-                                "message": parts[3],
-                            })
+                            commits.append(
+                                {
+                                    "hash": parts[0][:8],
+                                    "author": parts[1],
+                                    "date": parts[2],
+                                    "message": parts[3],
+                                }
+                            )
             return commits
         except Exception:
             return []
@@ -203,7 +272,8 @@ class SubprocessBackend:
         try:
             r = SubprocessBackend._run_git(
                 ["shortlog", "-sn", "--", str(file_path)],
-                project_root, timeout=5,
+                project_root,
+                timeout=5,
             )
             authors = []
             if r.returncode == 0:
@@ -270,7 +340,10 @@ class Pygit2Backend:
             for fp, flags in status.items():
                 if flags & pygit2.GIT_STATUS_IGNORED:
                     continue
-                is_changed = bool(flags & (pygit2.GIT_STATUS_INDEX_MODIFIED | pygit2.GIT_STATUS_WT_MODIFIED))
+                is_changed = bool(
+                    flags
+                    & (pygit2.GIT_STATUS_INDEX_MODIFIED | pygit2.GIT_STATUS_WT_MODIFIED)
+                )
                 is_new_wt = bool(flags & pygit2.GIT_STATUS_WT_NEW)
                 is_new_idx = bool(flags & pygit2.GIT_STATUS_INDEX_NEW)
                 if is_changed or is_new_wt or is_new_idx:
@@ -288,7 +361,10 @@ class Pygit2Backend:
             files: list[str] = []
             status = repo.status()
             for fp, flags in status.items():
-                is_deleted = bool(flags & (pygit2.GIT_STATUS_INDEX_DELETED | pygit2.GIT_STATUS_WT_DELETED))
+                is_deleted = bool(
+                    flags
+                    & (pygit2.GIT_STATUS_INDEX_DELETED | pygit2.GIT_STATUS_WT_DELETED)
+                )
                 if is_deleted:
                     files.append(fp)
             return files
@@ -304,7 +380,9 @@ class Pygit2Backend:
             return []
         try:
             if since and repo.head.target:
-                since_commit = repo.revparse_single(since.split("..")[0] if ".." in since else since)
+                since_commit = repo.revparse_single(
+                    since.split("..")[0] if ".." in since else since
+                )
                 head = repo.get(repo.head.target)
                 diff = repo.diff(since_commit.tree, head.tree)
             else:
@@ -336,7 +414,14 @@ class Pygit2Backend:
                 if flags & pygit2.GIT_STATUS_IGNORED:
                     lines.append(f"!! {fp}")
                     continue
-                if flags & pygit2.GIT_STATUS_WT_NEW and not (flags & (pygit2.GIT_STATUS_INDEX_NEW | pygit2.GIT_STATUS_INDEX_MODIFIED | pygit2.GIT_STATUS_INDEX_DELETED)):
+                if flags & pygit2.GIT_STATUS_WT_NEW and not (
+                    flags
+                    & (
+                        pygit2.GIT_STATUS_INDEX_NEW
+                        | pygit2.GIT_STATUS_INDEX_MODIFIED
+                        | pygit2.GIT_STATUS_INDEX_DELETED
+                    )
+                ):
                     lines.append(f"?? {fp}")
                     continue
                 x = " "
@@ -378,8 +463,10 @@ class Pygit2Backend:
         try:
             files: set[str] = set()
             import time as _time
+
             now = _time.time()
             import re as _re
+
             _m = _re.match(r"(\d+)\.days\.ago", since)
             since_days = int(_m.group(1)) if _m else 90
             since_seconds = int(now) - since_days * 86400
@@ -406,6 +493,7 @@ class Pygit2Backend:
             return []
         try:
             import time as _time
+
             since_seconds = int(_time.time()) - since_days * 86400
             groups: list[list[str]] = []
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
@@ -430,6 +518,7 @@ class Pygit2Backend:
             return []
         try:
             import time as _time
+
             since_seconds = int(_time.time()) - days * 86400
             files: set[str] = set()
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
@@ -448,7 +537,9 @@ class Pygit2Backend:
             return []
 
     @staticmethod
-    def blame_line(project_root: str, file_path: str, line: int) -> dict[str, str] | None:
+    def blame_line(
+        project_root: str, file_path: str, line: int
+    ) -> dict[str, str] | None:
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return None
@@ -464,7 +555,9 @@ class Pygit2Backend:
         return None
 
     @staticmethod
-    def log_file_commits(project_root: str, file_path: str, limit: int = 20) -> list[dict[str, str]]:
+    def log_file_commits(
+        project_root: str, file_path: str, limit: int = 20
+    ) -> list[dict[str, str]]:
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
@@ -478,24 +571,31 @@ class Pygit2Backend:
                     diff = commit.tree.diff_to_tree(swap=True)
                     for d in diff.deltas:
                         if d.new_file.path == file_path or d.old_file.path == file_path:
-                            commits.append({
-                                "hash": str(commit.id)[:8],
-                                "author": commit.author.name,
-                                "date": commit.commit_time,
-                                "message": commit.message.split("\n")[0],
-                            })
+                            commits.append(
+                                {
+                                    "hash": str(commit.id)[:8],
+                                    "author": commit.author.name,
+                                    "date": commit.commit_time,
+                                    "message": commit.message.split("\n")[0],
+                                }
+                            )
                             break
                 else:
                     for parent in commit.parents:
                         diff = repo.diff(parent.tree, commit.tree)
                         for d in diff.deltas:
-                            if d.new_file.path == file_path or d.old_file.path == file_path:
-                                commits.append({
-                                    "hash": str(commit.id)[:8],
-                                    "author": commit.author.name,
-                                    "date": commit.commit_time,
-                                    "message": commit.message.split("\n")[0],
-                                })
+                            if (
+                                d.new_file.path == file_path
+                                or d.old_file.path == file_path
+                            ):
+                                commits.append(
+                                    {
+                                        "hash": str(commit.id)[:8],
+                                        "author": commit.author.name,
+                                        "date": commit.commit_time,
+                                        "message": commit.message.split("\n")[0],
+                                    }
+                                )
                                 break
                         else:
                             continue
@@ -525,7 +625,9 @@ class Pygit2Backend:
                 if touched:
                     name = commit.author.name
                     author_counts[name] = author_counts.get(name, 0) + 1
-            sorted_authors = sorted(author_counts.items(), key=lambda x: x[1], reverse=True)
+            sorted_authors = sorted(
+                author_counts.items(), key=lambda x: x[1], reverse=True
+            )
             return [a[0] for a in sorted_authors]
         except Exception:
             return []
@@ -540,7 +642,9 @@ class GitBackend:
             try:
                 repo = Pygit2Backend._repo(project_root)
                 if repo is not None:
-                    self._backend: type[Pygit2Backend] | type[SubprocessBackend] = Pygit2Backend
+                    self._backend: type[Pygit2Backend] | type[SubprocessBackend] = (
+                        Pygit2Backend
+                    )
                     logger.debug("Using pygit2 backend for %s", project_root)
                     return
             except Exception:

@@ -26,25 +26,43 @@ _CONSUMER_PATTERNS: dict[str, list[tuple[str, int]]] = {
     "javascript": [
         (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
         (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+        (
+            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
+            1,
+        ),
         (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
     ],
     "typescript": [
         (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
         (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+        (
+            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
+            1,
+        ),
         (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
     ],
     "tsx": [
         (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
         (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+        (
+            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
+            1,
+        ),
         (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
     ],
     "python": [
-        (r"""requests\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""", 1),
-        (r"""httpx\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""", 1),
-        (r"""client\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""", 1),
+        (
+            r"""requests\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""",
+            1,
+        ),
+        (
+            r"""httpx\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""",
+            1,
+        ),
+        (
+            r"""client\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""",
+            1,
+        ),
         (r"""\.get\s*\(\s*['"](/[^'"]*)['"]""", 1),  # test client
         (r"""\.post\s*\(\s*['"](/[^'"]*)['"]""", 1),
     ],
@@ -200,7 +218,10 @@ def find_route_consumers(
                     # Prefix match (route literal starts with route path prefix)
                     if not route_key and "{" in route_norm:
                         prefix = route_norm.rsplit("/{", 1)[0]
-                        if route_literal.startswith(prefix) and len(route_literal) > len(prefix) + 1:
+                        if (
+                            route_literal.startswith(prefix)
+                            and len(route_literal) > len(prefix) + 1
+                        ):
                             confidence = "low"
                             match_type = "prefix_concatenation"
                             route_key = f"{route.method} {route_lit}"

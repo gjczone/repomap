@@ -154,10 +154,14 @@ def classify_file_role(file_path: str, graph: "RepoGraph | None" = None) -> str:
         return "frontend-ui"
     if any(p in path for p in ["/stores/", "/hooks/"]):
         return "frontend-state"
-    if any(p in path for p in ["/server/", "/routes/", "/api/"]
-           ) or path.startswith("server/"):
+    if any(p in path for p in ["/server/", "/routes/", "/api/"]) or path.startswith(
+        "server/"
+    ):
         return "backend"
-    if any(path.endswith(ext) for ext in [".config.ts", ".config.js", ".config.tsx", "package.json"]):
+    if any(
+        path.endswith(ext)
+        for ext in [".config.ts", ".config.js", ".config.tsx", "package.json"]
+    ):
         return "config"
 
     # Use symbol information for more precise classification
@@ -171,8 +175,12 @@ def classify_file_role(file_path: str, graph: "RepoGraph | None" = None) -> str:
                     kind_counts[symbol.kind] = kind_counts.get(symbol.kind, 0) + 1
 
             # Many exported symbols → core module
-            exported_count = sum(1 for sid in symbol_ids
-                               if graph.symbols.get(sid) and graph.symbols[sid].visibility == "exported")
+            exported_count = sum(
+                1
+                for sid in symbol_ids
+                if graph.symbols.get(sid)
+                and graph.symbols[sid].visibility == "exported"
+            )
             if exported_count >= 3:
                 return "core"
 
@@ -195,7 +203,7 @@ def classify_file_role(file_path: str, graph: "RepoGraph | None" = None) -> str:
 # 标识符拆分
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_CAMEL_SPLIT_RE = re.compile(r'([A-Z][a-z0-9]+|[a-z0-9]+|[A-Z0-9]+(?=[A-Z]|$))')
+_CAMEL_SPLIT_RE = re.compile(r"([A-Z][a-z0-9]+|[a-z0-9]+|[A-Z0-9]+(?=[A-Z]|$))")
 
 
 def split_identifier(name: str) -> list[str]:
@@ -245,7 +253,11 @@ def topic_score(
 
         # Path hit: 30 for original, 15 for synonym
         if kw in path_lower:
-            score += (15 if is_synonym else 30) * (2.0 if kw in file_name else 1.0) * kw_weight
+            score += (
+                (15 if is_synonym else 30)
+                * (2.0 if kw in file_name else 1.0)
+                * kw_weight
+            )
 
         # Filename hit: 25/12, including tokenized match 15/8
         if kw in file_name:
@@ -295,7 +307,11 @@ def compute_keyword_weights(
             path_lower = f.lower()
             file_name = PurePosixPath(f).stem.lower()
             tokens = split_identifier(PurePosixPath(f).stem)
-            if kw_lower in path_lower or kw_lower in file_name or any(kw_lower in t for t in tokens):
+            if (
+                kw_lower in path_lower
+                or kw_lower in file_name
+                or any(kw_lower in t for t in tokens)
+            ):
                 matched += 1
                 continue
             for sid in graph.file_symbols.get(f, []):
@@ -326,7 +342,14 @@ def is_test_like_file(file_path: str) -> bool:
     name = path.name.lower()
     if any(part.lower() in {"test", "tests", "__tests__"} for part in path.parts):
         return True
-    return name.startswith("test_") or name.endswith("_test.py") or name.endswith(".spec.ts") or name.endswith(".test.ts") or name.endswith(".test.tsx") or name.endswith(".spec.tsx")
+    return (
+        name.startswith("test_")
+        or name.endswith("_test.py")
+        or name.endswith(".spec.ts")
+        or name.endswith(".test.ts")
+        or name.endswith(".test.tsx")
+        or name.endswith(".spec.tsx")
+    )
 
 
 def _is_boilerplate_test(file_path: str) -> bool:
@@ -363,7 +386,8 @@ def find_related_tests(
     """根据目标文件查找相关测试（5 级优先级匹配）。"""
     results: list[TestMatch] = []
     test_files = [
-        f for f in graph.file_symbols
+        f
+        for f in graph.file_symbols
         if is_test_like_file(f) and not _is_boilerplate_test(f)
     ]
     if not test_files:
@@ -379,26 +403,38 @@ def find_related_tests(
 
             # 策略1: 文件名强匹配（high confidence）
             if test_bare == target_bare:
-                results.append(TestMatch(
-                    test_file, target, "high",
-                    "exact filename match",
-                ))
+                results.append(
+                    TestMatch(
+                        test_file,
+                        target,
+                        "high",
+                        "exact filename match",
+                    )
+                )
                 continue
 
             # 策略2: 路径邻近匹配（medium confidence）
             if _share_test_dir(test_file, target):
-                results.append(TestMatch(
-                    test_file, target, "medium",
-                    "same test directory",
-                ))
+                results.append(
+                    TestMatch(
+                        test_file,
+                        target,
+                        "medium",
+                        "same test directory",
+                    )
+                )
                 continue
 
             # 策略3: import 路径命中（high confidence）
             if _test_imports_target(test_file, target, graph):
-                results.append(TestMatch(
-                    test_file, target, "high",
-                    "test imports target module",
-                ))
+                results.append(
+                    TestMatch(
+                        test_file,
+                        target,
+                        "high",
+                        "test imports target module",
+                    )
+                )
                 continue
 
             # 策略4: 符号边命中（medium confidence）
@@ -409,10 +445,14 @@ def find_related_tests(
                     if edge.target in target_symbol_ids:
                         target_sym = graph.symbols.get(edge.target)
                         sym_name = target_sym.name if target_sym else "?"
-                        results.append(TestMatch(
-                            test_file, target, "medium",
-                            f"test references {sym_name}",
-                        ))
+                        results.append(
+                            TestMatch(
+                                test_file,
+                                target,
+                                "medium",
+                                f"test references {sym_name}",
+                            )
+                        )
                         found = True
                         break
                 if found:
@@ -421,10 +461,14 @@ def find_related_tests(
                 # 策略5: git 共变更历史（medium confidence）
                 co_score = _get_co_change_score(project_root, test_file, target)
                 if co_score >= 3:
-                    results.append(TestMatch(
-                        test_file, target, "medium",
-                        f"git co-changed {co_score} times",
-                    ))
+                    results.append(
+                        TestMatch(
+                            test_file,
+                            target,
+                            "medium",
+                            f"git co-changed {co_score} times",
+                        )
+                    )
 
     return _dedupe_test_matches(results)
 
@@ -458,6 +502,7 @@ def _dedupe_test_matches(matches: list[TestMatch]) -> list[TestMatch]:
         if score(match) > score(best[key]):
             best[key] = match
     return [best[key] for key in order]
+
 
 def _share_test_dir(test_file: str, target: str) -> bool:
     """检查测试文件和目标文件是否在同一目录下（含 __tests__ 相邻目录）。"""
@@ -528,7 +573,9 @@ _get_co_change_score = get_co_change_score
 
 
 def get_co_change_neighbors(
-    project_root: str, file_path: str, top_n: int = 5,
+    project_root: str,
+    file_path: str,
+    top_n: int = 5,
 ) -> list[tuple[str, int]]:
     """返回与指定文件共变频率最高的文件列表（降序）。
 
@@ -551,6 +598,7 @@ def get_co_change_neighbors(
 def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
     from .git_backend import GitBackend
+
     scores: dict[tuple[str, str], int] = defaultdict(int)
     try:
         git = GitBackend(project_root)
@@ -579,7 +627,11 @@ def _signal_weight_for_symbol(sym: Any) -> float:
     """独立版符号信号权重，不依赖 GraphAnalyzer 实例。"""
     kind = getattr(sym, "kind", "") if hasattr(sym, "kind") else sym.get("kind", "")
     name = getattr(sym, "name", "") if hasattr(sym, "name") else sym.get("name", "")
-    visibility = getattr(sym, "visibility", "") if hasattr(sym, "visibility") else sym.get("visibility", "")
+    visibility = (
+        getattr(sym, "visibility", "")
+        if hasattr(sym, "visibility")
+        else sym.get("visibility", "")
+    )
     if kind in LOW_SIGNAL_KINDS:
         return 0.002
     if name in {"__init__", "__main__"}:
@@ -630,14 +682,16 @@ def find_untested_symbols(
         score = incoming * sw * 5.0
         if score < min_score:
             continue
-        untested.append({
-            "symbol": getattr(sym, "name", str(sid)),
-            "kind": getattr(sym, "kind", ""),
-            "file": getattr(sym, "file", ""),
-            "line": getattr(sym, "line", 0),
-            "incoming_calls": incoming,
-            "risk_score": round(score, 1),
-        })
+        untested.append(
+            {
+                "symbol": getattr(sym, "name", str(sid)),
+                "kind": getattr(sym, "kind", ""),
+                "file": getattr(sym, "file", ""),
+                "line": getattr(sym, "line", 0),
+                "incoming_calls": incoming,
+                "risk_score": round(score, 1),
+            }
+        )
 
     untested.sort(key=lambda x: -x["risk_score"])
     return untested[:max_results]

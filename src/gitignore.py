@@ -9,7 +9,9 @@ import pathspec
 _cache: dict[str, "GitignoreParser"] = {}
 
 
-def get_gitignore(project_root: str | Path, extra_patterns: list[str] | None = None) -> "GitignoreParser":
+def get_gitignore(
+    project_root: str | Path, extra_patterns: list[str] | None = None
+) -> "GitignoreParser":
     root = str(Path(project_root).resolve())
     key = f"{root}\x00{tuple(extra_patterns or [])}"
     if key not in _cache:
@@ -83,7 +85,9 @@ class GitignoreParser:
     按所在目录的层级叠加，子目录规则覆盖父目录。
     """
 
-    def __init__(self, project_root: str | Path, extra_patterns: list[str] | None = None) -> None:
+    def __init__(
+        self, project_root: str | Path, extra_patterns: list[str] | None = None
+    ) -> None:
         self.project_root = Path(project_root).resolve()
         self._specs: list[tuple[Path, pathspec.PathSpec]] = []
         self._base_spec: pathspec.PathSpec = pathspec.PathSpec.from_lines(
@@ -141,7 +145,11 @@ class GitignoreParser:
         for rel_dir, spec in self._specs:
             if not self._is_ancestor(rel_dir, path):
                 continue
-            spec_path = path.relative_to(rel_dir).as_posix() if rel_dir.as_posix() != "." else path_str
+            spec_path = (
+                path.relative_to(rel_dir).as_posix()
+                if rel_dir.as_posix() != "."
+                else path_str
+            )
             if self._match_spec(spec, spec_path):
                 return True
         return False

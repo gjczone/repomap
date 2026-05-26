@@ -74,9 +74,10 @@ class LspRunResult:
 @dataclass
 class LspSymbolInfo:
     """LSP documentSymbol 返回的符号树节点。"""
+
     name: str
-    kind: int           # LSP SymbolKind 整数
-    kind_name: str      # 可读名称："class", "function", "method", ...
+    kind: int  # LSP SymbolKind 整数
+    kind_name: str  # 可读名称："class", "function", "method", ...
     file: str
     line: int
     end_line: int = 0
@@ -89,10 +90,11 @@ class LspSymbolInfo:
 @dataclass
 class LspHoverInfo:
     """LSP hover 返回的符号类型/文档信息。"""
+
     file: str
     line: int
     col: int
-    contents: str = ""       # 纯文本格式的 hover 内容
+    contents: str = ""  # 纯文本格式的 hover 内容
 
 
 LSP_SPECS: tuple[LspServerSpec, ...] = (
@@ -211,10 +213,21 @@ def specs_for_language(language: str) -> list[LspServerSpec]:
     return [spec for spec in LSP_SPECS if spec.language == language]
 
 
-def detect_project_languages(project_root: str | Path, max_files: int = 2000) -> list[str]:
+def detect_project_languages(
+    project_root: str | Path, max_files: int = 2000
+) -> list[str]:
     root = Path(project_root).resolve()
     languages: set[str] = set()
-    skip_dirs = {".git", "node_modules", "dist", "build", ".venv", "venv", "target", "__pycache__"}
+    skip_dirs = {
+        ".git",
+        "node_modules",
+        "dist",
+        "build",
+        ".venv",
+        "venv",
+        "target",
+        "__pycache__",
+    }
     seen = 0
     for current_root, dir_names, file_names in os.walk(root):
         dir_names[:] = [name for name in dir_names if name not in skip_dirs]
@@ -228,10 +241,14 @@ def detect_project_languages(project_root: str | Path, max_files: int = 2000) ->
     return sorted(languages)
 
 
-def detect_lsp_workspace_root(project_root: str | Path, file_path: str | Path | None, language: str) -> Path:
+def detect_lsp_workspace_root(
+    project_root: str | Path, file_path: str | Path | None, language: str
+) -> Path:
     root = Path(project_root).resolve()
     specs = specs_for_language(language)
-    markers: tuple[str, ...] = tuple(dict.fromkeys(marker for spec in specs for marker in spec.root_markers))
+    markers: tuple[str, ...] = tuple(
+        dict.fromkeys(marker for spec in specs for marker in spec.root_markers)
+    )
     if not file_path:
         return root
     path = Path(file_path)
@@ -279,7 +296,9 @@ def _npm_prefix_bin(command_name: str) -> list[Path]:
         return []
     if completed.returncode != 0:
         return []
-    prefix = completed.stdout.strip().splitlines()[0] if completed.stdout.strip() else ""
+    prefix = (
+        completed.stdout.strip().splitlines()[0] if completed.stdout.strip() else ""
+    )
     if not prefix or prefix.lower() == "undefined":
         return []
     prefix_path = Path(prefix).expanduser()
@@ -317,12 +336,20 @@ def _trusted_user_lsp_candidates(command_name: str) -> list[Path]:
     return _dedupe_paths(candidates)
 
 
-def detect_lsp_server(project_root: str | Path, language: str, file_path: str | Path | None = None) -> LspServerDetection:
+def detect_lsp_server(
+    project_root: str | Path, language: str, file_path: str | Path | None = None
+) -> LspServerDetection:
     root = Path(project_root).resolve()
     workspace_root = detect_lsp_workspace_root(root, file_path, language)
     specs = specs_for_language(language)
     if not specs:
-        return LspServerDetection(language, "", "missing", workspace_root=str(workspace_root), reason="unsupported language")
+        return LspServerDetection(
+            language,
+            "",
+            "missing",
+            workspace_root=str(workspace_root),
+            reason="unsupported language",
+        )
     for spec in specs:
         for candidate in spec.project_relative_candidates:
             candidate_path = workspace_root / candidate
@@ -365,9 +392,13 @@ def detect_lsp_server(project_root: str | Path, language: str, file_path: str | 
     )
 
 
-def detect_lsp_servers(project_root: str | Path, languages: list[str] | None = None) -> list[LspServerDetection]:
+def detect_lsp_servers(
+    project_root: str | Path, languages: list[str] | None = None
+) -> list[LspServerDetection]:
     detected_languages = languages or detect_project_languages(project_root)
-    return [detect_lsp_server(project_root, language) for language in detected_languages]
+    return [
+        detect_lsp_server(project_root, language) for language in detected_languages
+    ]
 
 
 def _path_to_uri(path: Path) -> str:
@@ -377,6 +408,7 @@ def _path_to_uri(path: Path) -> str:
 def _uri_to_path(uri: str) -> Path:
     if uri.startswith("file://"):
         from urllib.parse import unquote, urlparse
+
         return Path(unquote(urlparse(uri).path))
     return Path(uri)
 
@@ -448,19 +480,32 @@ class StdioLspClient:
             try:
                 message = _read_lsp_message(self.process.stdout)
             except Exception as exc:
-                self._messages.put({"method": "$/repomapReadError", "params": {"message": str(exc)}})
+                self._messages.put(
+                    {"method": "$/repomapReadError", "params": {"message": str(exc)}}
+                )
                 return
             if message is None:
                 return
             self._messages.put(message)
 
-    def send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
+    def send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
         self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
-    def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         request_id = self._next_id
         self._next_id += 1
-        self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}})
+        self._send(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params or {},
+            }
+        )
         deadline = time.time() + self.timeout
         while time.time() < deadline:
             try:
@@ -484,7 +529,9 @@ class StdioLspClient:
                     if self.process.stderr is not None:
                         remaining = self.process.stderr.read()
                         if remaining:
-                            stderr_tail = remaining.decode("utf-8", errors="replace").strip()[-200:]
+                            stderr_tail = remaining.decode(
+                                "utf-8", errors="replace"
+                            ).strip()[-200:]
                 except Exception:
                     pass
                 detail = f"exit code {exit_code}"
@@ -535,14 +582,18 @@ class StdioLspClient:
             },
         )
 
-    def _position_params(self, file_path: Path, line: int, character: int) -> dict[str, Any]:
+    def _position_params(
+        self, file_path: Path, line: int, character: int
+    ) -> dict[str, Any]:
         return {
             "textDocument": {"uri": _path_to_uri(file_path)},
             "position": {"line": line, "character": character},
         }
 
     def definition(self, file_path: Path, line: int, character: int) -> Any:
-        response = self.request("textDocument/definition", self._position_params(file_path, line, character))
+        response = self.request(
+            "textDocument/definition", self._position_params(file_path, line, character)
+        )
         if "error" in response:
             raise RuntimeError(str(response["error"]))
         return response.get("result")
@@ -556,20 +607,25 @@ class StdioLspClient:
         return response.get("result")
 
     def hover(self, file_path: Path, line: int, character: int) -> Any:
-        response = self.request("textDocument/hover", self._position_params(file_path, line, character))
+        response = self.request(
+            "textDocument/hover", self._position_params(file_path, line, character)
+        )
         if "error" in response:
             raise RuntimeError(str(response["error"]))
         return response.get("result")
 
     def document_symbols(self, file_path: Path) -> Any:
-        response = self.request("textDocument/documentSymbol", {
-            "textDocument": {"uri": _path_to_uri(file_path)}
-        })
+        response = self.request(
+            "textDocument/documentSymbol",
+            {"textDocument": {"uri": _path_to_uri(file_path)}},
+        )
         if "error" in response:
             raise RuntimeError(str(response["error"]))
         return response.get("result")
 
-    def collect_diagnostics(self, file_paths: list[Path], language: str) -> list[dict[str, Any]]:
+    def collect_diagnostics(
+        self, file_paths: list[Path], language: str
+    ) -> list[dict[str, Any]]:
         expected_uris = {_path_to_uri(path) for path in file_paths}
         diagnostics: list[dict[str, Any]] = []
         deadline = time.time() + self.timeout
@@ -635,7 +691,9 @@ def _severity_name(value: int | None) -> str:
     return {1: "error", 2: "warning", 3: "info", 4: "info"}.get(value or 3, "info")
 
 
-def _diagnostic_from_lsp(project_root: Path, params: dict[str, Any], item: dict[str, Any]) -> LspDiagnostic:
+def _diagnostic_from_lsp(
+    project_root: Path, params: dict[str, Any], item: dict[str, Any]
+) -> LspDiagnostic:
     file_path = _uri_to_path(params.get("uri", ""))
     try:
         rel_file = file_path.resolve().relative_to(project_root).as_posix()
@@ -678,21 +736,29 @@ def collect_lsp_diagnostics(
     for language, abs_files in sorted(by_language.items()):
         detection = detect_lsp_server(root, language, abs_files[0])
         if detection.status != "available":
-            results.append(LspRunResult(
-                server=detection.server_name or language,
-                language=language,
-                status="skipped",
-                workspace_root=detection.workspace_root,
-                reason=detection.reason,
-            ))
+            results.append(
+                LspRunResult(
+                    server=detection.server_name or language,
+                    language=language,
+                    status="skipped",
+                    workspace_root=detection.workspace_root,
+                    reason=detection.reason,
+                )
+            )
             continue
         start = time.time()
         try:
             workspace_root = Path(detection.workspace_root)
-            with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+            with StdioLspClient(
+                detection.command, workspace_root, timeout=timeout
+            ) as client:
                 client.initialize()
                 for abs_file in abs_files:
-                    client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
+                    client.did_open(
+                        abs_file,
+                        language,
+                        abs_file.read_text(encoding="utf-8", errors="replace"),
+                    )
                 raw_diagnostics = client.collect_diagnostics(abs_files, language)
             diagnostics = [
                 _diagnostic_from_lsp(root, params, item)
@@ -700,43 +766,58 @@ def collect_lsp_diagnostics(
                 for item in params.get("diagnostics", [])
             ]
             exit_code_status = "ok"
-            results.append(LspRunResult(
-                server=detection.server_name,
-                language=language,
-                status=exit_code_status,
-                diagnostics=diagnostics,
-                command=detection.command,
-                workspace_root=detection.workspace_root,
-                duration_ms=int((time.time() - start) * 1000),
-            ))
+            results.append(
+                LspRunResult(
+                    server=detection.server_name,
+                    language=language,
+                    status=exit_code_status,
+                    diagnostics=diagnostics,
+                    command=detection.command,
+                    workspace_root=detection.workspace_root,
+                    duration_ms=int((time.time() - start) * 1000),
+                )
+            )
         except TimeoutError as exc:
-            results.append(LspRunResult(
-                server=detection.server_name,
-                language=language,
-                status="timeout",
-                command=detection.command,
-                workspace_root=detection.workspace_root,
-                reason=str(exc),
-                duration_ms=int((time.time() - start) * 1000),
-            ))
+            results.append(
+                LspRunResult(
+                    server=detection.server_name,
+                    language=language,
+                    status="timeout",
+                    command=detection.command,
+                    workspace_root=detection.workspace_root,
+                    reason=str(exc),
+                    duration_ms=int((time.time() - start) * 1000),
+                )
+            )
         except Exception as exc:
-            results.append(LspRunResult(
-                server=detection.server_name,
-                language=language,
-                status="failed",
-                command=detection.command,
-                workspace_root=detection.workspace_root,
-                reason=str(exc),
-                duration_ms=int((time.time() - start) * 1000),
-            ))
+            results.append(
+                LspRunResult(
+                    server=detection.server_name,
+                    language=language,
+                    status="failed",
+                    command=detection.command,
+                    workspace_root=detection.workspace_root,
+                    reason=str(exc),
+                    duration_ms=int((time.time() - start) * 1000),
+                )
+            )
     if not results:
-        results.append(LspRunResult(server="lsp", language="unknown", status="skipped", reason="no supported files"))
+        results.append(
+            LspRunResult(
+                server="lsp",
+                language="unknown",
+                status="skipped",
+                reason="no supported files",
+            )
+        )
     return results
 
 
 def _location_from_lsp(project_root: Path, item: dict[str, Any]) -> LspLocation | None:
     uri = item.get("uri") or item.get("targetUri")
-    raw_range = item.get("range") or item.get("targetSelectionRange") or item.get("targetRange")
+    raw_range = (
+        item.get("range") or item.get("targetSelectionRange") or item.get("targetRange")
+    )
     if not uri or not isinstance(raw_range, dict):
         return None
     file_path = _uri_to_path(str(uri))
@@ -767,7 +848,13 @@ def _normalize_lsp_locations(project_root: Path, value: Any) -> list[LspLocation
         location = _location_from_lsp(project_root, raw_item)
         if location is None:
             continue
-        key = (location.file, location.line, location.col, location.end_line, location.end_col)
+        key = (
+            location.file,
+            location.line,
+            location.col,
+            location.end_line,
+            location.end_col,
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -775,7 +862,9 @@ def _normalize_lsp_locations(project_root: Path, value: Any) -> list[LspLocation
     return locations
 
 
-def _symbol_position(project_root: Path, file_path: str, line: int, symbol_name: str) -> tuple[Path, int, int]:
+def _symbol_position(
+    project_root: Path, file_path: str, line: int, symbol_name: str
+) -> tuple[Path, int, int]:
     abs_file = (project_root / file_path).resolve()
     zero_based_line = max(0, line - 1)
     character = 0
@@ -800,10 +889,19 @@ def collect_lsp_symbol_evidence(
     root = Path(project_root).resolve()
     language = language_for_file(file_path)
     if not language:
-        return LspRunResult(server="lsp", language="unknown", status="skipped", reason="unsupported file type")
-    abs_file, line_index, character = _symbol_position(root, file_path, line, symbol_name)
+        return LspRunResult(
+            server="lsp",
+            language="unknown",
+            status="skipped",
+            reason="unsupported file type",
+        )
+    abs_file, line_index, character = _symbol_position(
+        root, file_path, line, symbol_name
+    )
     if not abs_file.exists() or not abs_file.is_file():
-        return LspRunResult(server="lsp", language=language, status="skipped", reason="file not found")
+        return LspRunResult(
+            server="lsp", language=language, status="skipped", reason="file not found"
+        )
     detection = detect_lsp_server(root, language, abs_file)
     if detection.status != "available":
         return LspRunResult(
@@ -816,11 +914,21 @@ def collect_lsp_symbol_evidence(
     start = time.time()
     try:
         workspace_root = Path(detection.workspace_root)
-        with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+        with StdioLspClient(
+            detection.command, workspace_root, timeout=timeout
+        ) as client:
             client.initialize()
-            client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
-            definitions = _normalize_lsp_locations(root, client.definition(abs_file, line_index, character))
-            references = _normalize_lsp_locations(root, client.references(abs_file, line_index, character))
+            client.did_open(
+                abs_file,
+                language,
+                abs_file.read_text(encoding="utf-8", errors="replace"),
+            )
+            definitions = _normalize_lsp_locations(
+                root, client.definition(abs_file, line_index, character)
+            )
+            references = _normalize_lsp_locations(
+                root, client.references(abs_file, line_index, character)
+            )
         return LspRunResult(
             server=detection.server_name,
             language=language,
@@ -855,12 +963,32 @@ def collect_lsp_symbol_evidence(
 
 # ── LSP SymbolKind 整数 → 可读名称 ───────────────────────────────────────────
 _LSP_SYMBOL_KIND_NAMES: dict[int, str] = {
-    1: "file", 2: "module", 3: "namespace", 4: "package", 5: "class",
-    6: "method", 7: "property", 8: "field", 9: "constructor", 10: "enum",
-    11: "interface", 12: "function", 13: "variable", 14: "constant",
-    15: "string", 16: "number", 17: "boolean", 18: "array", 19: "object",
-    20: "key", 21: "null", 22: "enum member", 23: "struct", 24: "event",
-    25: "operator", 26: "type parameter",
+    1: "file",
+    2: "module",
+    3: "namespace",
+    4: "package",
+    5: "class",
+    6: "method",
+    7: "property",
+    8: "field",
+    9: "constructor",
+    10: "enum",
+    11: "interface",
+    12: "function",
+    13: "variable",
+    14: "constant",
+    15: "string",
+    16: "number",
+    17: "boolean",
+    18: "array",
+    19: "object",
+    20: "key",
+    21: "null",
+    22: "enum member",
+    23: "struct",
+    24: "event",
+    25: "operator",
+    26: "type parameter",
 }
 
 
@@ -889,18 +1017,20 @@ def _parse_lsp_symbol_tree(project_root: Path, raw: Any) -> list[LspSymbolInfo]:
         children = _parse_lsp_symbol_tree(project_root, item.get("children", []))
         line = int(start.get("line", 0)) + 1
         end_line = int(end.get("line", start.get("line", 0))) + 1
-        result.append(LspSymbolInfo(
-            name=name,
-            kind=kind,
-            kind_name=_LSP_SYMBOL_KIND_NAMES.get(kind, f"kind{kind}"),
-            file="",
-            line=line,
-            end_line=end_line,
-            col=int(start.get("character", 0)) + 1,
-            end_col=int(end.get("character", start.get("character", 0))) + 1,
-            detail=item.get("detail", ""),
-            children=children,
-        ))
+        result.append(
+            LspSymbolInfo(
+                name=name,
+                kind=kind,
+                kind_name=_LSP_SYMBOL_KIND_NAMES.get(kind, f"kind{kind}"),
+                file="",
+                line=line,
+                end_line=end_line,
+                col=int(start.get("character", 0)) + 1,
+                end_col=int(end.get("character", start.get("character", 0))) + 1,
+                detail=item.get("detail", ""),
+                children=children,
+            )
+        )
     return result
 
 
@@ -959,9 +1089,15 @@ def collect_lsp_symbol_tree(
         return []
     try:
         workspace_root = Path(detection.workspace_root)
-        with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+        with StdioLspClient(
+            detection.command, workspace_root, timeout=timeout
+        ) as client:
             client.initialize()
-            client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
+            client.did_open(
+                abs_file,
+                language,
+                abs_file.read_text(encoding="utf-8", errors="replace"),
+            )
             raw = client.document_symbols(abs_file)
         tree = _parse_lsp_symbol_tree(root, raw)
         # 回填 file 字段
@@ -992,7 +1128,9 @@ def collect_lsp_hover(
     language = language_for_file(file_path)
     if not language:
         return None
-    abs_file, line_index, character = _symbol_position(root, file_path, line, symbol_name)
+    abs_file, line_index, character = _symbol_position(
+        root, file_path, line, symbol_name
+    )
     if not abs_file.exists() or not abs_file.is_file():
         return None
     detection = detect_lsp_server(root, language, abs_file)
@@ -1000,9 +1138,15 @@ def collect_lsp_hover(
         return None
     try:
         workspace_root = Path(detection.workspace_root)
-        with StdioLspClient(detection.command, workspace_root, timeout=timeout) as client:
+        with StdioLspClient(
+            detection.command, workspace_root, timeout=timeout
+        ) as client:
             client.initialize()
-            client.did_open(abs_file, language, abs_file.read_text(encoding="utf-8", errors="replace"))
+            client.did_open(
+                abs_file,
+                language,
+                abs_file.read_text(encoding="utf-8", errors="replace"),
+            )
             raw = client.hover(abs_file, line_index, character)
         return LspHoverInfo(
             file=file_path,
@@ -1030,17 +1174,57 @@ def compute_name_paths(
 
 LSP_INSTALL_STRATEGIES: dict[str, dict[str, str]] = {
     "python": {"tool": "uv", "cmd": "uv pip install pyright", "detect": ".venv"},
-    "typescript": {"tool": "npm", "cmd": "npm install -g typescript-language-server typescript", "detect": "package.json"},
-    "rust": {"tool": "rustup", "cmd": "rustup component add rust-analyzer", "detect": "Cargo.toml"},
-    "go": {"tool": "go", "cmd": "go install golang.org/x/tools/gopls@latest", "detect": "go.mod"},
-    "cpp": {"tool": "apt/brew", "cmd": "clangd (system package: apt install clangd-12 / brew install llvm)", "detect": "compile_commands.json"},
-    "csharp": {"tool": "dotnet", "cmd": "dotnet tool install --global csharp-ls", "detect": "*.csproj"},
-    "java": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall jdtls", "detect": "pom.xml"},
-    "lua": {"tool": "npm", "cmd": "npm install -g lua-language-server", "detect": ".luarc.json"},
-    "php": {"tool": "npm", "cmd": "npm install -g intelephense", "detect": "composer.json"},
+    "typescript": {
+        "tool": "npm",
+        "cmd": "npm install -g typescript-language-server typescript",
+        "detect": "package.json",
+    },
+    "rust": {
+        "tool": "rustup",
+        "cmd": "rustup component add rust-analyzer",
+        "detect": "Cargo.toml",
+    },
+    "go": {
+        "tool": "go",
+        "cmd": "go install golang.org/x/tools/gopls@latest",
+        "detect": "go.mod",
+    },
+    "cpp": {
+        "tool": "apt/brew",
+        "cmd": "clangd (system package: apt install clangd-12 / brew install llvm)",
+        "detect": "compile_commands.json",
+    },
+    "csharp": {
+        "tool": "dotnet",
+        "cmd": "dotnet tool install --global csharp-ls",
+        "detect": "*.csproj",
+    },
+    "java": {
+        "tool": "mason/nvim",
+        "cmd": "nvim +MasonInstall jdtls",
+        "detect": "pom.xml",
+    },
+    "lua": {
+        "tool": "npm",
+        "cmd": "npm install -g lua-language-server",
+        "detect": ".luarc.json",
+    },
+    "php": {
+        "tool": "npm",
+        "cmd": "npm install -g intelephense",
+        "detect": "composer.json",
+    },
     "ruby": {"tool": "gem", "cmd": "gem install ruby-lsp", "detect": "Gemfile"},
-    "swift": {"tool": "xcode", "cmd": "sourcekit-lsp (included with Xcode on macOS / Swift toolchain on Linux)", "detect": "Package.swift"},
-    "kotlin": {"tool": "mason/nvim", "cmd": "nvim +MasonInstall kotlin-language-server", "detect": "build.gradle"},
+    "swift": {
+        "tool": "xcode",
+        "cmd": "sourcekit-lsp (included with Xcode on macOS / Swift toolchain on Linux)",
+        "detect": "Package.swift",
+    },
+    "kotlin": {
+        "tool": "mason/nvim",
+        "cmd": "nvim +MasonInstall kotlin-language-server",
+        "detect": "build.gradle",
+    },
 }
 
 

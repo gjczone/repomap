@@ -35,7 +35,9 @@ class StateDefinition:
 
 def _read_file(project_root: str, file_path: str) -> str | None:
     try:
-        with open(f"{project_root}/{file_path}", "r", encoding="utf-8", errors="replace") as f:
+        with open(
+            f"{project_root}/{file_path}", "r", encoding="utf-8", errors="replace"
+        ) as f:
             return f.read(131072)
     except (OSError, UnicodeDecodeError):
         return None
@@ -99,7 +101,9 @@ def find_state_definitions(
     return results
 
 
-def _scan_rust_state(defn: StateDefinition, sym, content: str, lines: list[str], engine):
+def _scan_rust_state(
+    defn: StateDefinition, sym, content: str, lines: list[str], engine
+):
     """Extract Rust enum variants and match/write sites."""
     # Find enum variants with line numbers by scanning from symbol line
     in_enum = False
@@ -115,7 +119,9 @@ def _scan_rust_state(defn: StateDefinition, sym, content: str, lines: list[str],
                 if after_brace.strip():
                     m = re.match(r"^\s*(\w+)\s*(?:=|,)", after_brace.strip())
                     if m and m.group(1) not in ("pub", "use", "where", "impl"):
-                        defn.values.append(StateValue(name=m.group(1), file=defn.file, line=i + 1))
+                        defn.values.append(
+                            StateValue(name=m.group(1), file=defn.file, line=i + 1)
+                        )
                 continue
             continue
         for ch in line:
@@ -130,17 +136,23 @@ def _scan_rust_state(defn: StateDefinition, sym, content: str, lines: list[str],
         if brace_depth == 1:
             m = re.match(r"^\s*(\w+)\s*(?:=|,)", line)
             if m and m.group(1) not in ("pub", "use", "where", "impl"):
-                defn.values.append(StateValue(name=m.group(1), file=defn.file, line=i + 1))
+                defn.values.append(
+                    StateValue(name=m.group(1), file=defn.file, line=i + 1)
+                )
 
     variant_names = {v.name for v in defn.values}
     for i, line in enumerate(lines, 1):
         for vname in variant_names:
             pattern = rf"{sym.name}::{vname}\b"
             if re.search(pattern, line):
-                defn.writers.append(StateValue(name=f"{sym.name}::{vname}", file=defn.file, line=i))
+                defn.writers.append(
+                    StateValue(name=f"{sym.name}::{vname}", file=defn.file, line=i)
+                )
     for i, line in enumerate(lines, 1):
         if f"{sym.name}::" in line:
-            defn.readers.append(StateValue(name=line.strip()[:80], file=defn.file, line=i))
+            defn.readers.append(
+                StateValue(name=line.strip()[:80], file=defn.file, line=i)
+            )
 
 
 def _scan_ts_state(defn: StateDefinition, sym, content: str, lines: list[str], engine):
@@ -165,16 +177,22 @@ def _scan_ts_state(defn: StateDefinition, sym, content: str, lines: list[str], e
             if brace_depth == 1:
                 m = re.match(r"^\s*(\w+)\s*[=,]", line)
                 if m:
-                    defn.values.append(StateValue(name=m.group(1), file=defn.file, line=i + 1))
+                    defn.values.append(
+                        StateValue(name=m.group(1), file=defn.file, line=i + 1)
+                    )
 
     if sym.kind == "type":
         for i in range(sym.line - 1, min(sym.line + 20, len(lines))):
             line = lines[i]
             for m in re.finditer(r"(\w+)\s*:\s*['\"]([^'\"]+)['\"]", line):
-                defn.values.append(StateValue(name=m.group(2), file=defn.file, line=i + 1))
+                defn.values.append(
+                    StateValue(name=m.group(2), file=defn.file, line=i + 1)
+                )
 
 
-def _scan_python_state(defn: StateDefinition, sym, content: str, lines: list[str], engine):
+def _scan_python_state(
+    defn: StateDefinition, sym, content: str, lines: list[str], engine
+):
     """Extract Python Enum values with line numbers."""
     if sym.kind != "class":
         return
@@ -201,15 +219,19 @@ def _scan_python_state(defn: StateDefinition, sym, content: str, lines: list[str
         for vname in variant_names:
             if f"{sym.name}.{vname}" in line:
                 if "=" in line or "return" in line:
-                    defn.writers.append(StateValue(name=f"{sym.name}.{vname}", file=defn.file, line=i))
+                    defn.writers.append(
+                        StateValue(name=f"{sym.name}.{vname}", file=defn.file, line=i)
+                    )
                 else:
-                    defn.readers.append(StateValue(name=f"{sym.name}.{vname}", file=defn.file, line=i))
+                    defn.readers.append(
+                        StateValue(name=f"{sym.name}.{vname}", file=defn.file, line=i)
+                    )
 
 
 def _scan_go_state(defn: StateDefinition, sym, content: str, lines: list[str], engine):
     """Extract Go typed constants."""
     # Go: type X string; const (...) block
-    for i, line in enumerate(lines[sym.line - 1:], sym.line):
+    for i, line in enumerate(lines[sym.line - 1 :], sym.line):
         stripped = line.strip()
         if stripped.startswith("const ("):
             # Read until )
@@ -219,6 +241,8 @@ def _scan_go_state(defn: StateDefinition, sym, content: str, lines: list[str], e
                 if "=" in ct or not ct.startswith("//"):
                     name = ct.split()[0] if ct and not ct.startswith("//") else ""
                     if name and name.isidentifier():
-                        defn.values.append(StateValue(name=name, file=defn.file, line=j + 1))
+                        defn.values.append(
+                            StateValue(name=name, file=defn.file, line=j + 1)
+                        )
                 j += 1
             break

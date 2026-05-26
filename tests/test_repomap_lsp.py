@@ -57,15 +57,31 @@ class RepoMapLspTests(unittest.TestCase):
                 write_file(home, relative, "#!/bin/sh\nexit 0\n")
 
             with patch("pathlib.Path.home", return_value=home):
-                with patch("src.lsp._npm_prefix_bin", return_value=[home / ".npm-global" / "bin" / command_name]):
+                with patch(
+                    "src.lsp._npm_prefix_bin",
+                    return_value=[home / ".npm-global" / "bin" / command_name],
+                ):
                     candidates = _trusted_user_lsp_candidates(command_name)
 
-            candidate_set = {path.relative_to(home).as_posix() for path in candidates if home in path.parents}
+            candidate_set = {
+                path.relative_to(home).as_posix()
+                for path in candidates
+                if home in path.parents
+            }
             self.assertIn(".local/bin/pyright-langserver", candidate_set)
-            self.assertIn(".local/share/nvim/mason/bin/pyright-langserver", candidate_set)
-            self.assertIn(".local/share/pnpm/global/5/node_modules/.bin/pyright-langserver", candidate_set)
-            self.assertIn(".local/share/pipx/venvs/pyright/bin/pyright-langserver", candidate_set)
-            self.assertIn(".local/share/uv/tools/pyright/bin/pyright-langserver", candidate_set)
+            self.assertIn(
+                ".local/share/nvim/mason/bin/pyright-langserver", candidate_set
+            )
+            self.assertIn(
+                ".local/share/pnpm/global/5/node_modules/.bin/pyright-langserver",
+                candidate_set,
+            )
+            self.assertIn(
+                ".local/share/pipx/venvs/pyright/bin/pyright-langserver", candidate_set
+            )
+            self.assertIn(
+                ".local/share/uv/tools/pyright/bin/pyright-langserver", candidate_set
+            )
             self.assertEqual(len(candidates), len({str(path) for path in candidates}))
 
     def test_npm_prefix_bin_uses_safe_config_lookup(self) -> None:
@@ -73,7 +89,9 @@ class RepoMapLspTests(unittest.TestCase):
         with patch("subprocess.run", return_value=completed) as run_mock:
             candidates = _npm_prefix_bin("typescript-language-server")
 
-        self.assertEqual(candidates, [Path("/tmp/npm-prefix/bin/typescript-language-server")])
+        self.assertEqual(
+            candidates, [Path("/tmp/npm-prefix/bin/typescript-language-server")]
+        )
         run_mock.assert_called_once()
         self.assertEqual(run_mock.call_args.args[0], ["npm", "config", "get", "prefix"])
         self.assertEqual(run_mock.call_args.kwargs["timeout"], 2)
@@ -93,7 +111,9 @@ class RepoMapLspTests(unittest.TestCase):
             user_server.chmod(user_server.stat().st_mode | stat.S_IXUSR)
 
             with patch("shutil.which", return_value="/usr/bin/pyright-langserver"):
-                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[user_server]):
+                with patch(
+                    "src.lsp._trusted_user_lsp_candidates", return_value=[user_server]
+                ):
                     detection = detect_lsp_server(project_root, "python", "main.py")
 
             self.assertEqual(detection.status, "available")
@@ -104,9 +124,15 @@ class RepoMapLspTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "package.json", "{}")
             write_file(project_root, "apps/web/package.json", "{}")
-            write_file(project_root, "apps/web/src/App.tsx", "export function App() { return null }\n")
+            write_file(
+                project_root,
+                "apps/web/src/App.tsx",
+                "export function App() { return null }\n",
+            )
 
-            root = detect_lsp_workspace_root(project_root, "apps/web/src/App.tsx", "typescript")
+            root = detect_lsp_workspace_root(
+                project_root, "apps/web/src/App.tsx", "typescript"
+            )
 
             self.assertEqual(root, Path(project_root, "apps/web").resolve())
 
@@ -117,11 +143,15 @@ class RepoMapLspTests(unittest.TestCase):
             server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             server.chmod(server.stat().st_mode | stat.S_IXUSR)
             write_file(project_root, "package.json", "{}")
-            write_file(project_root, "src/App.tsx", "export function App() { return null }\n")
+            write_file(
+                project_root, "src/App.tsx", "export function App() { return null }\n"
+            )
 
             with patch("shutil.which", return_value=None):
                 with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
-                    detection = detect_lsp_server(project_root, "typescript", "src/App.tsx")
+                    detection = detect_lsp_server(
+                        project_root, "typescript", "src/App.tsx"
+                    )
 
             self.assertEqual(detection.status, "available")
             self.assertEqual(detection.source, "project")
@@ -136,7 +166,9 @@ class RepoMapLspTests(unittest.TestCase):
             user_server.chmod(user_server.stat().st_mode | stat.S_IXUSR)
 
             with patch("shutil.which", return_value=None):
-                with patch("src.lsp._trusted_user_lsp_candidates", return_value=[user_server]):
+                with patch(
+                    "src.lsp._trusted_user_lsp_candidates", return_value=[user_server]
+                ):
                     detection = detect_lsp_server(project_root, "python", "main.py")
 
             self.assertEqual(detection.status, "available")
@@ -153,7 +185,7 @@ class RepoMapLspTests(unittest.TestCase):
             self.assertEqual(result[0].status, "skipped")
             self.assertIn("not found", result[0].reason)
 
-    @unittest.skipIf(sys.platform == 'win32', "fake LSP server uses Unix shebang")
+    @unittest.skipIf(sys.platform == "win32", "fake LSP server uses Unix shebang")
     def test_fake_lsp_server_returns_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             server = write_file(
@@ -218,7 +250,8 @@ while True:
             self.assertEqual(len(result[0].diagnostics), 1)
             self.assertEqual(result[0].diagnostics[0].file, "src/app.ts")
             self.assertEqual(result[0].diagnostics[0].message, "fake diagnostic")
-    @unittest.skipIf(sys.platform == 'win32', "fake LSP server uses Unix shebang")
+
+    @unittest.skipIf(sys.platform == "win32", "fake LSP server uses Unix shebang")
     def test_fake_lsp_server_returns_definition_and_references(self) -> None:
         from src.lsp import collect_lsp_symbol_evidence
 
@@ -277,9 +310,15 @@ while True:
             )
             server.chmod(server.stat().st_mode | stat.S_IXUSR)
             write_file(project_root, "package.json", "{}")
-            write_file(project_root, "src/app.ts", "export function helper() { return 1; }\n\nhelper();\n")
+            write_file(
+                project_root,
+                "src/app.ts",
+                "export function helper() { return 1; }\n\nhelper();\n",
+            )
 
-            result = collect_lsp_symbol_evidence(project_root, "src/app.ts", 1, "helper", timeout=3)
+            result = collect_lsp_symbol_evidence(
+                project_root, "src/app.ts", 1, "helper", timeout=3
+            )
 
             self.assertEqual(result.status, "ok")
             self.assertEqual(result.definitions[0].file, "src/app.ts")

@@ -110,12 +110,20 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
                 self.info.calls.append((call_name, "", node.lineno))
         self.generic_visit(node)
 
-    def _visit_calls_in_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+    def _visit_calls_in_func(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> None:
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
                 call_name = self._extract_call_name(child.func)
                 if call_name:
-                    self.info.calls.append((call_name, self._current_class[-1] if self._current_class else "", child.lineno))
+                    self.info.calls.append(
+                        (
+                            call_name,
+                            self._current_class[-1] if self._current_class else "",
+                            child.lineno,
+                        )
+                    )
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -173,12 +181,16 @@ def analyze_python_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None], depth: int = 0) -> None:
+def _walk_ts_node(
+    node: Any, info: ModuleInfo, current_class: list[str | None], depth: int = 0
+) -> None:
     if depth > 50 or node.child_count == 0:
         return
 
     if node.type == "class_declaration":
-        name_node = _find_child_by_type(node, "type_identifier") or _find_child_by_type(node, "identifier")
+        name_node = _find_child_by_type(node, "type_identifier") or _find_child_by_type(
+            node, "identifier"
+        )
         if name_node:
             class_name = _node_text(name_node)
             cls = ClassInfo(class_name)
@@ -204,7 +216,9 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None], 
 
     if node.type == "variable_declarator":
         name_node = _find_child_by_type(node, "identifier")
-        val = _find_child_by_type(node, "arrow_function") or _find_child_by_type(node, "function_expression")
+        val = _find_child_by_type(node, "arrow_function") or _find_child_by_type(
+            node, "function_expression"
+        )
         if name_node and val and not current_class[0]:
             info.functions[_node_text(name_node)] = node.start_point[0] + 1
 
@@ -237,7 +251,9 @@ def _walk_ts_node(node: Any, info: ModuleInfo, current_class: list[str | None], 
     if node.type == "call_expression":
         call_name = _extract_ts_call_name(node)
         if call_name:
-            info.calls.append((call_name, current_class[0] or "", node.start_point[0] + 1))
+            info.calls.append(
+                (call_name, current_class[0] or "", node.start_point[0] + 1)
+            )
 
     for child in node.children:
         _walk_ts_node(child, info, current_class, depth + 1)
@@ -290,7 +306,9 @@ def analyze_ts_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None], depth: int = 0) -> None:
+def _walk_go_node(
+    node: Any, info: ModuleInfo, current_receiver: list[str | None], depth: int = 0
+) -> None:
     if depth > 50 or node.child_count == 0:
         return
 
@@ -317,10 +335,14 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
             for spec in spec_list.children:
                 if spec.type == "import_spec":
                     path_node = _find_child_by_type(spec, "interpreted_string_literal")
-                    alias_nodes = _find_children_by_type(spec, "identifier") + _find_children_by_type(spec, "package_identifier")
+                    alias_nodes = _find_children_by_type(
+                        spec, "identifier"
+                    ) + _find_children_by_type(spec, "package_identifier")
                     if path_node:
-                        pkg_path = _node_text(path_node).strip("\"")
-                        pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        pkg_path = _node_text(path_node).strip('"')
+                        pkg_name = (
+                            pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        )
                         if alias_nodes:
                             alias = _node_text(alias_nodes[-1])
                             info.imports[alias] = pkg_path
@@ -330,10 +352,14 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
             for child in node.children:
                 if child.type == "import_spec":
                     path_node = _find_child_by_type(child, "interpreted_string_literal")
-                    alias_nodes = _find_children_by_type(child, "identifier") + _find_children_by_type(child, "package_identifier")
+                    alias_nodes = _find_children_by_type(
+                        child, "identifier"
+                    ) + _find_children_by_type(child, "package_identifier")
                     if path_node:
-                        pkg_path = _node_text(path_node).strip("\"")
-                        pkg_name = pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        pkg_path = _node_text(path_node).strip('"')
+                        pkg_name = (
+                            pkg_path.rsplit("/", 1)[-1] if "/" in pkg_path else pkg_path
+                        )
                         if alias_nodes:
                             alias = _node_text(alias_nodes[-1])
                             info.imports[alias] = pkg_path
@@ -343,7 +369,9 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
     if node.type == "call_expression":
         call_name = _extract_go_call_name(node)
         if call_name:
-            info.calls.append((call_name, current_receiver[0] or "", node.start_point[0] + 1))
+            info.calls.append(
+                (call_name, current_receiver[0] or "", node.start_point[0] + 1)
+            )
 
     for child in node.children:
         _walk_go_node(child, info, current_receiver, depth + 1)
@@ -352,14 +380,16 @@ def _walk_go_node(node: Any, info: ModuleInfo, current_receiver: list[str | None
 def _extract_go_receiver_type(param_list: Any) -> str:
     for child in param_list.children:
         if child.type in ("parameter_declaration", "variadic_parameter_declaration"):
-            type_info = _find_child_by_type(child, "type_identifier") or \
-                        _find_child_by_type(child, "pointer_type") or \
-                        _find_child_by_type(child, "generic_type")
+            type_info = (
+                _find_child_by_type(child, "type_identifier")
+                or _find_child_by_type(child, "pointer_type")
+                or _find_child_by_type(child, "generic_type")
+            )
             if type_info:
                 text = _node_text(type_info)
                 text = text.lstrip("*")
                 if "<" in text:
-                    text = text[:text.index("<")]
+                    text = text[: text.index("<")]
                 return text
     return ""
 
@@ -409,7 +439,9 @@ def analyze_go_callgraph(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None], depth: int = 0) -> None:
+def _walk_rust_node(
+    node: Any, info: ModuleInfo, current_impl: list[str | None], depth: int = 0
+) -> None:
     if depth > 50 or node.child_count == 0:
         return
 
@@ -434,14 +466,18 @@ def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None],
                     fn_name_node = _find_child_by_type(child, "identifier")
                     if fn_name_node:
                         fn_name = _node_text(fn_name_node)
-                        info.classes[impl_type].methods[fn_name] = child.start_point[0] + 1
+                        info.classes[impl_type].methods[fn_name] = (
+                            child.start_point[0] + 1
+                        )
                 elif child.type == "declaration_list":
                     for decl_child in child.children:
                         if decl_child.type == "function_item":
                             fn_name_node = _find_child_by_type(decl_child, "identifier")
                             if fn_name_node:
                                 fn_name = _node_text(fn_name_node)
-                                info.classes[impl_type].methods[fn_name] = decl_child.start_point[0] + 1
+                                info.classes[impl_type].methods[fn_name] = (
+                                    decl_child.start_point[0] + 1
+                                )
                 _walk_rust_node(child, info, current_impl, depth + 1)
             current_impl[0] = old
             return
@@ -460,7 +496,9 @@ def _walk_rust_node(node: Any, info: ModuleInfo, current_impl: list[str | None],
     if node.type == "call_expression":
         call_name = _extract_rust_call_name(node)
         if call_name:
-            info.calls.append((call_name, current_impl[0] or "", node.start_point[0] + 1))
+            info.calls.append(
+                (call_name, current_impl[0] or "", node.start_point[0] + 1)
+            )
 
     for child in node.children:
         _walk_rust_node(child, info, current_impl, depth + 1)
@@ -537,7 +575,9 @@ def resolve_precise_edges(
             name_to_file.setdefault(fname, []).append((fpath, lineno))
         for cname, cinfo in info.classes.items():
             class_name_to_file.setdefault(cname, []).append((fpath, cinfo))
-        module_name = fpath.replace("/", ".").replace(".py", "").replace(".__init__", "")
+        module_name = (
+            fpath.replace("/", ".").replace(".py", "").replace(".__init__", "")
+        )
         module_path_map[module_name] = fpath
         parent = module_name.rsplit(".", 1)[0] if "." in module_name else ""
         if parent:
@@ -548,12 +588,21 @@ def resolve_precise_edges(
     for fpath, info in modules.items():
         for call_name, in_class, call_line in info.calls:
             resolved = _resolve_call(
-                call_name, in_class, fpath, info,
-                name_to_file, class_name_to_file, module_path_map,
+                call_name,
+                in_class,
+                fpath,
+                info,
+                name_to_file,
+                class_name_to_file,
+                module_path_map,
             )
             if resolved:
                 callee_file, callee_name, callee_line, kind = resolved
-                caller_name = f"{in_class}.{call_name.split('.')[-1]}" if in_class else call_name.split(".")[-1]
+                caller_name = (
+                    f"{in_class}.{call_name.split('.')[-1]}"
+                    if in_class
+                    else call_name.split(".")[-1]
+                )
                 edges.append((fpath, caller_name, callee_file, callee_line, kind))
 
     return edges
@@ -582,13 +631,23 @@ def _resolve_call(
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
                 if method_name in cinfo.methods:
-                    return (cfpath, f"{in_class}{sep}{method_name}", cinfo.methods[method_name], "method_call")
+                    return (
+                        cfpath,
+                        f"{in_class}{sep}{method_name}",
+                        cinfo.methods[method_name],
+                        "method_call",
+                    )
 
         if obj_name == "cls" and in_class:
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
                 if method_name in cinfo.methods:
-                    return (cfpath, f"{in_class}{sep}{method_name}", cinfo.methods[method_name], "method_call")
+                    return (
+                        cfpath,
+                        f"{in_class}{sep}{method_name}",
+                        cinfo.methods[method_name],
+                        "method_call",
+                    )
 
         import_target = caller_info.imports.get(obj_name)
         if import_target:
@@ -600,7 +659,12 @@ def _resolve_call(
         class_matches = class_name_to_file.get(obj_name, [])
         for cfpath, cinfo in class_matches:
             if method_name in cinfo.methods:
-                return (cfpath, f"{obj_name}{sep}{method_name}", cinfo.methods[method_name], "method_call")
+                return (
+                    cfpath,
+                    f"{obj_name}{sep}{method_name}",
+                    cinfo.methods[method_name],
+                    "method_call",
+                )
 
     func_name = parts[0]
     matches = name_to_file.get(func_name, [])

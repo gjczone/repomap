@@ -99,6 +99,7 @@ def get_incremental_cache_path(project_path: str) -> Path:
 @dataclass
 class FileCacheEntry:
     """单文件增量缓存条目——对应一次全量扫描中一个文件的解析结果"""
+
     mtime: float
     symbols_json: list[dict] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
@@ -111,6 +112,7 @@ class FileCacheEntry:
 @dataclass
 class IncrementalCache:
     """持久化的增量扫描基线，用于后续增量扫描时识别变更文件并还原未变更文件"""
+
     project_root_hash: str = ""
     git_head: str = ""
     files: dict[str, FileCacheEntry] = field(default_factory=dict)
@@ -193,12 +195,13 @@ class ScanStats:
 @dataclass
 class HttpRoute:
     """HTTP 路由定义（从 AST 中提取）"""
-    method: str       # GET, POST, PUT, DELETE, PATCH
-    path: str         # /api/users/:id
-    handler: str      # 处理函数名
-    file: str         # 文件路径
-    line: int         # 行号
-    framework: str    # fastapi, flask, express, axum
+
+    method: str  # GET, POST, PUT, DELETE, PATCH
+    path: str  # /api/users/:id
+    handler: str  # 处理函数名
+    file: str  # 文件路径
+    line: int  # 行号
+    framework: str  # fastapi, flask, express, axum
 
 
 @dataclass
@@ -206,16 +209,27 @@ class RepoGraph:
     symbols: dict[str, Symbol] = field(default_factory=dict)
     outgoing: dict[str, list[Edge]] = field(default_factory=lambda: defaultdict(list))
     incoming: dict[str, list[Edge]] = field(default_factory=lambda: defaultdict(list))
-    file_symbols: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
-    file_imports: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
-    file_calls: dict[str, list[tuple]] = field(default_factory=lambda: defaultdict(list))
-    file_import_bindings: dict[str, list[JSImportBinding]] = field(default_factory=lambda: defaultdict(list))
-    file_exports: dict[str, list[JSExportBinding]] = field(default_factory=lambda: defaultdict(list))
+    file_symbols: dict[str, list[str]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    file_imports: dict[str, list[str]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    file_calls: dict[str, list[tuple]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    file_import_bindings: dict[str, list[JSImportBinding]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    file_exports: dict[str, list[JSExportBinding]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
 
 
 @dataclass(frozen=True)
 class NamePath:
     """符号分级路径，如 ClassName/method_name。"""
+
     parts: tuple[str, ...]
 
     @classmethod
@@ -331,10 +345,11 @@ def compare_graph_snapshots(
             }
             # 附加调用者信息
             if incoming_map:
-                callers = [e for e in incoming_map.get(symbol_id, []) if e.kind == "call"]
+                callers = [
+                    e for e in incoming_map.get(symbol_id, []) if e.kind == "call"
+                ]
                 entry["affected_callers"] = [
-                    {"symbol_id": e.source, "kind": e.kind}
-                    for e in callers[:10]
+                    {"symbol_id": e.source, "kind": e.kind} for e in callers[:10]
                 ]
                 entry["affected_caller_count"] = len(callers)
                 # 风险评级：导出符号签名变更→HIGH，否则有调用者→MEDIUM

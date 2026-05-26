@@ -42,9 +42,15 @@ class StateMapTests(unittest.TestCase):
 
             self.assertEqual(len(definitions), 1)
             definition = definitions[0]
-            self.assertEqual({value.name for value in definition.values}, {"Ready", "Done"})
-            self.assertTrue(any(writer.name == "Status::Ready" for writer in definition.writers))
-            self.assertTrue(any("Status::Done" in reader.name for reader in definition.readers))
+            self.assertEqual(
+                {value.name for value in definition.values}, {"Ready", "Done"}
+            )
+            self.assertTrue(
+                any(writer.name == "Status::Ready" for writer in definition.writers)
+            )
+            self.assertTrue(
+                any("Status::Done" in reader.name for reader in definition.readers)
+            )
 
 
 if __name__ == "__main__":

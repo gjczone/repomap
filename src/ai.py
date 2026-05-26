@@ -10,7 +10,11 @@ from .topic import FileMatch, TestMatch, classify_file_role, get_co_change_neigh
 
 
 RISK_MARK = {"high": "[high]", "medium": "[medium]", "low": "[low]"}
-VISIBILITY_MARK = {"exported": "[exported]", "public": "[public]", "private": "[private]"}
+VISIBILITY_MARK = {
+    "exported": "[exported]",
+    "public": "[public]",
+    "private": "[private]",
+}
 CONFIDENCE_MARK = {"high": "HIGH", "medium": "MED", "low": "LOW"}
 
 
@@ -51,7 +55,7 @@ def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
         if not path:
             continue
         if prefix and path.startswith(prefix):
-            path = path[len(prefix):]
+            path = path[len(prefix) :]
         hot_files.add(path)
     return hot_files
 
@@ -71,10 +75,23 @@ def _project_summary(engine: "RepoMapEngine", granularity: str) -> str:
         return ""
     top_langs = sorted(lang_counts.items(), key=lambda x: -x[1])[:3]
     lang_names = {
-        "python": "Python", "javascript": "JS", "typescript": "TS", "tsx": "TSX",
-        "go": "Go", "rust": "Rust", "c": "C", "cpp": "C++", "java": "Java",
-        "kotlin": "Kotlin", "swift": "Swift", "c_sharp": "C#", "php": "PHP",
-        "ruby": "Ruby", "html": "HTML", "css": "CSS", "json": "JSON",
+        "python": "Python",
+        "javascript": "JS",
+        "typescript": "TS",
+        "tsx": "TSX",
+        "go": "Go",
+        "rust": "Rust",
+        "c": "C",
+        "cpp": "C++",
+        "java": "Java",
+        "kotlin": "Kotlin",
+        "swift": "Swift",
+        "c_sharp": "C#",
+        "php": "PHP",
+        "ruby": "Ruby",
+        "html": "HTML",
+        "css": "CSS",
+        "json": "JSON",
     }
     lang_str = " + ".join(
         f"{lang_names.get(lang, lang)} ({count}f)" for lang, count in top_langs
@@ -158,12 +175,16 @@ def _format_route_lines_with_consumers(routes: list, consumers: dict) -> str:
     for r in sorted(routes, key=lambda r: (r.file, r.line)):
         route_key = f"{r.method} {r.path}"
         lines.append(f"\n### {r.method} `{r.path}`\n")
-        lines.append(f"- **Handler**: `{r.handler}` — `{r.file}:{r.line}` ({r.framework})")
+        lines.append(
+            f"- **Handler**: `{r.handler}` — `{r.file}:{r.line}` ({r.framework})"
+        )
         route_consumers = consumers.get(route_key, [])
         if route_consumers:
             lines.append("- **Consumers**:")
             for c in route_consumers:
-                conf = {"high": "HIGH", "medium": "MED", "low": "LOW"}.get(c.confidence, c.confidence)
+                conf = {"high": "HIGH", "medium": "MED", "low": "LOW"}.get(
+                    c.confidence, c.confidence
+                )
                 lines.append(f"  - `{c.file}:{c.line}` [{conf}: {c.match_type}]")
                 if c.context:
                     lines.append(f"    > {c.context}")
@@ -194,7 +215,11 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
             by_file.setdefault(r.file, []).append(r)
         for file, file_routes in list(by_file.items())[:6]:
             methods = Counter(r.method for r in file_routes)
-            method_str = " ".join(f"{m}x{methods[m]}" for m in ("GET", "POST", "PUT", "DELETE", "PATCH") if methods[m])
+            method_str = " ".join(
+                f"{m}x{methods[m]}"
+                for m in ("GET", "POST", "PUT", "DELETE", "PATCH")
+                if methods[m]
+            )
             lines.append(f"- `{file}` — {len(file_routes)} routes ({method_str})")
         if len(by_file) > 6:
             lines.append(f"- ... {len(by_file) - 6} more files with routes")
@@ -204,7 +229,9 @@ def _format_route_lines(routes: list, compact: bool = False) -> list[str]:
         lines.append("| Method | Path | Handler | File | Framework |")
         lines.append("|--------|------|---------|------|-----------|")
         for r in routes_sorted[:20]:
-            lines.append(f"| {r.method} | `{r.path}` | `{r.handler}` | `{r.file}:{r.line}` | {r.framework} |")
+            lines.append(
+                f"| {r.method} | `{r.path}` | `{r.handler}` | `{r.file}:{r.line}` | {r.framework} |"
+            )
         if len(routes_sorted) > 20 and compact:
             lines.append(f"\n... {len(routes_sorted) - 20} more routes")
     lines.append("")
@@ -257,10 +284,18 @@ def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
         for neighbor_git_path, count in neighbors:
             display_a = file_path
             if git_rel_prefix:
-                display_b = neighbor_git_path[len(git_rel_prefix) + 1:] if neighbor_git_path.startswith(git_rel_prefix + "/") else neighbor_git_path
+                display_b = (
+                    neighbor_git_path[len(git_rel_prefix) + 1 :]
+                    if neighbor_git_path.startswith(git_rel_prefix + "/")
+                    else neighbor_git_path
+                )
             else:
                 display_b = neighbor_git_path
-            key = (display_a, display_b) if display_a <= display_b else (display_b, display_a)
+            key = (
+                (display_a, display_b)
+                if display_a <= display_b
+                else (display_b, display_a)
+            )
             if key in seen_pairs:
                 continue
             if count < 2:
@@ -284,21 +319,45 @@ def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
     return lines
 
 
-def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
-                          with_heat: bool = False,
-                          with_co_change: bool = False,
-                          granularity: str = "auto") -> str:
+def render_overview_report(
+    engine: "RepoMapEngine",
+    max_chars: int = 16000,
+    with_heat: bool = False,
+    with_co_change: bool = False,
+    granularity: str = "auto",
+) -> str:
     # 解析粒度
     if granularity == "auto":
         granularity = _auto_granularity(engine)
 
     # 根据粒度调整各板块的数量限制
     if granularity == "compact":
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 0, 5, 0, 3, 2, 3
+        (
+            reading_limit,
+            module_limit,
+            hotspot_limit,
+            summary_files,
+            summary_per_file,
+            supporting_limit,
+        ) = 0, 5, 0, 3, 2, 3
     elif granularity == "medium":
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 5, 5, 5, 4, 3, 6
+        (
+            reading_limit,
+            module_limit,
+            hotspot_limit,
+            summary_files,
+            summary_per_file,
+            supporting_limit,
+        ) = 5, 5, 5, 4, 3, 6
     else:  # full
-        reading_limit, module_limit, hotspot_limit, summary_files, summary_per_file, supporting_limit = 8, 8, 10, 6, 4, 8
+        (
+            reading_limit,
+            module_limit,
+            hotspot_limit,
+            summary_files,
+            summary_per_file,
+            supporting_limit,
+        ) = 8, 8, 10, 6, 4, 8
 
     lines: list[str] = []
     lines.append(f"# Project Map — {engine.project_root.name}")
@@ -306,12 +365,16 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         lines[-1] += f" ({granularity} mode)"
     lines[-1] += "\n"
     file_analysis = engine.file_analysis()
-    semantic_symbol_total = round(sum(row.get("semantic_symbol_count", 0.0) for row in file_analysis.values()), 1)
+    semantic_symbol_total = round(
+        sum(row.get("semantic_symbol_count", 0.0) for row in file_analysis.values()), 1
+    )
 
     # 计算依赖边数
     edge_count = sum(len(v) for v in engine.graph.outgoing.values())
     # 获取解析配置数量
-    import_config_count = len(engine._resolver.import_configs) if engine._resolver else 0
+    import_config_count = (
+        len(engine._resolver.import_configs) if engine._resolver else 0
+    )
 
     stats_line = (
         f"**Files**: {engine.scan_stats.processed_files}  "
@@ -326,7 +389,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
     lines.append(stats_line + "\n")
 
     if engine.scan_stats.truncated_files:
-        lines.append(f"> `max_files` truncated {engine.scan_stats.truncated_files} candidate files\n")
+        lines.append(
+            f"> `max_files` truncated {engine.scan_stats.truncated_files} candidate files\n"
+        )
 
     # 一句话项目摘要
     summary = _project_summary(engine, granularity)
@@ -343,7 +408,11 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         lines.append("## Recommended Reading Order\n")
         for index, item in enumerate(suggestions, 1):
             hot_tag = " [HOT]" if item["file"] in hot_files else ""
-            highlights = f"; key symbols: {', '.join(item['top_symbols'])}" if item["top_symbols"] else ""
+            highlights = (
+                f"; key symbols: {', '.join(item['top_symbols'])}"
+                if item["top_symbols"]
+                else ""
+            )
             count_text = (
                 f"Semantic symbols {item['semantic_symbol_count']}"
                 if item.get("semantic_symbol_count") is not None
@@ -368,17 +437,18 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
             "> Source graph prioritizes source code; key docs, scripts, and configs listed below. Does not replace AGENTS.md/CLAUDE.md context.\n"
         )
         for item in supporting_files:
-            lines.append(
-                f"- `{item['file']}` — {item['reason']}"
-                f"（{item['role']}）"
-            )
+            lines.append(f"- `{item['file']}` — {item['reason']}（{item['role']}）")
         lines.append("")
 
     modules = engine.module_summary(module_limit)
     if modules:
         lines.append("## Module Summary\n")
         for module in modules:
-            highlights = f"; key symbols: {', '.join(module['highlights'])}" if module["highlights"] else ""
+            highlights = (
+                f"; key symbols: {', '.join(module['highlights'])}"
+                if module["highlights"]
+                else ""
+            )
             count_text = (
                 f"Semantic symbols {module['semantic_symbol_count']}"
                 if module.get("semantic_symbol_count") is not None
@@ -401,7 +471,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
         lines.append("## Module Clusters (auto-detected)\n")
         for c in clusters:
             reps = c.get("representatives", [])[:3]
-            lines.append(f"- **{c['label']}** ({c['size']} files): {', '.join(f'`{r}`' for r in reps)}")
+            lines.append(
+                f"- **{c['label']}** ({c['size']} files): {', '.join(f'`{r}`' for r in reps)}"
+            )
         lines.append("")
 
     entries = engine.entry_points()
@@ -418,7 +490,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
 
     hotspots = engine.hotspots(hotspot_limit)
     if hotspots:
-        lines.append("## High-Density Files (by semantic symbol density, label/config noise reduced)\n")
+        lines.append(
+            "## High-Density Files (by semantic symbol density, label/config noise reduced)\n"
+        )
         for hotspot in hotspots:
             count_text = (
                 f"Semantic symbols {hotspot['semantic_symbol_count']}"
@@ -440,7 +514,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
     summary_sections = engine.summary_symbols(summary_files, summary_per_file)
     if summary_sections:
         lines.append("## Key Implementation Symbols\n")
-        lines.append("> Implementation symbols ranked by importance; tests, HTML tags, CSS selectors, and JSON keys are deprioritized.\n")
+        lines.append(
+            "> Implementation symbols ranked by importance; tests, HTML tags, CSS selectors, and JSON keys are deprioritized.\n"
+        )
         for section in summary_sections:
             lines.append(f"### `{section['file']}`\n")
             if section.get("reason"):
@@ -448,7 +524,11 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
             for symbol_row in section["symbols"]:
                 pagerank = symbol_row["pagerank"] * 1000
                 visibility = VISIBILITY_MARK.get(symbol_row["visibility"], "[private]")
-                signature = f"  \n  *`{symbol_row['signature']}`*" if symbol_row["signature"] else ""
+                signature = (
+                    f"  \n  *`{symbol_row['signature']}`*"
+                    if symbol_row["signature"]
+                    else ""
+                )
                 # 生成重要性说明
                 importance_parts = []
                 incoming = symbol_row.get("incoming_calls", 0)
@@ -467,7 +547,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
                             importance_parts.append("high-importance leaf")
                         else:
                             importance_parts.append("leaf/entry")
-                importance_hint = f"  ({', '.join(importance_parts)})" if importance_parts else ""
+                importance_hint = (
+                    f"  ({', '.join(importance_parts)})" if importance_parts else ""
+                )
                 lines.append(
                     f"- {visibility} **{symbol_row['name']}** `({symbol_row['kind']})`"
                     f" L{symbol_row['line']} Score={symbol_row['summary_score']:.2f} PR={pagerank:.1f}{importance_hint}{signature}"
@@ -483,7 +565,9 @@ def render_overview_report(engine: "RepoMapEngine", max_chars: int = 16000,
     return _truncate_output("\n".join(lines), max_chars)
 
 
-def render_call_chain_report(engine: "RepoMapEngine", symbol_name: str, max_depth: int = 3) -> str:
+def render_call_chain_report(
+    engine: "RepoMapEngine", symbol_name: str, max_depth: int = 3
+) -> str:
     matches = engine.query_symbol(symbol_name)
     if not matches:
         return f"> Symbol `{symbol_name}` not found"
@@ -503,7 +587,9 @@ def render_call_chain_report(engine: "RepoMapEngine", symbol_name: str, max_dept
     lines.append(f"### Called by ({len(callers)})\n")
     if callers:
         for caller in callers[:20]:
-            lines.append(f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`")
+            lines.append(
+                f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`"
+            )
         if len(callers) > 20:
             lines.append(f"- ... {len(callers) - 20} more")
     else:
@@ -513,7 +599,9 @@ def render_call_chain_report(engine: "RepoMapEngine", symbol_name: str, max_dept
     lines.append(f"\n### Calls ({len(callees)})\n")
     if callees:
         for callee in callees[:20]:
-            lines.append(f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`")
+            lines.append(
+                f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`"
+            )
         if len(callees) > 20:
             lines.append(f"- ... {len(callees) - 20} more")
     else:
@@ -540,7 +628,11 @@ def render_file_detail_report(
 
     analysis = engine.file_analysis().get(file_path, {})
     symbols = sorted(
-        [engine.graph.symbols[symbol_id] for symbol_id in symbol_ids if symbol_id in engine.graph.symbols],
+        [
+            engine.graph.symbols[symbol_id]
+            for symbol_id in symbol_ids
+            if symbol_id in engine.graph.symbols
+        ],
         key=lambda symbol: symbol.line,
     )
     visible_symbols = symbols if max_symbols <= 0 else symbols[:max_symbols]
@@ -558,11 +650,15 @@ def render_file_detail_report(
         lines.append("")
 
     if max_symbols > 0 and len(symbols) > len(visible_symbols):
-        lines.append(f"Showing first {len(visible_symbols)} of {len(symbols)} symbols; use `--max-symbols` to see more.\n")
+        lines.append(
+            f"Showing first {len(visible_symbols)} of {len(symbols)} symbols; use `--max-symbols` to see more.\n"
+        )
 
     for symbol in visible_symbols:
         pagerank = symbol.pagerank * 1000
-        lines.append(f"- `{symbol.name}` ({symbol.kind}) — L{symbol.line} PR={pagerank:.1f}")
+        lines.append(
+            f"- `{symbol.name}` ({symbol.kind}) — L{symbol.line} PR={pagerank:.1f}"
+        )
         if symbol.signature:
             lines.append(f"  - sig: `{symbol.signature}`")
         if symbol.return_type:
@@ -583,27 +679,40 @@ def render_file_detail_report(
     # LSP 符号树
     if lsp_symbol_tree:
         lines.append("## LSP Symbol Tree\n")
-        lines.append("> From language server; nested structure reflects lexical scoping.\n")
+        lines.append(
+            "> From language server; nested structure reflects lexical scoping.\n"
+        )
         _append_lsp_symbol_outline(lines, lsp_symbol_tree, indent=0)
 
     return _truncate_output("\n".join(lines), max_chars)
 
 
-def _append_lsp_symbol_outline(lines: list[str], nodes: list[Any], indent: int,
-                               parent_path: str = "") -> None:
+def _append_lsp_symbol_outline(
+    lines: list[str], nodes: list[Any], indent: int, parent_path: str = ""
+) -> None:
     prefix = "  " * indent
     for node in nodes:
         name = node.name if hasattr(node, "name") else node.get("name", "?")
         qualified = f"{parent_path}/{name}" if parent_path else name
-        kind = node.kind_name if hasattr(node, "kind_name") else node.get("kind_name", "")
+        kind = (
+            node.kind_name if hasattr(node, "kind_name") else node.get("kind_name", "")
+        )
         line_num = node.line if hasattr(node, "line") else node.get("line", 0)
-        end_line = node.end_line if hasattr(node, "end_line") else node.get("end_line", 0)
+        end_line = (
+            node.end_line if hasattr(node, "end_line") else node.get("end_line", 0)
+        )
         sig = node.detail if hasattr(node, "detail") else node.get("detail", "")
         sig_str = f" — {sig}" if sig else ""
-        lines.append(f"{prefix}- `{qualified}` ({kind}{sig_str}) L{line_num}-L{end_line}")
-        children = node.children if hasattr(node, "children") else node.get("children", [])
+        lines.append(
+            f"{prefix}- `{qualified}` ({kind}{sig_str}) L{line_num}-L{end_line}"
+        )
+        children = (
+            node.children if hasattr(node, "children") else node.get("children", [])
+        )
         if children:
-            _append_lsp_symbol_outline(lines, children, indent + 1, parent_path=qualified)
+            _append_lsp_symbol_outline(
+                lines, children, indent + 1, parent_path=qualified
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -629,8 +738,7 @@ def render_query_report(
     lines.append(f"Matched files: {len(file_matches)}")
 
     sym_count = sum(
-        len(engine.graph.file_symbols.get(m.path, []))
-        for m in file_matches[:max_files]
+        len(engine.graph.file_symbols.get(m.path, [])) for m in file_matches[:max_files]
     )
     lines.append(f"Matched symbols: {sym_count}\n")
 
@@ -695,14 +803,16 @@ def render_query_report(
             if symbols_shown >= max_symbols:
                 break
             role_hint = classify_file_role(m.path, engine.graph)
-            lines.append(f"| `{sym['name']}` | `{m.path}` | {sym['line']} | {role_hint} |")
+            lines.append(
+                f"| `{sym['name']}` | `{m.path}` | {sym['line']} | {role_hint} |"
+            )
             symbols_shown += 1
     lines.append("")
 
     # 匹配代码行（含上下文）
     if file_matches and context_lines > 0:
         lines.append("## Matched Lines\n")
-        for m in file_matches[:min(len(file_matches), 3)]:
+        for m in file_matches[: min(len(file_matches), 3)]:
             blocks = _build_matched_blocks(engine, m.path, query, context_lines)
             if blocks:
                 if len(file_matches[:3]) > 1:
@@ -711,7 +821,9 @@ def render_query_report(
                     lines.append(_format_matched_block(block))
                     lines.append("")
                 if len(blocks) > 5:
-                    lines.append(f"... {len(blocks) - 5} more match(es) in `{m.path}`\n")
+                    lines.append(
+                        f"... {len(blocks) - 5} more match(es) in `{m.path}`\n"
+                    )
 
     # Related Commands
     if file_matches:
@@ -720,8 +832,12 @@ def render_query_report(
         lines.append("## Related Commands\n")
         lines.append(f"- `repomap file-detail --project . --file-path {top_file}`")
         if top_symbols:
-            lines.append(f"- `repomap refs --project . --symbol {top_symbols[0]['name']}`")
-            lines.append(f"- `repomap call-chain --project . --symbol {top_symbols[0]['name']}`")
+            lines.append(
+                f"- `repomap refs --project . --symbol {top_symbols[0]['name']}`"
+            )
+            lines.append(
+                f"- `repomap call-chain --project . --symbol {top_symbols[0]['name']}`"
+            )
 
     return _truncate_output("\n".join(lines), max_chars)
 
@@ -738,7 +854,10 @@ def _build_query_reading_order(
     for m in file_matches:
         if m.path in seen:
             continue
-        if any(m.path.endswith(suffix) for suffix in ["index.ts", "index.tsx", "main.ts", "main.py"]):
+        if any(
+            m.path.endswith(suffix)
+            for suffix in ["index.ts", "index.tsx", "main.ts", "main.py"]
+        ):
             order.append({"file": m.path, "reason": "Entry point / index"})
             seen.add(m.path)
 
@@ -767,7 +886,9 @@ def _build_query_reading_order(
     return order[:max_files]
 
 
-def _rank_symbols_for_file(engine: "RepoMapEngine", file_path: str) -> list[dict[str, Any]]:
+def _rank_symbols_for_file(
+    engine: "RepoMapEngine", file_path: str
+) -> list[dict[str, Any]]:
     symbols = [
         engine.graph.symbols[sid]
         for sid in engine.graph.file_symbols.get(file_path, [])
@@ -777,7 +898,10 @@ def _rank_symbols_for_file(engine: "RepoMapEngine", file_path: str) -> list[dict
         symbols,
         key=lambda s: (-s.pagerank, s.line),
     )
-    return [{"name": s.name, "kind": s.kind, "line": s.line, "pagerank": s.pagerank} for s in ranked]
+    return [
+        {"name": s.name, "kind": s.kind, "line": s.line, "pagerank": s.pagerank}
+        for s in ranked
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -812,7 +936,9 @@ def render_impact_report(
         if affected_files:
             lines.append("- Inspect Likely Affected Files flagged below.")
         if lsp_hint and lsp_hint.get("available"):
-            lines.append("- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters.")
+            lines.append(
+                "- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters."
+            )
         lines.append("")
         # Edit checklist
         checklist: list[str] = []
@@ -839,7 +965,9 @@ def render_impact_report(
     if read_next:
         lines.append("## Read Next\n")
         for read_item in read_next[:10]:
-            lines.append(f"- `{read_item['file']}` ({read_item['role']}): {read_item['reason']}")
+            lines.append(
+                f"- `{read_item['file']}` ({read_item['role']}): {read_item['reason']}"
+            )
         lines.append("")
 
     if affected_files:
@@ -874,10 +1002,14 @@ def render_impact_report(
     # Related Commands
     lines.append("## Related Commands\n")
     if target_files:
-        lines.append(f"- View target file details: `repomap file-detail --project . --file-path {target_files[0]}`")
+        lines.append(
+            f"- View target file details: `repomap file-detail --project . --file-path {target_files[0]}`"
+        )
     if affected_files:
         top_affected = affected_files[0][0]
-        lines.append(f"- Inspect top affected file: `repomap file-detail --project . --file-path {top_affected}`")
+        lines.append(
+            f"- Inspect top affected file: `repomap file-detail --project . --file-path {top_affected}`"
+        )
     lines.append("- Verify changes: `repomap verify --project .`")
     lines.append("")
 
@@ -893,8 +1025,10 @@ def _extract_impact_areas(
     for f in all_files:
         parts = PurePosixPath(f).parts
         if len(parts) >= 2:
-            top = parts[0] if parts[0] not in ("src", "app", "lib") else (
-                parts[1] if len(parts) >= 2 else parts[0]
+            top = (
+                parts[0]
+                if parts[0] not in ("src", "app", "lib")
+                else (parts[1] if len(parts) >= 2 else parts[0])
             )
             areas.add(top)
     return sorted(areas)[:8]
@@ -905,8 +1039,6 @@ def _extract_impact_areas(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # verify 报告渲染
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -915,17 +1047,25 @@ def _extract_impact_areas(
 def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str:
     result = payload.get("result", {})
     status = result.get("status", "unknown")
-    status_label = {"passed": "PASS", "warning": "WARNING", "failed": "FAILED"}.get(status, status.upper())
+    status_label = {"passed": "PASS", "warning": "WARNING", "failed": "FAILED"}.get(
+        status, status.upper()
+    )
     lines: list[str] = ["# Verify Report\n"]
 
     lines.append("## Overall Status\n")
     lines.append(f"**{status_label}**")
     if status == "passed":
-        lines.append("- Evidence looks sufficient for final handoff, assuming required project tests were actually run when needed.")
+        lines.append(
+            "- Evidence looks sufficient for final handoff, assuming required project tests were actually run when needed."
+        )
     elif status == "warning":
-        lines.append("- Do not claim full confidence yet; review the warnings and missing evidence below.")
+        lines.append(
+            "- Do not claim full confidence yet; review the warnings and missing evidence below."
+        )
     else:
-        lines.append("- Do not claim completion; at least one verification source failed.")
+        lines.append(
+            "- Do not claim completion; at least one verification source failed."
+        )
     lines.append("")
 
     changed_files = result.get("changedFiles", [])
@@ -951,15 +1091,17 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     tests = result.get("tests", [])
     if tests:
         lines.append("## Suggested Tests\n")
-        for command in _test_commands_for_files([
-            TestMatch(
-                test_file=item.get("testFile", ""),
-                target_file=item.get("targetFile", ""),
-                confidence=item.get("confidence", ""),
-                reason=item.get("reason", ""),
-            )
-            for item in tests
-        ]):
+        for command in _test_commands_for_files(
+            [
+                TestMatch(
+                    test_file=item.get("testFile", ""),
+                    target_file=item.get("targetFile", ""),
+                    confidence=item.get("confidence", ""),
+                    reason=item.get("reason", ""),
+                )
+                for item in tests
+            ]
+        ):
             lines.append(f"- `{command}`")
         lines.append("")
     else:
@@ -991,11 +1133,19 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     untested = result.get("untestedSymbols", [])
     if untested:
         lines.append("## Test Coverage Gaps\n")
-        lines.append("> Symbols below lack test coverage. Review carefully before modifying.\n")
+        lines.append(
+            "> Symbols below lack test coverage. Review carefully before modifying.\n"
+        )
         lines.append("| Symbol | Kind | File | Callers | Risk |")
         lines.append("|--------|------|------|:------:|:----:|")
         for item in untested[:15]:
-            risk_label = "HIGH" if item["risk_score"] >= 10 else "MEDIUM" if item["risk_score"] >= 5 else "LOW"
+            risk_label = (
+                "HIGH"
+                if item["risk_score"] >= 10
+                else "MEDIUM"
+                if item["risk_score"] >= 5
+                else "LOW"
+            )
             lines.append(
                 f"| `{item['symbol']}` | {item['kind']} | `{item['file']}:{item['line']}` "
                 f"| {item['incoming_calls']} | {risk_label} |"
@@ -1038,7 +1188,9 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
                 f"**{bc['name']}** `({bc.get('kind', '')})` in `{bc['file']}` "
                 f"[{bc.get('risk', 'LOW')}]"
             )
-            if bc.get("new_signature") and bc.get("old_signature") != bc.get("new_signature"):
+            if bc.get("new_signature") and bc.get("old_signature") != bc.get(
+                "new_signature"
+            ):
                 lines.append(f"  - Old: `{bc.get('old_signature', '')}`")
                 lines.append(f"  - New: `{bc.get('new_signature', '')}`")
             if bc.get("affected_caller_count", 0) > 0:
@@ -1071,9 +1223,13 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     if tests and status != "passed":
         lines.append("- [ ] Run suggested tests separately.")
     if lsp.get("status") == "skipped":
-        lines.append("- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed.")
+        lines.append(
+            "- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed."
+        )
     if graph_diff.get("enabled") and graph_diff.get("status") == "skipped":
-        lines.append("- [ ] Graph diff was skipped; use `--with-diff` after `cache save` for contract change evidence.")
+        lines.append(
+            "- [ ] Graph diff was skipped; use `--with-diff` after `cache save` for contract change evidence."
+        )
     if status == "passed":
         lines.append("- [x] No unresolved verification gaps reported by this command.")
     return _truncate_output("\n".join(lines), max_chars)
@@ -1103,8 +1259,9 @@ def _test_commands_for_files(tests: list[TestMatch]) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_matched_blocks(engine: "RepoMapEngine", file_path: str, query: str,
-                          context: int = 2) -> list[dict[str, Any]]:
+def _build_matched_blocks(
+    engine: "RepoMapEngine", file_path: str, query: str, context: int = 2
+) -> list[dict[str, Any]]:
     """在文件中搜索关键词，返回带上下文的匹配块。"""
     try:
         abs_path = engine.project_root / file_path
@@ -1141,11 +1298,13 @@ def _build_matched_blocks(engine: "RepoMapEngine", file_path: str, query: str,
     for block in blocks:
         block_lines: list[dict[str, Any]] = []
         for i in range(block["start"], block["end"] + 1):
-            block_lines.append({
-                "num": i + 1,
-                "text": lines[i],
-                "match": i in block["matches"],
-            })
+            block_lines.append(
+                {
+                    "num": i + 1,
+                    "text": lines[i],
+                    "match": i in block["matches"],
+                }
+            )
         result.append({"first_line": block["start"] + 1, "lines": block_lines})
     return result
 

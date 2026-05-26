@@ -24,7 +24,9 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "ui_evaluate.js", "console.log('ok')\n")
-            report = RepoMapChecker(project_root, max_items=10).check(types=["javascript"], resolve_symbols=False)
+            report = RepoMapChecker(project_root, max_items=10).check(
+                types=["javascript"], resolve_symbols=False
+            )
 
         self.assertEqual(report["status"], "unknown")
         self.assertEqual(report["summary"]["tools_run"], 0)
@@ -47,20 +49,38 @@ class RepoMapCliTests(unittest.TestCase):
                 "project_root": "/tmp/repo",
                 "status": "passed",
                 "types": ["python"],
-                "incremental": {"enabled": True, "files_checked": kwargs.get("modified_files") or [], "files_count": 1},
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": kwargs.get("modified_files") or [],
+                    "files_count": 1,
+                },
                 "runs": [],
-                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 0,
+                    "tools_skipped": 0,
+                    "tool_failures": 0,
+                },
                 "errors_by_file": {},
             }
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
-                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
+            with patch(
+                "src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel
+            ):
+                with patch(
+                    "src.git_backend.GitBackend.status_porcelain",
+                    fake_git_status_porcelain,
+                ):
                     with patch.object(RepoMapChecker, "check", fake_check):
                         with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                            exit_code = main(["verify", "--project", project_root, "--json"])
+                            exit_code = main(
+                                ["verify", "--project", project_root, "--json"]
+                            )
 
         self.assertEqual(exit_code, 0)
         payload = json.loads(stdout.getvalue())
@@ -85,20 +105,46 @@ class RepoMapCliTests(unittest.TestCase):
                 "project_root": "/tmp/repo",
                 "status": "failed",
                 "types": ["python"],
-                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
-                "runs": [{"tool": "pytest", "exit_code": 1, "skipped": False, "error_count": 1, "warning_count": 0}],
-                "summary": {"total_errors": 1, "total_warnings": 0, "files_with_errors": 1, "tools_run": 1, "tools_skipped": 0, "tool_failures": 1},
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": ["main.py"],
+                    "files_count": 1,
+                },
+                "runs": [
+                    {
+                        "tool": "pytest",
+                        "exit_code": 1,
+                        "skipped": False,
+                        "error_count": 1,
+                        "warning_count": 0,
+                    }
+                ],
+                "summary": {
+                    "total_errors": 1,
+                    "total_warnings": 0,
+                    "files_with_errors": 1,
+                    "tools_run": 1,
+                    "tools_skipped": 0,
+                    "tool_failures": 1,
+                },
                 "errors_by_file": {"main.py": []},
             }
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
-                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
+            with patch(
+                "src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel
+            ):
+                with patch(
+                    "src.git_backend.GitBackend.status_porcelain",
+                    fake_git_status_porcelain,
+                ):
                     with patch.object(RepoMapChecker, "check", fake_check):
                         with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                            exit_code = main(["verify", "--project", project_root, "--json"])
+                            exit_code = main(
+                                ["verify", "--project", project_root, "--json"]
+                            )
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(json.loads(stdout.getvalue())["result"]["status"], "failed")
@@ -129,7 +175,10 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         message = stderr.getvalue()
-        self.assertIn("LLM action: select the intended project root, then re-run the same repomap command with exactly one --project argument.", message)
+        self.assertIn(
+            "LLM action: select the intended project root, then re-run the same repomap command with exactly one --project argument.",
+            message,
+        )
         self.assertIn("Candidate --project arguments:", message)
         self.assertIn(f"--project {Path(workspace_root, 'alpha').resolve()}", message)
         self.assertIn(f"--project {Path(workspace_root, 'beta').resolve()}", message)
@@ -209,37 +258,83 @@ class RepoMapCliTests(unittest.TestCase):
                 "project_root": "/tmp/repo",
                 "status": "passed",
                 "types": ["python"],
-                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": ["main.py"],
+                    "files_count": 1,
+                },
                 "runs": [],
-                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 0,
+                    "tools_skipped": 0,
+                    "tool_failures": 0,
+                },
                 "errors_by_file": {},
             }
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
-            with patch("src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel):
-                with patch("src.git_backend.GitBackend.status_porcelain", fake_git_status_porcelain):
-                    with patch("src.cli.handlers.diff_project", return_value={"error": "No cache found; run cache --save first"}):
+            with patch(
+                "src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel
+            ):
+                with patch(
+                    "src.git_backend.GitBackend.status_porcelain",
+                    fake_git_status_porcelain,
+                ):
+                    with patch(
+                        "src.cli.handlers.diff_project",
+                        return_value={
+                            "error": "No cache found; run cache --save first"
+                        },
+                    ):
                         with patch.object(RepoMapChecker, "check", fake_check):
-                            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                                exit_code = main(["verify", "--project", project_root, "--with-diff", "--json"])
+                            with (
+                                redirect_stdout(stdout),
+                                redirect_stderr(io.StringIO()),
+                            ):
+                                exit_code = main(
+                                    [
+                                        "verify",
+                                        "--project",
+                                        project_root,
+                                        "--with-diff",
+                                        "--json",
+                                    ]
+                                )
 
         self.assertEqual(exit_code, 0)
         graph_diff = json.loads(stdout.getvalue())["result"]["graphDiff"]
         self.assertTrue(graph_diff["enabled"])
         self.assertEqual(graph_diff["status"], "skipped")
 
-    def test_check_marks_nonzero_tool_exit_as_failed_even_without_parsed_issues(self) -> None:
+    def test_check_marks_nonzero_tool_exit_as_failed_even_without_parsed_issues(
+        self,
+    ) -> None:
         from src.cli import main
 
-        def fake_check(self, types=None, resolve_symbols=True, symbols_map=None, since_commit=None, modified_files=None, **kwargs):
+        def fake_check(
+            self,
+            types=None,
+            resolve_symbols=True,
+            symbols_map=None,
+            since_commit=None,
+            modified_files=None,
+            **kwargs,
+        ):
             return {
                 "timestamp": "2026-01-01T00:00:00+00:00",
                 "project_root": "/tmp/demo",
                 "status": "failed",
                 "types": ["javascript"],
-                "incremental": {"enabled": False, "files_checked": [], "files_count": 0},
+                "incremental": {
+                    "enabled": False,
+                    "files_checked": [],
+                    "files_count": 0,
+                },
                 "runs": [
                     {
                         "tool": "eslint",
@@ -285,7 +380,9 @@ class RepoMapCliTests(unittest.TestCase):
             with patch("shutil.which", return_value=None):
                 with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
                     with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        exit_code = main(["lsp", "doctor", "--project", project_root, "--json"])
+                        exit_code = main(
+                            ["lsp", "doctor", "--project", project_root, "--json"]
+                        )
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
@@ -301,7 +398,16 @@ class RepoMapCliTests(unittest.TestCase):
             with patch("shutil.which", return_value=None):
                 with patch("src.lsp._trusted_user_lsp_candidates", return_value=[]):
                     with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        exit_code = main(["check", "--project", project_root, "--with-lsp", "--modified-file", "main.py"])
+                        exit_code = main(
+                            [
+                                "check",
+                                "--project",
+                                project_root,
+                                "--with-lsp",
+                                "--modified-file",
+                                "main.py",
+                            ]
+                        )
 
             self.assertIn(exit_code, {0, 1})
 
@@ -317,9 +423,20 @@ class RepoMapCliTests(unittest.TestCase):
                 "project_root": "/tmp/demo",
                 "status": "passed",
                 "types": ["python"],
-                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": ["main.py"],
+                    "files_count": 1,
+                },
                 "runs": [],
-                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 0,
+                    "tools_skipped": 0,
+                    "tool_failures": 0,
+                },
                 "errors_by_file": {},
             }
 
@@ -327,7 +444,23 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "main.py", "print('hi')\n")
             with patch.object(RepoMapChecker, "check", fake_check):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    exit_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py", "--with-lsp", "--lsp-timeout", "1.5", "--lsp-max-files", "3"])
+                    exit_code = main(
+                        [
+                            "check",
+                            "--project",
+                            project_root,
+                            "--types",
+                            "python",
+                            "--no-symbols",
+                            "--modified-file",
+                            "main.py",
+                            "--with-lsp",
+                            "--lsp-timeout",
+                            "1.5",
+                            "--lsp-max-files",
+                            "3",
+                        ]
+                    )
 
         self.assertEqual(exit_code, 0)
         self.assertTrue(captured["with_lsp"])
@@ -346,9 +479,20 @@ class RepoMapCliTests(unittest.TestCase):
                 "project_root": "/tmp/demo",
                 "status": "passed",
                 "types": ["python"],
-                "incremental": {"enabled": True, "files_checked": ["main.py"], "files_count": 1},
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": ["main.py"],
+                    "files_count": 1,
+                },
                 "runs": [],
-                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0, "tools_run": 0, "tools_skipped": 0, "tool_failures": 0},
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 0,
+                    "tools_skipped": 0,
+                    "tool_failures": 0,
+                },
                 "errors_by_file": {},
             }
 
@@ -356,8 +500,31 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "main.py", "print('hi')\n")
             with patch.object(RepoMapChecker, "check", fake_check):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    default_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py"])
-                    disabled_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", "main.py", "--no-lsp"])
+                    default_code = main(
+                        [
+                            "check",
+                            "--project",
+                            project_root,
+                            "--types",
+                            "python",
+                            "--no-symbols",
+                            "--modified-file",
+                            "main.py",
+                        ]
+                    )
+                    disabled_code = main(
+                        [
+                            "check",
+                            "--project",
+                            project_root,
+                            "--types",
+                            "python",
+                            "--no-symbols",
+                            "--modified-file",
+                            "main.py",
+                            "--no-lsp",
+                        ]
+                    )
 
         self.assertEqual(default_code, 0)
         self.assertEqual(disabled_code, 0)
@@ -383,13 +550,19 @@ class RepoMapCliTests(unittest.TestCase):
 
         with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["query-symbol", "--project", ".", "--symbol", "target"]), 0)
+                self.assertEqual(
+                    main(["query-symbol", "--project", ".", "--symbol", "target"]), 0
+                )
         with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0)
+                self.assertEqual(
+                    main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0
+                )
         with patch("src.cli.handlers.run_refs", fake_run_refs):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["refs", "--project", ".", "--symbol", "target"]), 0)
+                self.assertEqual(
+                    main(["refs", "--project", ".", "--symbol", "target"]), 0
+                )
 
         self.assertTrue(captured["query-symbol"][5])
         self.assertTrue(captured["file-detail"][5])
@@ -414,13 +587,40 @@ class RepoMapCliTests(unittest.TestCase):
 
         with patch("src.cli.handlers.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["query-symbol", "--project", ".", "--symbol", "target", "--no-lsp"]), 0)
+                self.assertEqual(
+                    main(
+                        [
+                            "query-symbol",
+                            "--project",
+                            ".",
+                            "--symbol",
+                            "target",
+                            "--no-lsp",
+                        ]
+                    ),
+                    0,
+                )
         with patch("src.cli.handlers.run_file_detail", fake_run_file_detail):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["file-detail", "--project", ".", "--file-path", "main.py", "--no-lsp"]), 0)
+                self.assertEqual(
+                    main(
+                        [
+                            "file-detail",
+                            "--project",
+                            ".",
+                            "--file-path",
+                            "main.py",
+                            "--no-lsp",
+                        ]
+                    ),
+                    0,
+                )
         with patch("src.cli.handlers.run_refs", fake_run_refs):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(main(["refs", "--project", ".", "--symbol", "target", "--no-lsp"]), 0)
+                self.assertEqual(
+                    main(["refs", "--project", ".", "--symbol", "target", "--no-lsp"]),
+                    0,
+                )
 
         self.assertFalse(captured["query-symbol"][5])
         self.assertFalse(captured["file-detail"][5])
@@ -448,8 +648,20 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             runner = DiagnosticRunner(Path(project_root))
-            with patch.object(runner, "_run_mypy", return_value=DiagnosticResult(tool="mypy", command="mypy", exit_code=0, duration_ms=1)) as mypy_mock:
-                with patch.object(runner, "_run_ruff", return_value=DiagnosticResult(tool="ruff", command="ruff", exit_code=0, duration_ms=1)) as ruff_mock:
+            with patch.object(
+                runner,
+                "_run_mypy",
+                return_value=DiagnosticResult(
+                    tool="mypy", command="mypy", exit_code=0, duration_ms=1
+                ),
+            ) as mypy_mock:
+                with patch.object(
+                    runner,
+                    "_run_ruff",
+                    return_value=DiagnosticResult(
+                        tool="ruff", command="ruff", exit_code=0, duration_ms=1
+                    ),
+                ) as ruff_mock:
                     results = runner.run_all(["python"])
 
         self.assertEqual([result.tool for result in results], ["mypy", "ruff"])
@@ -475,35 +687,70 @@ class RepoMapCliTests(unittest.TestCase):
 
             dot_stdout = io.StringIO()
             with redirect_stdout(dot_stdout), redirect_stderr(io.StringIO()):
-                dot_code = main(["impact", "--project", project_root, "--files", "./main.py", "--json"])
+                dot_code = main(
+                    [
+                        "impact",
+                        "--project",
+                        project_root,
+                        "--files",
+                        "./main.py",
+                        "--json",
+                    ]
+                )
 
             abs_stdout = io.StringIO()
             abs_path = str(Path(project_root, "main.py"))
             with redirect_stdout(abs_stdout), redirect_stderr(io.StringIO()):
-                abs_code = main(["impact", "--project", project_root, "--files", abs_path, "--json"])
+                abs_code = main(
+                    ["impact", "--project", project_root, "--files", abs_path, "--json"]
+                )
 
             self.assertEqual(dot_code, 0)
             self.assertEqual(abs_code, 0)
-            self.assertEqual(json.loads(dot_stdout.getvalue())["result"]["inputFiles"], ["main.py"])
-            self.assertEqual(json.loads(abs_stdout.getvalue())["result"]["inputFiles"], ["main.py"])
+            self.assertEqual(
+                json.loads(dot_stdout.getvalue())["result"]["inputFiles"], ["main.py"]
+            )
+            self.assertEqual(
+                json.loads(abs_stdout.getvalue())["result"]["inputFiles"], ["main.py"]
+            )
 
     def test_impact_with_symbols_outputs_edit_plan_fields(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
-            write_file(project_root, "caller.py", "from main import target\n\ndef run():\n    return target()\n")
-            write_file(project_root, "test_main.py", "from main import target\n\ndef test_target():\n    assert target() == 1\n")
+            write_file(
+                project_root,
+                "caller.py",
+                "from main import target\n\ndef run():\n    return target()\n",
+            )
+            write_file(
+                project_root,
+                "test_main.py",
+                "from main import target\n\ndef test_target():\n    assert target() == 1\n",
+            )
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["impact", "--project", project_root, "--files", "main.py", "--with-symbols", "--json"])
+                exit_code = main(
+                    [
+                        "impact",
+                        "--project",
+                        project_root,
+                        "--files",
+                        "main.py",
+                        "--with-symbols",
+                        "--json",
+                    ]
+                )
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             result = payload["result"]
             self.assertEqual(result["inputFiles"], ["main.py"])
-            self.assertTrue(any(item["name"] == "target" for item in result["keySymbols"]))
+            self.assertTrue(
+                any(item["name"] == "target" for item in result["keySymbols"])
+            )
             self.assertEqual(result["readNext"][0]["file"], "main.py")
             self.assertEqual(result["readNext"][0]["role"], "target")
             self.assertIn("lspHint", result)
@@ -516,7 +763,16 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["impact", "--project", project_root, "--files", "main.py", "--json"])
+                exit_code = main(
+                    [
+                        "impact",
+                        "--project",
+                        project_root,
+                        "--files",
+                        "main.py",
+                        "--json",
+                    ]
+                )
 
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())["result"]
@@ -533,12 +789,16 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(project_root, "main.py", "def run():\n    return 1\n")
             stderr = io.StringIO()
             with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                exit_code = main(["impact", "--project", project_root, "--files", "../outside.py"])
+                exit_code = main(
+                    ["impact", "--project", project_root, "--files", "../outside.py"]
+                )
 
             self.assertEqual(exit_code, 1)
             self.assertIn("outside project", stderr.getvalue())
 
-    @unittest.skipIf(sys.platform == 'win32', "query --paths filter behavior differs on Windows")
+    @unittest.skipIf(
+        sys.platform == "win32", "query --paths filter behavior differs on Windows"
+    )
     def test_query_paths_and_exclude_match_path_segments(self) -> None:
         from src.cli import main
 
@@ -548,32 +808,89 @@ class RepoMapCliTests(unittest.TestCase):
 
             paths_stdout = io.StringIO()
             with redirect_stdout(paths_stdout), redirect_stderr(io.StringIO()):
-                paths_code = main(["query", "--project", project_root, "--query", "target", "--paths", "src", "--json"])
+                paths_code = main(
+                    [
+                        "query",
+                        "--project",
+                        project_root,
+                        "--query",
+                        "target",
+                        "--paths",
+                        "src",
+                        "--json",
+                    ]
+                )
 
             exclude_stdout = io.StringIO()
             with redirect_stdout(exclude_stdout), redirect_stderr(io.StringIO()):
-                exclude_code = main(["query", "--project", project_root, "--query", "target", "--exclude", "src", "--json"])
+                exclude_code = main(
+                    [
+                        "query",
+                        "--project",
+                        project_root,
+                        "--query",
+                        "target",
+                        "--exclude",
+                        "src",
+                        "--json",
+                    ]
+                )
 
             self.assertEqual(paths_code, 0)
             self.assertEqual(exclude_code, 0)
             paths_payload = json.loads(paths_stdout.getvalue())
             exclude_payload = json.loads(exclude_stdout.getvalue())
-            self.assertTrue(any(row["path"].replace("\\", "/") == "src/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(row["path"].replace("\\", "/") == "src2/main.py" for row in paths_payload["result"]["coreFiles"] + paths_payload["result"]["supportingFiles"]))
-            self.assertTrue(any(row["path"].replace("\\", "/") == "src2/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
-            self.assertFalse(any(row["path"].replace("\\", "/") == "src/main.py" for row in exclude_payload["result"]["coreFiles"] + exclude_payload["result"]["supportingFiles"]))
+            self.assertTrue(
+                any(
+                    row["path"].replace("\\", "/") == "src/main.py"
+                    for row in paths_payload["result"]["coreFiles"]
+                    + paths_payload["result"]["supportingFiles"]
+                )
+            )
+            self.assertFalse(
+                any(
+                    row["path"].replace("\\", "/") == "src2/main.py"
+                    for row in paths_payload["result"]["coreFiles"]
+                    + paths_payload["result"]["supportingFiles"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    row["path"].replace("\\", "/") == "src2/main.py"
+                    for row in exclude_payload["result"]["coreFiles"]
+                    + exclude_payload["result"]["supportingFiles"]
+                )
+            )
+            self.assertFalse(
+                any(
+                    row["path"].replace("\\", "/") == "src/main.py"
+                    for row in exclude_payload["result"]["coreFiles"]
+                    + exclude_payload["result"]["supportingFiles"]
+                )
+            )
 
     def test_check_rejects_unsafe_modified_file_paths(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "pyproject.toml", "[project]\nname = \"demo\"\n")
+            write_file(project_root, "pyproject.toml", '[project]\nname = "demo"\n')
             write_file(project_root, "main.py", "def run():\n    return 1\n")
 
             for unsafe in ("../outside.py", "-bad.py"):
                 stderr = io.StringIO()
                 with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                    exit_code = main(["check", "--project", project_root, "--types", "python", "--no-symbols", "--modified-file", unsafe])
+                    exit_code = main(
+                        [
+                            "check",
+                            "--project",
+                            project_root,
+                            "--types",
+                            "python",
+                            "--no-symbols",
+                            "--modified-file",
+                            unsafe,
+                        ]
+                    )
 
                 self.assertEqual(exit_code, 1)
                 self.assertIn("unsafe modified file", stderr.getvalue())
@@ -582,12 +899,21 @@ class RepoMapCliTests(unittest.TestCase):
         from src.check import DiagnosticRunner
 
         with tempfile.TemporaryDirectory() as project_root:
-            runner = DiagnosticRunner(Path(project_root), modified_files=["src/main.py"])
-            with patch.object(runner, "_has_cmd", return_value=True), patch.object(runner, "_run_command", return_value=(0, "[]", 1)) as run_mock:
+            runner = DiagnosticRunner(
+                Path(project_root), modified_files=["src/main.py"]
+            )
+            with (
+                patch.object(runner, "_has_cmd", return_value=True),
+                patch.object(
+                    runner, "_run_command", return_value=(0, "[]", 1)
+                ) as run_mock,
+            ):
                 runner._run_ruff()
 
             command = run_mock.call_args.args[0]
-            self.assertEqual(command[:5], ["ruff", "check", "--output-format", "json", "--"])
+            self.assertEqual(
+                command[:5], ["ruff", "check", "--output-format", "json", "--"]
+            )
             self.assertIn("src/main.py", command)
 
     def test_tsc_skips_instead_of_falling_back_to_npx(self) -> None:
@@ -655,7 +981,6 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(verify_code, 0)
         self.assertIn("--quick", verify_stdout.getvalue())
 
-
     def test_routes_help_includes_json_output(self) -> None:
         from src.cli import main
 
@@ -694,7 +1019,9 @@ class RepoMapCliTests(unittest.TestCase):
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "src/routes.ts", "router.get('/items', handler);\n")
+            write_file(
+                project_root, "src/routes.ts", "router.get('/items', handler);\n"
+            )
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 exit_code = main(["routes", "--project", project_root, "--json"])
@@ -715,7 +1042,9 @@ class RepoMapCliTests(unittest.TestCase):
         from src.check import ProjectDetector
 
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "node_modules/pkg/index.js", "module.exports = {};\n")
+            write_file(
+                project_root, "node_modules/pkg/index.js", "module.exports = {};\n"
+            )
             with patch("src.check.subprocess.run", side_effect=FileNotFoundError()):
                 self.assertFalse(ProjectDetector._has_js_files(Path(project_root)))
 
@@ -735,7 +1064,13 @@ class RepoMapCliTests(unittest.TestCase):
     def test_script_entrypoint_runs_without_package_context(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
-            [sys.executable, "src/cli/__main__.py", "doctor", "--project", str(repo_root)],
+            [
+                sys.executable,
+                "src/cli/__main__.py",
+                "doctor",
+                "--project",
+                str(repo_root),
+            ],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -747,7 +1082,10 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("tsx", result.stdout)
         self.assertNotIn("repomap_cli: not found", result.stdout)
         self.assertIn("tree_sitter:", result.stdout)
-        self.assertRegex(result.stdout, r"PyInstaller: (available|not installed in current runtime, only required for build-binary)")
+        self.assertRegex(
+            result.stdout,
+            r"PyInstaller: (available|not installed in current runtime, only required for build-binary)",
+        )
 
     def test_help_lists_all_commands(self) -> None:
         from src.cli import main
@@ -794,11 +1132,15 @@ class RepoMapCliTests(unittest.TestCase):
 
             symbol_stdout = io.StringIO()
             with redirect_stdout(symbol_stdout), redirect_stderr(io.StringIO()):
-                symbol_code = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+                symbol_code = main(
+                    ["query-symbol", "--project", project_root, "--symbol", "helper"]
+                )
 
             chain_stdout = io.StringIO()
             with redirect_stdout(chain_stdout), redirect_stderr(io.StringIO()):
-                chain_code = main(["call-chain", "--project", project_root, "--symbol", "helper"])
+                chain_code = main(
+                    ["call-chain", "--project", project_root, "--symbol", "helper"]
+                )
 
             self.assertEqual(overview_code, 0)
             self.assertEqual(symbol_code, 0)
@@ -819,17 +1161,37 @@ class RepoMapCliTests(unittest.TestCase):
             "reason": "",
             "durationMs": 1,
             "diagnostics": [],
-            "definitions": [{"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}],
-            "references": [{"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}],
+            "definitions": [
+                {"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}
+            ],
+            "references": [
+                {"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}
+            ],
         }
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(
+                project_root,
+                "main.py",
+                "from lib import helper\n\ndef caller():\n    return helper()\n",
+            )
             stdout = io.StringIO()
-            with patch("src.cli.handlers._collect_lsp_evidence_for_symbol", return_value=fake_run):
+            with patch(
+                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                return_value=fake_run,
+            ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                    exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper", "--with-lsp"])
+                    exit_code = main(
+                        [
+                            "query-symbol",
+                            "--project",
+                            project_root,
+                            "--symbol",
+                            "helper",
+                            "--with-lsp",
+                        ]
+                    )
 
             self.assertEqual(exit_code, 0)
             output = stdout.getvalue()
@@ -849,20 +1211,40 @@ class RepoMapCliTests(unittest.TestCase):
             "reason": "",
             "durationMs": 1,
             "diagnostics": [],
-            "definitions": [{"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}],
-            "references": [{"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}],
+            "definitions": [
+                {"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}
+            ],
+            "references": [
+                {"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}
+            ],
         }
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(
+                project_root,
+                "main.py",
+                "from lib import helper\n\ndef caller():\n    return helper()\n",
+            )
             stdout = io.StringIO()
-            with patch("src.cli.handlers._collect_lsp_evidence_for_symbol", return_value=fake_run):
+            with patch(
+                "src.cli.handlers._collect_lsp_evidence_for_symbol",
+                return_value=fake_run,
+            ):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                    exit_code = main([
-                        "refs", "--project", project_root, "--symbol", "helper",
-                        "--file-path", "lib.py", "--with-lsp", "--json",
-                    ])
+                    exit_code = main(
+                        [
+                            "refs",
+                            "--project",
+                            project_root,
+                            "--symbol",
+                            "helper",
+                            "--file-path",
+                            "lib.py",
+                            "--with-lsp",
+                            "--json",
+                        ]
+                    )
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
@@ -939,7 +1321,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                exit_code = main(["call-chain", "--project", project_root, "--symbol", "helper"])
+                exit_code = main(
+                    ["call-chain", "--project", project_root, "--symbol", "helper"]
+                )
 
             self.assertEqual(exit_code, 1)
             self.assertIn("--file-path", stderr.getvalue())
@@ -961,7 +1345,15 @@ class RepoMapCliTests(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 exit_code = main(
-                    ["call-chain", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
+                    [
+                        "call-chain",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "helper",
+                        "--file-path",
+                        "b.py",
+                    ]
                 )
 
             self.assertEqual(exit_code, 0)
@@ -978,7 +1370,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+                exit_code = main(
+                    ["query-symbol", "--project", project_root, "--symbol", "helper"]
+                )
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
@@ -997,7 +1391,17 @@ class RepoMapCliTests(unittest.TestCase):
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["query-symbol", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"])
+                exit_code = main(
+                    [
+                        "query-symbol",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "helper",
+                        "--file-path",
+                        "b.py",
+                    ]
+                )
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
@@ -1017,8 +1421,14 @@ class RepoMapCliTests(unittest.TestCase):
                 src.ai.get_co_change_neighbors(str(engine.project_root), "main.py")
                 return ["## Implicit Coupling (Git Co-change)\n"]
 
-            with patch.object(src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]) as co_change_mock:
-                with patch.object(src.ai, "_render_co_change_section", side_effect=fake_co_change_section):
+            with patch.object(
+                src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]
+            ) as co_change_mock:
+                with patch.object(
+                    src.ai,
+                    "_render_co_change_section",
+                    side_effect=fake_co_change_section,
+                ):
                     # Default: co-change is disabled (opt-in)
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                         default_code = main(["overview", "--project", project_root])
@@ -1027,7 +1437,9 @@ class RepoMapCliTests(unittest.TestCase):
 
                     # --with-co-change should enable it
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                        enabled_code = main(["overview", "--project", project_root, "--with-co-change"])
+                        enabled_code = main(
+                            ["overview", "--project", project_root, "--with-co-change"]
+                        )
                     self.assertEqual(enabled_code, 0)
                     self.assertGreater(co_change_mock.call_count, 0)
 
@@ -1036,9 +1448,15 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(
+                project_root,
+                "main.py",
+                "from lib import helper\n\ndef caller():\n    return helper()\n",
+            )
             write_file(project_root, "README.md", "# Demo\n")
-            write_file(project_root, "scripts/check.sh", "#!/usr/bin/env bash\necho ok\n")
+            write_file(
+                project_root, "scripts/check.sh", "#!/usr/bin/env bash\necho ok\n"
+            )
             write_file(project_root, ".env", "SECRET=hidden\n")
 
             stdout = io.StringIO()
@@ -1047,7 +1465,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(Path(payload["project_root"]).resolve(), Path(project_root).resolve())
+            self.assertEqual(
+                Path(payload["project_root"]).resolve(), Path(project_root).resolve()
+            )
             self.assertIn("scan_stats", payload)
             self.assertIn("entry_points", payload)
             self.assertIn("hotspots", payload)
@@ -1060,7 +1480,9 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertLessEqual(len(payload["reading_order"]), 6)
             self.assertLessEqual(len(payload["modules"]), 6)
             self.assertLessEqual(len(payload["summary_symbols"]), 4)
-            supporting_paths = {Path(item["file"]) for item in payload["supporting_files"]}
+            supporting_paths = {
+                Path(item["file"]) for item in payload["supporting_files"]
+            }
             self.assertIn(Path("README.md"), supporting_paths)
             self.assertIn(Path("scripts/check.sh"), supporting_paths)
             self.assertNotIn(Path(".env"), supporting_paths)
@@ -1072,12 +1494,24 @@ class RepoMapCliTests(unittest.TestCase):
             write_file(
                 project_root,
                 "main.py",
-                "\n\n".join(f"def helper_{index}():\n    return {index}" for index in range(15)) + "\n",
+                "\n\n".join(
+                    f"def helper_{index}():\n    return {index}" for index in range(15)
+                )
+                + "\n",
             )
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["file-detail", "--project", project_root, "--file-path", "main.py", "--no-lsp"])
+                exit_code = main(
+                    [
+                        "file-detail",
+                        "--project",
+                        project_root,
+                        "--file-path",
+                        "main.py",
+                        "--no-lsp",
+                    ]
+                )
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
@@ -1095,13 +1529,22 @@ class RepoMapCliTests(unittest.TestCase):
                 "\n\n".join(
                     f"def helper_{index}(first_argument, second_argument, third_argument):\n    return first_argument + second_argument + third_argument + {index}"
                     for index in range(12)
-                ) + "\n",
+                )
+                + "\n",
             )
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 exit_code = main(
-                    ["file-detail", "--project", project_root, "--file-path", "main.py", "--max-chars", "220"]
+                    [
+                        "file-detail",
+                        "--project",
+                        project_root,
+                        "--file-path",
+                        "main.py",
+                        "--max-chars",
+                        "220",
+                    ]
                 )
 
             text = stdout.getvalue()
@@ -1114,37 +1557,58 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(
+                project_root,
+                "main.py",
+                "from lib import helper\n\ndef caller():\n    return helper()\n",
+            )
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main(["call-chain", "--project", project_root, "--symbol", "helper", "--json"])
+                exit_code = main(
+                    [
+                        "call-chain",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "helper",
+                        "--json",
+                    ]
+                )
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["symbol"]["name"], "helper")
             self.assertEqual(payload["direction"], "both")
-            self.assertTrue(any(item["name"] == "caller" for item in payload["callers"]))
+            self.assertTrue(
+                any(item["name"] == "caller" for item in payload["callers"])
+            )
 
     def test_call_chain_json_respects_direction_filter(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(project_root, "main.py", "from lib import helper\n\ndef caller():\n    return helper()\n")
+            write_file(
+                project_root,
+                "main.py",
+                "from lib import helper\n\ndef caller():\n    return helper()\n",
+            )
 
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                exit_code = main([
-                    "call-chain",
-                    "--project",
-                    project_root,
-                    "--symbol",
-                    "helper",
-                    "--direction",
-                    "callees",
-                    "--json",
-                ])
+                exit_code = main(
+                    [
+                        "call-chain",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "helper",
+                        "--direction",
+                        "callees",
+                        "--json",
+                    ]
+                )
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
@@ -1161,11 +1625,21 @@ class RepoMapCliTests(unittest.TestCase):
             cli_mod._SCAN_CACHE.clear()
 
             original_scan = cli_mod.RepoMapEngine.scan
-            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+            with patch.object(
+                cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan
+            ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+                    code2 = main(
+                        [
+                            "query-symbol",
+                            "--project",
+                            project_root,
+                            "--symbol",
+                            "helper",
+                        ]
+                    )
 
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
@@ -1183,9 +1657,13 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as home_dir:
             stderr = io.StringIO()
-            with patch.object(handlers_mod.Path, "home", return_value=Path(home_dir).resolve()):
+            with patch.object(
+                handlers_mod.Path, "home", return_value=Path(home_dir).resolve()
+            ):
                 with redirect_stderr(stderr):
-                    resolved = handlers_mod._resolve_project(str(Path(home_dir).resolve()))
+                    resolved = handlers_mod._resolve_project(
+                        str(Path(home_dir).resolve())
+                    )
 
         self.assertEqual(resolved, str(Path(home_dir).resolve()))
         self.assertIn("warning: project root is your home directory", stderr.getvalue())
@@ -1223,7 +1701,10 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertNotEqual(session_a, session_b)
         self.assertEqual(session_a.name, "session_scan.json")
         self.assertEqual(session_a.parent, cache_paths_a[0].parent)
-        self.assertEqual([path.name for path in cache_paths_a], ["symbols.json", "git.json", "last_snapshot.json"])
+        self.assertEqual(
+            [path.name for path in cache_paths_a],
+            ["symbols.json", "git.json", "last_snapshot.json"],
+        )
 
     def test_session_cache_rejects_mismatched_project_root_payload(self) -> None:
         import src.cli.cli as cli_mod
@@ -1238,17 +1719,29 @@ class RepoMapCliTests(unittest.TestCase):
                 session_cache.unlink()
 
             original_scan = cli_mod.RepoMapEngine.scan
-            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+            with patch.object(
+                cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan
+            ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
 
                 payload = json.loads(session_cache.read_text(encoding="utf-8"))
-                payload["project_root"] = str(Path(project_root).parent / "other-project")
+                payload["project_root"] = str(
+                    Path(project_root).parent / "other-project"
+                )
                 session_cache.write_text(json.dumps(payload), encoding="utf-8")
 
                 cli_mod._SCAN_CACHE.clear()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+                    code2 = main(
+                        [
+                            "query-symbol",
+                            "--project",
+                            project_root,
+                            "--symbol",
+                            "helper",
+                        ]
+                    )
 
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
@@ -1267,19 +1760,31 @@ class RepoMapCliTests(unittest.TestCase):
                 session_cache.unlink()
 
             original_scan = cli_mod.RepoMapEngine.scan
-            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+            with patch.object(
+                cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan
+            ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
                 cli_mod._SCAN_CACHE.clear()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "helper"])
+                    code2 = main(
+                        [
+                            "query-symbol",
+                            "--project",
+                            project_root,
+                            "--symbol",
+                            "helper",
+                        ]
+                    )
 
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
             self.assertEqual(scan_mock.call_count, 1)
 
-    @unittest.skipIf(sys.platform == 'win32', "0-symbol TSX entry detection differs on Windows")
+    @unittest.skipIf(
+        sys.platform == "win32", "0-symbol TSX entry detection differs on Windows"
+    )
     def test_session_cache_preserves_zero_symbol_entry_files(self) -> None:
         import src.cli.cli as cli_mod
         from src.cli import main
@@ -1318,8 +1823,15 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
-            self.assertTrue(any(ep.replace("\\", "/") == "src/main.tsx" for ep in payload["entry_points"]))
-            self.assertEqual(payload["reading_order"][0]["file"].replace("\\", "/"), "src/main.tsx")
+            self.assertTrue(
+                any(
+                    ep.replace("\\", "/") == "src/main.tsx"
+                    for ep in payload["entry_points"]
+                )
+            )
+            self.assertEqual(
+                payload["reading_order"][0]["file"].replace("\\", "/"), "src/main.tsx"
+            )
 
     def test_scan_cache_invalidates_after_source_change(self) -> None:
         import src.cli.cli as cli_mod
@@ -1330,12 +1842,20 @@ class RepoMapCliTests(unittest.TestCase):
             cli_mod._SCAN_CACHE.clear()
 
             original_scan = cli_mod.RepoMapEngine.scan
-            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+            with patch.object(
+                cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan
+            ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
-                write_file(project_root, "main.py", "def helper():\n    return 1\n\ndef added():\n    return helper()\n")
+                write_file(
+                    project_root,
+                    "main.py",
+                    "def helper():\n    return 1\n\ndef added():\n    return helper()\n",
+                )
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    code2 = main(["query-symbol", "--project", project_root, "--symbol", "added"])
+                    code2 = main(
+                        ["query-symbol", "--project", project_root, "--symbol", "added"]
+                    )
 
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
@@ -1350,11 +1870,17 @@ class RepoMapCliTests(unittest.TestCase):
             cli_mod._SCAN_CACHE.clear()
 
             original_scan = cli_mod.RepoMapEngine.scan
-            with patch.object(cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan) as scan_mock:
+            with patch.object(
+                cli_mod.RepoMapEngine, "scan", autospec=True, wraps=original_scan
+            ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
                 cli_mod._SCAN_CACHE.clear()
-                write_file(project_root, "main.py", "def helper():\n    return 1\n\ndef changed():\n    return helper()\n")
+                write_file(
+                    project_root,
+                    "main.py",
+                    "def helper():\n    return 1\n\ndef changed():\n    return helper()\n",
+                )
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(["overview", "--project", project_root])
 
@@ -1375,7 +1901,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                exit_code = main(["refs", "--project", project_root, "--symbol", "helper"])
+                exit_code = main(
+                    ["refs", "--project", project_root, "--symbol", "helper"]
+                )
 
             self.assertEqual(exit_code, 1)
             self.assertIn("--file-path", stderr.getvalue())
@@ -1397,7 +1925,15 @@ class RepoMapCliTests(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 exit_code = main(
-                    ["refs", "--project", project_root, "--symbol", "helper", "--file-path", "b.py"]
+                    [
+                        "refs",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "helper",
+                        "--file-path",
+                        "b.py",
+                    ]
                 )
 
             self.assertEqual(exit_code, 0)

@@ -71,7 +71,9 @@ def _extract_ts_return_type(def_node: Any) -> str:
 
 
 def _extract_ts_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "formal_parameters") or _find_child_by_type(def_node, "parameters")
+    params_node = _find_child_by_type(
+        def_node, "formal_parameters"
+    ) or _find_child_by_type(def_node, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
@@ -89,9 +91,18 @@ def _extract_go_return_type(def_node: Any) -> str:
     for child in def_node.children:
         if child.type == "parameter_list":
             continue
-        if child.type in ("type_identifier", "pointer_type", "interface_type",
-                          "array_type", "slice_type", "map_type", "channel_type",
-                          "function_type", "struct_type", "generic_type"):
+        if child.type in (
+            "type_identifier",
+            "pointer_type",
+            "interface_type",
+            "array_type",
+            "slice_type",
+            "map_type",
+            "channel_type",
+            "function_type",
+            "struct_type",
+            "generic_type",
+        ):
             return _node_text(child).strip()
     param_lists = _find_children_by_type(def_node, "parameter_list")
     if len(param_lists) >= 2:
@@ -150,8 +161,13 @@ def _extract_java_return_type(def_node: Any) -> str:
     for child in def_node.children:
         if child.type == "type_identifier":
             return _node_text(child).strip()
-        if child.type in ("void_type", "integral_type", "floating_point_type",
-                          "boolean_type", "generic_type"):
+        if child.type in (
+            "void_type",
+            "integral_type",
+            "floating_point_type",
+            "boolean_type",
+            "generic_type",
+        ):
             return _node_text(child).strip()
     return ""
 
@@ -176,7 +192,9 @@ def _extract_kotlin_return_type(def_node: Any) -> str:
 
 
 def _extract_kotlin_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "function_value_parameters") or _find_child_by_type(def_node, "parameters")
+    params_node = _find_child_by_type(
+        def_node, "function_value_parameters"
+    ) or _find_child_by_type(def_node, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
@@ -195,7 +213,9 @@ def _extract_swift_return_type(def_node: Any) -> str:
 
 
 def _extract_swift_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "parameter_list") or _find_child_by_type(def_node, "parameters")
+    params_node = _find_child_by_type(
+        def_node, "parameter_list"
+    ) or _find_child_by_type(def_node, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
@@ -210,15 +230,24 @@ def _extract_c_sharp_return_type(def_node: Any) -> str:
     for child in def_node.children:
         if child.type == "type":
             return _node_text(child).strip()
-        if child.type in ("void_keyword", "int_keyword", "string_keyword",
-                          "bool_keyword", "float_keyword", "double_keyword",
-                          "object_keyword", "var_keyword"):
+        if child.type in (
+            "void_keyword",
+            "int_keyword",
+            "string_keyword",
+            "bool_keyword",
+            "float_keyword",
+            "double_keyword",
+            "object_keyword",
+            "var_keyword",
+        ):
             return _node_text(child).strip()
     return ""
 
 
 def _extract_c_sharp_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "parameter_list") or _find_child_by_type(def_node, "parameters")
+    params_node = _find_child_by_type(
+        def_node, "parameter_list"
+    ) or _find_child_by_type(def_node, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
@@ -231,18 +260,31 @@ def _extract_c_sharp_params(def_node: Any) -> str:
 
 def _extract_cpp_return_type(def_node: Any) -> str:
     for child in def_node.children:
-        if child.type in ("type_identifier", "primitive_type", "sized_type_specifier",
-                          "auto", "pointer_type", "reference_type", "qualified_identifier"):
+        if child.type in (
+            "type_identifier",
+            "primitive_type",
+            "sized_type_specifier",
+            "auto",
+            "pointer_type",
+            "reference_type",
+            "qualified_identifier",
+        ):
             return _node_text(child).strip()
     return ""
 
 
 def _extract_cpp_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(def_node, "parameter_list") or _find_child_by_type(def_node, "parameters")
+    params_node = _find_child_by_type(
+        def_node, "parameter_list"
+    ) or _find_child_by_type(def_node, "parameters")
     if not params_node:
-        declarator = _find_child_by_type(def_node, "function_declarator") or _find_child_by_type(def_node, "declarator")
+        declarator = _find_child_by_type(
+            def_node, "function_declarator"
+        ) or _find_child_by_type(def_node, "declarator")
         if declarator:
-            params_node = _find_child_by_type(declarator, "parameter_list") or _find_child_by_type(declarator, "parameters")
+            params_node = _find_child_by_type(
+                declarator, "parameter_list"
+            ) or _find_child_by_type(declarator, "parameters")
     if not params_node:
         return ""
     parts: list[str] = []
@@ -268,10 +310,24 @@ _EXTRACTORS: dict[str, tuple[Any, Any]] = {
 
 _FUNC_NODE_TYPES: dict[str, frozenset[str]] = {
     "python": frozenset({"function_definition"}),
-    "typescript": frozenset({"function_declaration", "method_definition", "arrow_function",
-                              "function", "generator_function_declaration"}),
-    "tsx": frozenset({"function_declaration", "method_definition", "arrow_function",
-                       "function", "generator_function_declaration"}),
+    "typescript": frozenset(
+        {
+            "function_declaration",
+            "method_definition",
+            "arrow_function",
+            "function",
+            "generator_function_declaration",
+        }
+    ),
+    "tsx": frozenset(
+        {
+            "function_declaration",
+            "method_definition",
+            "arrow_function",
+            "function",
+            "generator_function_declaration",
+        }
+    ),
     "go": frozenset({"function_declaration", "method_declaration"}),
     "rust": frozenset({"function_item"}),
     "java": frozenset({"method_declaration", "constructor_declaration"}),

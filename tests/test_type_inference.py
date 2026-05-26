@@ -33,8 +33,8 @@ def _parse_and_extract(ts, code, lang, symbols):
 # Python
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestPythonTypeExtraction:
 
+class TestPythonTypeExtraction:
     def test_return_type_annotation(self, ts):
         code = "def foo() -> str:\n    pass\n"
         sym = Symbol(id="s1", name="foo", kind="function", file="a.py", line=1)
@@ -65,11 +65,7 @@ class TestPythonTypeExtraction:
         assert "b: int" in result[0].params
 
     def test_method_in_class(self, ts):
-        code = (
-            "class Foo:\n"
-            "    def bar(self, x: int) -> str:\n"
-            "        return str(x)\n"
-        )
+        code = "class Foo:\n    def bar(self, x: int) -> str:\n        return str(x)\n"
         sym = Symbol(id="s1", name="bar", kind="method", file="a.py", line=2)
         result = _parse_and_extract(ts, code, "python", [sym])
         assert result[0].return_type == "str"
@@ -86,8 +82,8 @@ class TestPythonTypeExtraction:
 # TypeScript
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTypeScriptTypeExtraction:
 
+class TestTypeScriptTypeExtraction:
     def test_function_return_type(self, ts):
         code = "function foo(): string {\n  return '';\n}\n"
         sym = Symbol(id="s1", name="foo", kind="function", file="a.ts", line=1)
@@ -102,11 +98,7 @@ class TestTypeScriptTypeExtraction:
         assert "y: string" in result[0].params
 
     def test_method_params(self, ts):
-        code = (
-            "class Foo {\n"
-            "  method(x: number, y: string): void {}\n"
-            "}\n"
-        )
+        code = "class Foo {\n  method(x: number, y: string): void {}\n}\n"
         sym = Symbol(id="s1", name="method", kind="method", file="a.ts", line=2)
         result = _parse_and_extract(ts, code, "typescript", [sym])
         assert "x: number" in result[0].params
@@ -130,8 +122,8 @@ class TestTypeScriptTypeExtraction:
 # Go
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestGoTypeExtraction:
 
+class TestGoTypeExtraction:
     def test_single_return_type(self, ts):
         code = "func foo() error {\n\treturn nil\n}\n"
         sym = Symbol(id="s1", name="foo", kind="function", file="a.go", line=1)
@@ -185,8 +177,8 @@ class TestGoTypeExtraction:
 # Rust
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestRustTypeExtraction:
 
+class TestRustTypeExtraction:
     def test_return_type(self, ts):
         code = "fn foo() -> Result<bool> {\n    Ok(true)\n}\n"
         sym = Symbol(id="s1", name="foo", kind="function", file="a.rs", line=1)
@@ -219,8 +211,8 @@ class TestRustTypeExtraction:
 # Java
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestJavaTypeExtraction:
 
+class TestJavaTypeExtraction:
     def test_method_return_type_and_params(self, ts):
         code = (
             "public class Foo {\n"
@@ -236,23 +228,13 @@ class TestJavaTypeExtraction:
         assert "String y" in result[0].params
 
     def test_void_return(self, ts):
-        code = (
-            "public class Foo {\n"
-            "    public void doSomething() {\n"
-            "    }\n"
-            "}\n"
-        )
+        code = "public class Foo {\n    public void doSomething() {\n    }\n}\n"
         sym = Symbol(id="s1", name="doSomething", kind="method", file="a.java", line=2)
         result = _parse_and_extract(ts, code, "java", [sym])
         assert result[0].return_type == "void"
 
     def test_constructor_no_return(self, ts):
-        code = (
-            "public class Foo {\n"
-            "    public Foo(int x) {\n"
-            "    }\n"
-            "}\n"
-        )
+        code = "public class Foo {\n    public Foo(int x) {\n    }\n}\n"
         sym = Symbol(id="s1", name="Foo", kind="method", file="a.java", line=2)
         result = _parse_and_extract(ts, code, "java", [sym])
         assert result[0].return_type == ""
@@ -262,8 +244,8 @@ class TestJavaTypeExtraction:
 # C++
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestCppTypeExtraction:
 
+class TestCppTypeExtraction:
     def test_function_return_type(self, ts):
         code = "int main() {\n    return 0;\n}\n"
         sym = Symbol(id="s1", name="main", kind="function", file="a.cpp", line=1)
@@ -289,8 +271,8 @@ class TestCppTypeExtraction:
 # extract_types_for_file 边界情况
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestExtractTypesForFileEdgeCases:
 
+class TestExtractTypesForFileEdgeCases:
     def test_unsupported_language_returns_zero(self, ts):
         code = "def foo(): pass\n"
         tree = ts.parse(code.encode("utf-8"), "python")
@@ -307,8 +289,13 @@ class TestExtractTypesForFileEdgeCases:
     def test_already_filled_fields_not_overwritten(self, ts):
         code = "def foo() -> str:\n    pass\n"
         sym = Symbol(
-            id="s1", name="foo", kind="function", file="a.py", line=1,
-            return_type="existing", params="existing"
+            id="s1",
+            name="foo",
+            kind="function",
+            file="a.py",
+            line=1,
+            return_type="existing",
+            params="existing",
         )
         tree = ts.parse(code.encode("utf-8"), "python")
         result = extract_types_for_file(tree, "python", ["s1"], {"s1": sym})

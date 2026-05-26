@@ -94,7 +94,16 @@ class ProjectDetector:
         """检查是否有 JS 文件（排除 node_modules）"""
         try:
             result = subprocess.run(
-                ["rg", "--files", "-g", "!node_modules/**", "-g", "!dist/**", "-g", "!build/**"],
+                [
+                    "rg",
+                    "--files",
+                    "-g",
+                    "!node_modules/**",
+                    "-g",
+                    "!dist/**",
+                    "-g",
+                    "!build/**",
+                ],
                 cwd=project_root,
                 capture_output=True,
                 text=True,
@@ -108,10 +117,21 @@ class ProjectDetector:
             pass
 
         # fallback: 简单遍历，剪掉依赖和构建目录，避免只因 node_modules 内文件误判为 JS 项目
-        skip_dirs = {"node_modules", "dist", "build", ".git", ".venv", "venv", "__pycache__"}
+        skip_dirs = {
+            "node_modules",
+            "dist",
+            "build",
+            ".git",
+            ".venv",
+            "venv",
+            "__pycache__",
+        }
         for root, dir_names, file_names in os.walk(project_root):
             dir_names[:] = [name for name in dir_names if name not in skip_dirs]
-            if any(Path(file_name).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs"} for file_name in file_names):
+            if any(
+                Path(file_name).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs"}
+                for file_name in file_names
+            ):
                 return True
         return False
 
@@ -120,10 +140,13 @@ class GitHelper:
     """Git 辅助工具"""
 
     @staticmethod
-    def get_modified_files(project_root: Path, since_commit: str | None = None) -> list[str]:
+    def get_modified_files(
+        project_root: Path, since_commit: str | None = None
+    ) -> list[str]:
         """获取变更的文件列表"""
         try:
             from .git_backend import GitBackend
+
             git = GitBackend(str(project_root))
             files: set[str] = set()
             files.update(git.diff_cached_name_only())
@@ -138,11 +161,17 @@ class GitHelper:
 class DiagnosticRunner:
     """运行诊断工具"""
 
-    def __init__(self, project_root: Path, max_items: int = 100, modified_files: list[str] | None = None):
+    def __init__(
+        self,
+        project_root: Path,
+        max_items: int = 100,
+        modified_files: list[str] | None = None,
+    ):
         self.project_root = project_root.resolve()
         self.max_items = max_items
         self.modified_files = {
-            normalized for file_path in (modified_files or [])
+            normalized
+            for file_path in (modified_files or [])
             if (normalized := self._normalize_safe_path(file_path)) is not None
         }  # 增量检查的文件列表统一为项目内相对路径
 
@@ -150,11 +179,15 @@ class DiagnosticRunner:
         """将工具或 CLI 传入的文件路径归一为项目内相对路径；非法路径返回 None。"""
         if not file_path or file_path.startswith("-"):
             return None
-        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\\', '\x00']
+        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "\x00"]
         if any(c in file_path for c in dangerous_chars):
             return None
         input_path = Path(file_path).expanduser()
-        abs_path = input_path.resolve() if input_path.is_absolute() else (self.project_root / input_path).resolve()
+        abs_path = (
+            input_path.resolve()
+            if input_path.is_absolute()
+            else (self.project_root / input_path).resolve()
+        )
         try:
             rel_path = abs_path.relative_to(self.project_root).as_posix()
         except ValueError:
@@ -180,14 +213,16 @@ class DiagnosticRunner:
             if self._has_eslint_config():
                 results.append(self._run_eslint())
             else:
-                results.append(DiagnosticResult(
-                    tool="eslint",
-                    command="skip (no eslint config)",
-                    exit_code=0,
-                    duration_ms=0,
-                    skipped=True,
-                    skip_reason="eslint config not found",
-                ))
+                results.append(
+                    DiagnosticResult(
+                        tool="eslint",
+                        command="skip (no eslint config)",
+                        exit_code=0,
+                        duration_ms=0,
+                        skipped=True,
+                        skip_reason="eslint config not found",
+                    )
+                )
 
         if "rust" in types:
             results.append(self._run_cargo_check())
@@ -238,9 +273,7 @@ class DiagnosticRunner:
 
         return int(time.time() * 1000)
 
-    def _run_command(
-        self, cmd: list[str], tool_name: str
-    ) -> tuple[int, str, int]:
+    def _run_command(self, cmd: list[str], tool_name: str) -> tuple[int, str, int]:
         """运行命令并返回 (exit_code, stdout, duration_ms)"""
         start = self._now_ms()
         try:
@@ -290,11 +323,15 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:30],
         )
 
-    def _parse_tsc_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_tsc_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 tsc 输出"""
         errors, warnings = [], []
         # 匹配: file.ts(42,8): error TS2345: message
-        pattern = re.compile(r'^(.+)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$')
+        pattern = re.compile(
+            r"^(.+)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$"
+        )
 
         for line in output.split("\n"):
             match = pattern.match(line.strip())
@@ -337,7 +374,9 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = self._safe_modified_files(('.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx'))
+            target_files = self._safe_modified_files(
+                (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
+            )
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -350,9 +389,12 @@ class DiagnosticRunner:
             cmd = ["eslint", "--format", "json", "--"] + target_files
         else:
             cmd = [
-                "eslint", ".",
-                "--ext", ".js,.jsx,.mjs,.cjs,.ts,.tsx",
-                "--format", "json",
+                "eslint",
+                ".",
+                "--ext",
+                ".js,.jsx,.mjs,.cjs,.ts,.tsx",
+                "--format",
+                "json",
             ]
 
         exit_code, output, duration = self._run_command(cmd, tool)
@@ -369,7 +411,9 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:20],
         )
 
-    def _parse_eslint_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_eslint_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 ESLint JSON 输出"""
         errors, warnings = [], []
         try:
@@ -428,7 +472,10 @@ class DiagnosticRunner:
             )
 
         # 显示进度提示
-        print(f"[{tool}] Running cargo check (may take a minute for large projects)...", file=sys.stderr)
+        print(
+            f"[{tool}] Running cargo check (may take a minute for large projects)...",
+            file=sys.stderr,
+        )
 
         cmd = ["cargo", "check", "--message-format", "json"]
         exit_code, output, duration = self._run_command(cmd, tool)
@@ -448,7 +495,9 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:30],
         )
 
-    def _parse_cargo_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_cargo_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 cargo JSON 输出"""
         errors, warnings = [], []
 
@@ -520,7 +569,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = self._safe_modified_files(('.py',))
+            target_files = self._safe_modified_files((".py",))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -542,7 +591,9 @@ class DiagnosticRunner:
 
         if use_daemon:
             cmd = [
-                "dmypy", "run", "--",
+                "dmypy",
+                "run",
+                "--",
                 "--show-error-codes",
                 "--hide-error-context",
                 "--no-color-output",
@@ -572,18 +623,20 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:30],
         )
 
-    def _parse_mypy_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_mypy_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 mypy 输出"""
         errors, warnings = [], []
         # 匹配: file.py:42: error: message [code]
-        pattern = re.compile(r'^(.+\.py):(\d+):\s*(error|warning|note):\s+(.+)$')
+        pattern = re.compile(r"^(.+\.py):(\d+):\s*(error|warning|note):\s+(.+)$")
 
         for line in output.split("\n"):
             match = pattern.match(line)
             if match:
                 msg = match.group(4)
                 code = "mypy"
-                code_match = re.search(r'\[([^\]]+)\]\s*$', msg)
+                code_match = re.search(r"\[([^\]]+)\]\s*$", msg)
                 if code_match:
                     code = code_match.group(1)
 
@@ -624,7 +677,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = self._safe_modified_files(('.py',))
+            target_files = self._safe_modified_files((".py",))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -652,7 +705,9 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:20],
         )
 
-    def _parse_ruff_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_ruff_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 ruff JSON 输出，尝试获取修复建议"""
         errors = []
         try:
@@ -701,7 +756,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = self._safe_modified_files(('.go',))
+            target_files = self._safe_modified_files((".go",))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -745,7 +800,7 @@ class DiagnosticRunner:
 
         # 增量检查：只检查指定文件
         if self.modified_files:
-            target_files = self._safe_modified_files(('.go',))
+            target_files = self._safe_modified_files((".go",))
             if not target_files:
                 return DiagnosticResult(
                     tool=tool,
@@ -777,11 +832,13 @@ class DiagnosticRunner:
             raw_excerpt=output.split("\n")[:30],
         )
 
-    def _parse_go_output(self, output: str) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    def _parse_go_output(
+        self, output: str
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 go vet/build 输出"""
         errors = []
         # 匹配: file.go:42:8: message
-        pattern = re.compile(r'^(.+\.go):(\d+):(\d+):\s+(.+)$')
+        pattern = re.compile(r"^(.+\.go):(\d+):(\d+):\s+(.+)$")
 
         for line in output.split("\n"):
             match = pattern.match(line)
@@ -850,7 +907,11 @@ class RepoMapChecker:
                 "message": "No supported project type detected",
                 "types": [],
                 "runs": [],
-                "summary": {"total_errors": 0, "total_warnings": 0, "files_with_errors": 0},
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                },
                 "errors_by_file": {},
                 "incremental": {
                     "enabled": target_files is not None,
@@ -864,7 +925,9 @@ class RepoMapChecker:
         # 运行所有诊断工具
         results = self.runner.run_all(detected_types)
         if with_lsp:
-            results.extend(self._run_lsp_diagnostics(target_files, lsp_timeout, lsp_max_files))
+            results.extend(
+                self._run_lsp_diagnostics(target_files, lsp_timeout, lsp_max_files)
+            )
 
         # 解析符号关联
         if resolve_symbols and symbols_map:
@@ -881,18 +944,25 @@ class RepoMapChecker:
         lsp_max_files: int,
     ) -> list[DiagnosticResult]:
         if not target_files:
-            return [DiagnosticResult(
-                tool="lsp",
-                command="repomap lsp diagnostics",
-                exit_code=0,
-                duration_ms=0,
-                skipped=True,
-                skip_reason="no explicit files; pass --modified-file or use diagnostics --files",
-            )]
+            return [
+                DiagnosticResult(
+                    tool="lsp",
+                    command="repomap lsp diagnostics",
+                    exit_code=0,
+                    duration_ms=0,
+                    skipped=True,
+                    skip_reason="no explicit files; pass --modified-file or use diagnostics --files",
+                )
+            ]
         from .lsp import collect_lsp_diagnostics
 
         diagnostic_results: list[DiagnosticResult] = []
-        for run in collect_lsp_diagnostics(self.project_root, target_files, timeout=lsp_timeout, max_files=lsp_max_files):
+        for run in collect_lsp_diagnostics(
+            self.project_root,
+            target_files,
+            timeout=lsp_timeout,
+            max_files=lsp_max_files,
+        ):
             issues = [
                 DiagnosticIssue(
                     tool=f"lsp:{run.server}",
@@ -909,17 +979,21 @@ class RepoMapChecker:
             warnings = [issue for issue in issues if issue.severity != "error"]
             skipped = run.status == "skipped"
             exit_code = 1 if run.status in {"failed", "timeout"} else 0
-            diagnostic_results.append(DiagnosticResult(
-                tool=f"lsp:{run.server}",
-                command=" ".join(run.command) if run.command else "repomap lsp diagnostics",
-                exit_code=exit_code,
-                duration_ms=run.duration_ms,
-                skipped=skipped,
-                skip_reason=run.reason if skipped else "",
-                errors=errors,
-                warnings=warnings,
-                raw_excerpt=[run.reason] if run.reason and not skipped else [],
-            ))
+            diagnostic_results.append(
+                DiagnosticResult(
+                    tool=f"lsp:{run.server}",
+                    command=" ".join(run.command)
+                    if run.command
+                    else "repomap lsp diagnostics",
+                    exit_code=exit_code,
+                    duration_ms=run.duration_ms,
+                    skipped=skipped,
+                    skip_reason=run.reason if skipped else "",
+                    errors=errors,
+                    warnings=warnings,
+                    raw_excerpt=[run.reason] if run.reason and not skipped else [],
+                )
+            )
         return diagnostic_results
 
     def _get_timestamp(self) -> str:
@@ -929,13 +1003,16 @@ class RepoMapChecker:
         return datetime.now(timezone.utc).isoformat()
 
     def _resolve_symbols(
-        self, results: list[DiagnosticResult], symbols_map: dict[str, Any],
+        self,
+        results: list[DiagnosticResult],
+        symbols_map: dict[str, Any],
         graph: Any = None,
     ) -> None:
         """将错误位置解析为符号名称，并计算置信度；可选附加上下文调用者。"""
         # 构建文件 -> 符号列表 的映射，包含行号范围
         file_symbols: dict[str, list[tuple[str, int, int, str]]] = {}
         for symbol_id, symbol in symbols_map.items():
+
             def _get_attr(obj: Any, attr: str, default: Any = None) -> Any:
                 if hasattr(obj, attr):
                     return getattr(obj, attr, default)
@@ -1006,18 +1083,20 @@ class RepoMapChecker:
                 file_key = issue.file or "unknown"
                 if file_key not in errors_by_file:
                     errors_by_file[file_key] = []
-                errors_by_file[file_key].append({
-                    "tool": issue.tool,
-                    "line": issue.line,
-                    "col": issue.col,
-                    "severity": issue.severity,
-                    "code": issue.code,
-                    "message": issue.message,
-                    "symbol": issue.symbol,
-                    "symbol_confidence": issue.symbol_confidence,
-                    "callers": issue.callers,
-                    "suggested_fix": issue.suggested_fix,
-                })
+                errors_by_file[file_key].append(
+                    {
+                        "tool": issue.tool,
+                        "line": issue.line,
+                        "col": issue.col,
+                        "severity": issue.severity,
+                        "code": issue.code,
+                        "message": issue.message,
+                        "symbol": issue.symbol,
+                        "symbol_confidence": issue.symbol_confidence,
+                        "callers": issue.callers,
+                        "suggested_fix": issue.suggested_fix,
+                    }
+                )
 
         # 构建 runs 详情
         runs = []
@@ -1035,7 +1114,9 @@ class RepoMapChecker:
             if r.skip_reason:
                 run_data["skip_reason"] = r.skip_reason
             if not r.skipped and r.exit_code != 0 and not r.errors and not r.warnings:
-                run_data["tool_failure_reason"] = "Tool exited non-zero but no structured errors parsed"
+                run_data["tool_failure_reason"] = (
+                    "Tool exited non-zero but no structured errors parsed"
+                )
             if not r.skipped:
                 run_data["raw_excerpt"] = list(r.raw_excerpt[:10])
                 run_data["errors"] = [
@@ -1088,7 +1169,11 @@ class RepoMapChecker:
                 "tools_skipped": tools_skipped,
                 "tool_failures": len(tool_failures),
             },
-            "errors_by_file": dict(sorted(errors_by_file.items(), key=lambda x: len(x[1]), reverse=True)[:20]),
+            "errors_by_file": dict(
+                sorted(errors_by_file.items(), key=lambda x: len(x[1]), reverse=True)[
+                    :20
+                ]
+            ),
         }
 
 

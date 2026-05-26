@@ -189,8 +189,12 @@ class RepoMapEngine:
     # 扫描主流程
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def scan(self, max_files: int = 8000, max_scan_time: float = 300.0,
-             incremental: bool = False) -> None:
+    def scan(
+        self,
+        max_files: int = 8000,
+        max_scan_time: float = 300.0,
+        incremental: bool = False,
+    ) -> None:
         """三阶段扫描：提取符号 → 建依赖边 → PageRank。
 
         Args:
@@ -199,13 +203,13 @@ class RepoMapEngine:
             incremental: 尝试增量扫描——只重新解析 git 变更文件
         """
         import time
+
         start_time = time.time()
 
         self.scan_state = "invalid"
         if not self.ts.parsers:
             raise RuntimeError(
-                "No tree-sitter language bindings detected.\n"
-                "Install with: uv sync"
+                "No tree-sitter language bindings detected.\nInstall with: uv sync"
             )
 
         self.graph = RepoGraph()
@@ -223,7 +227,9 @@ class RepoMapEngine:
             changed_files, deleted_files = self._git_changed_files()
             all_candidate_files = self._list_files(max_files)
             changed_set = set(changed_files) & set(all_candidate_files)
-            unchanged_set = set(inc_cache.files.keys()) - changed_set - set(deleted_files)
+            unchanged_set = (
+                set(inc_cache.files.keys()) - changed_set - set(deleted_files)
+            )
             files_to_scan = [f for f in all_candidate_files if f in changed_set]
             stale_cached_files: list[str] = []
             for f in sorted(unchanged_set):
@@ -232,7 +238,11 @@ class RepoMapEngine:
                         stale_cached_files.append(f)
             if stale_cached_files:
                 stale_set = set(stale_cached_files)
-                files_to_scan.extend(f for f in all_candidate_files if f in stale_set and f not in changed_set)
+                files_to_scan.extend(
+                    f
+                    for f in all_candidate_files
+                    if f in stale_set and f not in changed_set
+                )
             logger.info(
                 f"Incremental scan: {len(files_to_scan)} changed/stale, "
                 f"{len(unchanged_set) - len(stale_cached_files)} restored, {len(deleted_files)} deleted"
@@ -248,14 +258,18 @@ class RepoMapEngine:
                 elapsed = time.time() - start_time
                 if elapsed > max_scan_time:
                     self.scan_stats.timeout_triggered = True
-                    logger.warning(f"Scan timeout: ran for  {elapsed:.1f}s, limit {max_scan_time}s")
+                    logger.warning(
+                        f"Scan timeout: ran for  {elapsed:.1f}s, limit {max_scan_time}s"
+                    )
                     break
 
                 try:
                     self._process_file(f)
                 except Exception as e:
                     if len(self.scan_stats.failed_files) < 5:
-                        self.scan_stats.failed_files.append(f"{f}: {type(e).__name__}: {str(e)[:50]}")
+                        self.scan_stats.failed_files.append(
+                            f"{f}: {type(e).__name__}: {str(e)[:50]}"
+                        )
                     logger.warning(f"Failed to process file {f}: {e}")
 
             self._build_edges()
@@ -272,6 +286,7 @@ class RepoMapEngine:
         if not self._inc_cache_loaded and self.scan_state == "scanned":
             try:
                 from .toolkit import save_incremental_cache
+
                 save_incremental_cache(str(self.project_root), self)
             except Exception as e:
                 logger.debug(f"Failed to save incremental cache: {e}")
@@ -279,9 +294,13 @@ class RepoMapEngine:
         sym_count = len(self.graph.symbols)
         edge_count = sum(len(v) for v in self.graph.outgoing.values())
 
-        summary_parts = [f"Scan complete — {sym_count} symbols, {edge_count} edges, {self.scan_stats.scan_duration_ms}ms"]
+        summary_parts = [
+            f"Scan complete — {sym_count} symbols, {edge_count} edges, {self.scan_stats.scan_duration_ms}ms"
+        ]
         if self.scan_stats.skipped_files:
-            summary_parts.append(f", {self.scan_stats.skipped_files} skipped (unchanged)")
+            summary_parts.append(
+                f", {self.scan_stats.skipped_files} skipped (unchanged)"
+            )
         if self.scan_stats.failed_files:
             summary_parts.append(f", {len(self.scan_stats.failed_files)} failed files")
         if self.scan_stats.timeout_triggered:
@@ -298,6 +317,7 @@ class RepoMapEngine:
         """加载增量缓存并校验有效性（项目路径 + git HEAD 匹配）。"""
         try:
             from .toolkit import _project_root_cache_key, load_incremental_cache
+
             cache = load_incremental_cache(str(self.project_root))
             if cache is None or not cache.files:
                 return None
@@ -306,6 +326,7 @@ class RepoMapEngine:
                 return None
             if cache.git_head:
                 from .git_backend import GitBackend
+
                 git = GitBackend(str(self.project_root))
                 current_head = git.rev_parse_head()
                 if current_head and cache.git_head != current_head:
@@ -319,6 +340,7 @@ class RepoMapEngine:
         """返回 (modified_files, deleted_files)，相对于项目根目录。"""
         try:
             from .git_backend import GitBackend
+
             git = GitBackend(str(self.project_root))
             modified = git.changed_files()
             deleted = git.deleted_files()
@@ -339,8 +361,11 @@ class RepoMapEngine:
         self.graph.file_symbols.setdefault(file_path, [])
         for sym_dict in entry.symbols_json:
             sym = Symbol(
-                id=sym_dict["id"], name=sym_dict["name"], kind=sym_dict["kind"],
-                file=sym_dict["file"], line=sym_dict["line"],
+                id=sym_dict["id"],
+                name=sym_dict["name"],
+                kind=sym_dict["kind"],
+                file=sym_dict["file"],
+                line=sym_dict["line"],
                 end_line=sym_dict.get("end_line", sym_dict["line"]),
                 col=sym_dict.get("col", 0),
                 visibility=sym_dict.get("visibility", "private"),
@@ -358,28 +383,35 @@ class RepoMapEngine:
 
         # 还原 import bindings
         from . import JSImportBinding
+
         self.graph.file_import_bindings[file_path] = [
             JSImportBinding(
-                local_name=b["local_name"], imported_name=b["imported_name"],
-                module=b["module"], line=b["line"], kind=b.get("kind", "named"),
+                local_name=b["local_name"],
+                imported_name=b["imported_name"],
+                module=b["module"],
+                line=b["line"],
+                kind=b.get("kind", "named"),
             )
             for b in entry.import_bindings_json
         ]
 
         # 还原 exports
         from . import JSExportBinding
+
         self.graph.file_exports[file_path] = [
             JSExportBinding(
-                exported_name=b["exported_name"], source_name=b.get("source_name"),
-                module=b.get("module"), line=b["line"], kind=b.get("kind", "local"),
+                exported_name=b["exported_name"],
+                source_name=b.get("source_name"),
+                module=b.get("module"),
+                line=b["line"],
+                kind=b.get("kind", "local"),
             )
             for b in entry.exports_json
         ]
 
         # 还原 calls
         self.graph.file_calls[file_path] = [
-            (c["name"], c["line"], c.get("kind", "direct"))
-            for c in entry.calls_json
+            (c["name"], c["line"], c.get("kind", "direct")) for c in entry.calls_json
         ]
 
         self.routes.extend(HttpRoute(**r) for r in entry.routes_json)
@@ -399,13 +431,16 @@ class RepoMapEngine:
             rg_cmd.extend(["-g", f"**/*{ext}"])
         try:
             result = subprocess.run(
-                rg_cmd, cwd=self.project_root,
-                capture_output=True, text=True, timeout=30,
+                rg_cmd,
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             candidates = sorted(
-                line for line in result.stdout.strip().split("\n")
-                if line
-                and Path(line).suffix.lower() in EXT_TO_LANG
+                line
+                for line in result.stdout.strip().split("\n")
+                if line and Path(line).suffix.lower() in EXT_TO_LANG
             )
         except Exception:
             # fallback：一次遍历过滤扩展名
@@ -413,8 +448,7 @@ class RepoMapEngine:
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
-                if p.is_file()
-                and p.suffix.lower() in valid_exts
+                if p.is_file() and p.suffix.lower() in valid_exts
             )
 
         filtered_files: list[str] = []
@@ -443,7 +477,9 @@ class RepoMapEngine:
             if not classified:
                 continue
             priority, role, reason = classified
-            rows.append({"file": file, "role": role, "reason": reason, "priority": priority})
+            rows.append(
+                {"file": file, "role": role, "reason": reason, "priority": priority}
+            )
         rows.sort(key=lambda row: (row["priority"], row["file"]))
         return [
             {"file": row["file"], "role": row["role"], "reason": row["reason"]}
@@ -460,7 +496,9 @@ class RepoMapEngine:
                 text=True,
                 timeout=30,
             )
-            candidates = sorted(line for line in result.stdout.strip().split("\n") if line)
+            candidates = sorted(
+                line for line in result.stdout.strip().split("\n") if line
+            )
         except Exception:
             candidates = sorted(
                 str(p.relative_to(self.project_root))
@@ -473,7 +511,9 @@ class RepoMapEngine:
             if (self.project_root / name).is_file()
         ]
         candidates = sorted(set(root_context_files + candidates))
-        return [file for file in candidates if not self._should_skip_supporting_path(file)]
+        return [
+            file for file in candidates if not self._should_skip_supporting_path(file)
+        ]
 
     def _should_skip_supporting_path(self, file: str) -> bool:
         path = Path(file)
@@ -497,12 +537,26 @@ class RepoMapEngine:
         depth = len(parts)
 
         if name in {"AGENTS.md", "CLAUDE.md"}:
-            return 0, "agent-context", "Injected project structure, rules, and workflow context"
+            return (
+                0,
+                "agent-context",
+                "Injected project structure, rules, and workflow context",
+            )
         if name == "SKILL.md":
-            return 1, "skill-doc", "Skill entrypoint, typically the skill repository core"
+            return (
+                1,
+                "skill-doc",
+                "Skill entrypoint, typically the skill repository core",
+            )
         if name == "README.md":
             return 2, "readme", "User/project entrypoint"
-        if name in {"package.json", "pyproject.toml", "Cargo.toml", "go.mod", "requirements.txt"}:
+        if name in {
+            "package.json",
+            "pyproject.toml",
+            "Cargo.toml",
+            "go.mod",
+            "requirements.txt",
+        }:
             return 3, "manifest", "Dependencies, scripts, or package metadata"
         if name.startswith("tsconfig") and suffix == ".json":
             return 4, "tooling-config", "TypeScript compilation config"
@@ -512,9 +566,13 @@ class RepoMapEngine:
             return 5, "automation", "Build, container, or automation entrypoint"
         if suffix == ".service":
             return 5, "service", "Service deployment/startup configuration"
-        if suffix == ".sh" and (depth <= 2 or (parts and parts[0] in {"scripts", "bin"})):
+        if suffix == ".sh" and (
+            depth <= 2 or (parts and parts[0] in {"scripts", "bin"})
+        ):
             return 6, "script", "Startup, verification, or maintenance script"
-        if suffix == ".md" and (depth <= 2 or (parts and parts[0] in {"docs", "references"})):
+        if suffix == ".md" and (
+            depth <= 2 or (parts and parts[0] in {"docs", "references"})
+        ):
             return 7, "docs", "Supplementary documentation or reference"
         if name in SUPPORTING_FILE_NAMES:
             return 8, "supporting", "Project supporting file"
@@ -564,17 +622,33 @@ class RepoMapEngine:
             self.graph.symbols[sym.id] = sym
             self.graph.file_symbols[file].append(sym.id)
 
-        if lang in ("python", "typescript", "tsx", "go", "rust",
-                     "java", "kotlin", "swift", "c_sharp", "cpp"):
+        if lang in (
+            "python",
+            "typescript",
+            "tsx",
+            "go",
+            "rust",
+            "java",
+            "kotlin",
+            "swift",
+            "c_sharp",
+            "cpp",
+        ):
             self._enrich_symbol_types(file, tree, lang)
 
         imports = self.ts.extract_imports(tree, lang)
-        import_bindings = self.ts.extract_js_ts_import_bindings(content, lang, tree=tree)
+        import_bindings = self.ts.extract_js_ts_import_bindings(
+            content, lang, tree=tree
+        )
         import_modules = {module for module, _ in imports}
-        import_modules.update(binding.module for binding in import_bindings if binding.module)
+        import_modules.update(
+            binding.module for binding in import_bindings if binding.module
+        )
         self.graph.file_imports[file] = sorted(import_modules)
         self.graph.file_import_bindings[file] = import_bindings
-        self.graph.file_exports[file] = self.ts.extract_js_ts_export_bindings(content, lang, tree=tree)
+        self.graph.file_exports[file] = self.ts.extract_js_ts_export_bindings(
+            content, lang, tree=tree
+        )
         self._mark_exported_symbols(file)
 
         self.graph.file_calls[file] = self.ts.extract_calls(tree, lang)
@@ -598,7 +672,9 @@ class RepoMapEngine:
         exported_names = {
             binding.source_name
             for binding in self.graph.file_exports.get(file, [])
-            if binding.module is None and binding.source_name and binding.source_name != "*"
+            if binding.module is None
+            and binding.source_name
+            and binding.source_name != "*"
         }
         if not exported_names:
             return
@@ -609,13 +685,15 @@ class RepoMapEngine:
 
     def _enrich_python_call_edges(self) -> None:
         python_files = [
-            f for f in self.graph.file_symbols
+            f
+            for f in self.graph.file_symbols
             if f.endswith(".py") or f.endswith(".pyi")
         ]
         if not python_files:
             return
         try:
             from .callgraph import analyze_python_callgraph, resolve_precise_edges
+
             modules = analyze_python_callgraph(self.project_root, python_files)
             precise_edges = resolve_precise_edges(modules)
             existing_edges = {
@@ -624,12 +702,25 @@ class RepoMapEngine:
                 for e in edges
             }
             added = 0
-            for caller_file, caller_name, callee_file, callee_line, kind in precise_edges:
+            for (
+                caller_file,
+                caller_name,
+                callee_file,
+                callee_line,
+                kind,
+            ) in precise_edges:
                 caller_id = self._find_symbol_id(caller_file, caller_name)
                 callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
-                if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
+                if (
+                    caller_id
+                    and callee_id
+                    and (caller_id, callee_id) not in existing_edges
+                ):
                     from . import Edge
-                    edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind="call")
+
+                    edge = Edge(
+                        source=caller_id, target=callee_id, weight=0.55, kind="call"
+                    )
                     self.graph.outgoing.setdefault(caller_id, []).append(edge)
                     self.graph.incoming.setdefault(callee_id, []).append(edge)
                     existing_edges.add((caller_id, callee_id))
@@ -641,13 +732,15 @@ class RepoMapEngine:
 
     def _enrich_ts_call_edges(self) -> None:
         ts_files = [
-            f for f in self.graph.file_symbols
+            f
+            for f in self.graph.file_symbols
             if f.endswith(".ts") or f.endswith(".tsx")
         ]
         if not ts_files:
             return
         try:
             from .callgraph import analyze_ts_callgraph, resolve_precise_edges
+
             modules = analyze_ts_callgraph(self.project_root, ts_files, self.ts)
             precise_edges = resolve_precise_edges(modules)
             added = self._add_precise_edges(precise_edges)
@@ -657,14 +750,12 @@ class RepoMapEngine:
             logger.debug(f"TypeScript call graph enrichment failed: {exc}")
 
     def _enrich_go_call_edges(self) -> None:
-        go_files = [
-            f for f in self.graph.file_symbols
-            if f.endswith(".go")
-        ]
+        go_files = [f for f in self.graph.file_symbols if f.endswith(".go")]
         if not go_files:
             return
         try:
             from .callgraph import analyze_go_callgraph, resolve_precise_edges
+
             modules = analyze_go_callgraph(self.project_root, go_files, self.ts)
             precise_edges = resolve_precise_edges(modules)
             added = self._add_precise_edges(precise_edges)
@@ -674,14 +765,12 @@ class RepoMapEngine:
             logger.debug(f"Go call graph enrichment failed: {exc}")
 
     def _enrich_rust_call_edges(self) -> None:
-        rust_files = [
-            f for f in self.graph.file_symbols
-            if f.endswith(".rs")
-        ]
+        rust_files = [f for f in self.graph.file_symbols if f.endswith(".rs")]
         if not rust_files:
             return
         try:
             from .callgraph import analyze_rust_callgraph, resolve_precise_edges
+
             modules = analyze_rust_callgraph(self.project_root, rust_files, self.ts)
             precise_edges = resolve_precise_edges(modules)
             added = self._add_precise_edges(precise_edges)
@@ -705,6 +794,7 @@ class RepoMapEngine:
             callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
             if caller_id and callee_id and (caller_id, callee_id) not in existing_edges:
                 from . import Edge
+
                 edge = Edge(source=caller_id, target=callee_id, weight=0.55, kind=kind)
                 self.graph.outgoing.setdefault(caller_id, []).append(edge)
                 self.graph.incoming.setdefault(callee_id, []).append(edge)
@@ -733,6 +823,7 @@ class RepoMapEngine:
 
     def _enrich_symbol_types(self, file: str, tree: Any, lang: str) -> None:
         from .type_inference import extract_types_for_file
+
         sym_ids = self.graph.file_symbols.get(file, [])
         if not sym_ids:
             return
@@ -751,8 +842,9 @@ class RepoMapEngine:
 
     # ── PageRank ───────────────────────────────────────────────────────────────
 
-    def _calculate_pagerank(self, damping: float = 0.85, max_iter: int = 50,
-                             tol: float = 1e-6) -> None:
+    def _calculate_pagerank(
+        self, damping: float = 0.85, max_iter: int = 50, tol: float = 1e-6
+    ) -> None:
         self._analyzer.calculate_pagerank(damping, max_iter, tol)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -763,8 +855,9 @@ class RepoMapEngine:
         """按名称模糊查找符号，按 PageRank 降序返回。"""
         return self._analyzer.query_symbol(name)
 
-    def call_chain(self, symbol_id: str, direction: str = "both",
-                   max_depth: int = 3) -> dict[str, list[Any]]:
+    def call_chain(
+        self, symbol_id: str, direction: str = "both", max_depth: int = 3
+    ) -> dict[str, list[Any]]:
         """
         返回指定符号的调用链。
         direction: "callers" | "callees" | "both"
@@ -800,10 +893,13 @@ class RepoMapEngine:
     def file_clusters(self, limit: int = 8) -> list[dict[str, Any]]:
         """Detect module clusters from the file dependency graph."""
         from .ranking import detect_file_clusters, format_cluster_summary
+
         clusters = detect_file_clusters(self.graph)
         return format_cluster_summary(clusters, top_n=limit)
 
-    def summary_symbols(self, limit_files: int = 6, per_file: int = 4) -> list[dict[str, Any]]:
+    def summary_symbols(
+        self, limit_files: int = 6, per_file: int = 4
+    ) -> list[dict[str, Any]]:
         """返回适合 overview 展示的关键实现符号。"""
         return self._analyzer.summary_symbols(limit_files, per_file)
 
@@ -819,7 +915,9 @@ class RepoMapEngine:
             lines.append(f"- Import configs: {len(self._resolver.import_configs)}")
         # 超时熔断提示
         if self.scan_stats.timeout_triggered:
-            lines.append("- ⚠️ Scan timeout triggered: some files were not processed, results incomplete")
+            lines.append(
+                "- ⚠️ Scan timeout triggered: some files were not processed, results incomplete"
+            )
         # 失败文件提示（最多显示 3 个）
         if self.scan_stats.failed_files:
             lines.append(f"- Failed files: {len(self.scan_stats.failed_files)}")
@@ -831,27 +929,51 @@ class RepoMapEngine:
     # AI 输出格式（委托给 repomap_ai）
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def render_overview(self, max_chars: int = 16000, with_heat: bool = False,
-                        with_co_change: bool = False, granularity: str = "auto") -> str:
-        return render_overview_report(self, max_chars, with_heat=with_heat,
-                                      with_co_change=with_co_change,
-                                      granularity=granularity)
+    def render_overview(
+        self,
+        max_chars: int = 16000,
+        with_heat: bool = False,
+        with_co_change: bool = False,
+        granularity: str = "auto",
+    ) -> str:
+        return render_overview_report(
+            self,
+            max_chars,
+            with_heat=with_heat,
+            with_co_change=with_co_change,
+            granularity=granularity,
+        )
 
     def render_call_chain(self, symbol_name: str, max_depth: int = 3) -> str:
         return render_call_chain_report(self, symbol_name, max_depth)
 
-    def render_file_detail(self, file_path: str, max_symbols: int = 12, max_chars: int = 6000,
-                           lsp_symbol_tree: list[Any] | None = None) -> str:
-        return render_file_detail_report(self, file_path, max_symbols=max_symbols, max_chars=max_chars,
-                                         lsp_symbol_tree=lsp_symbol_tree)
+    def render_file_detail(
+        self,
+        file_path: str,
+        max_symbols: int = 12,
+        max_chars: int = 6000,
+        lsp_symbol_tree: list[Any] | None = None,
+    ) -> str:
+        return render_file_detail_report(
+            self,
+            file_path,
+            max_symbols=max_symbols,
+            max_chars=max_chars,
+            lsp_symbol_tree=lsp_symbol_tree,
+        )
 
     def search_symbols(self, query: str, top_k: int = 20) -> list[tuple[Any, float]]:
         """BM25 符号搜索，返回 [(Symbol, score), ...]。"""
         if self._search_index is None:
             from .search import SymbolSearchIndex
+
             self._search_index = SymbolSearchIndex(self.graph.symbols)
         results = self._search_index.search(query, top_k)
-        return [(self.graph.symbols[sid], score) for sid, score in results if sid in self.graph.symbols]
+        return [
+            (self.graph.symbols[sid], score)
+            for sid, score in results
+            if sid in self.graph.symbols
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

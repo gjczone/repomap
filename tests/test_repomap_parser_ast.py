@@ -15,11 +15,16 @@ class RepoMapParserAstTests(unittest.TestCase):
         bindings = adapter.extract_js_ts_import_bindings(content, "typescript")
 
         self.assertEqual(
-            [(item.local_name, item.imported_name, item.module, item.kind) for item in bindings],
+            [
+                (item.local_name, item.imported_name, item.module, item.kind)
+                for item in bindings
+            ],
             [("alias", "real", "./real", "named")],
         )
 
-    def test_export_bindings_ignore_comments_and_capture_namespace_reexport(self) -> None:
+    def test_export_bindings_ignore_comments_and_capture_namespace_reexport(
+        self,
+    ) -> None:
         adapter = TreeSitterAdapter()
         content = (
             b"// export { Ghost } from './ghost';\n"
@@ -61,7 +66,9 @@ class RepoMapParserAstTests(unittest.TestCase):
         adapter = TreeSitterAdapter()
         if "css" not in adapter.parsers:
             self.skipTest("tree-sitter-css parser unavailable in current interpreter")
-        content = b".card { color: red; }\n#app { display: grid; }\nmain { margin: 0; }\n"
+        content = (
+            b".card { color: red; }\n#app { display: grid; }\nmain { margin: 0; }\n"
+        )
 
         tree = adapter.parse(content, "css")
         assert tree is not None
@@ -87,7 +94,9 @@ class RepoMapParserAstTests(unittest.TestCase):
         self.assertIn("nested", names)
         self.assertIn("enabled", names)
 
-    def test_typescript_object_literal_arrow_properties_become_named_symbols(self) -> None:
+    def test_typescript_object_literal_arrow_properties_become_named_symbols(
+        self,
+    ) -> None:
         adapter = TreeSitterAdapter()
         content = (
             b"export const api = {\n"
@@ -113,7 +122,7 @@ class RepoMapParserAstTests(unittest.TestCase):
         content = (
             b"import { helper } from './helper';\n"
             b"export function App() {\n"
-            b"  return <div data-testid=\"app\">{helper()}</div>;\n"
+            b'  return <div data-testid="app">{helper()}</div>;\n'
             b"}\n"
         )
         tree = adapter.parse(content, "tsx")
@@ -154,7 +163,9 @@ class RepoMapParserAstTests(unittest.TestCase):
         tree = adapter.parse(content, "typescript")
         assert tree is not None
 
-        routes = adapter.extract_http_routes(tree, "typescript", "bi-frontend/e2e/analysis.spec.ts")
+        routes = adapter.extract_http_routes(
+            tree, "typescript", "bi-frontend/e2e/analysis.spec.ts"
+        )
 
         self.assertEqual(routes, [])
 
@@ -179,15 +190,17 @@ class RepoMapParserAstTests(unittest.TestCase):
         content = (
             b"#[test]\n"
             b"fn analyzer_test() {\n"
-            b"    let config = Some(\"customer\");\n"
-            b"    let other = Option::Some(\"/api/customer\");\n"
+            b'    let config = Some("customer");\n'
+            b'    let other = Option::Some("/api/customer");\n'
             b"    assert!(config.is_some());\n"
             b"}\n"
         )
         tree = adapter.parse(content, "rust")
         assert tree is not None
 
-        routes = adapter.extract_http_routes(tree, "rust", "bi-backend/src/services/analyzer_test.rs")
+        routes = adapter.extract_http_routes(
+            tree, "rust", "bi-backend/src/services/analyzer_test.rs"
+        )
 
         self.assertEqual(routes, [])
 
@@ -199,7 +212,7 @@ class RepoMapParserAstTests(unittest.TestCase):
             b"use axum::{routing::get, Router};\n"
             b"fn handler() {}\n"
             b"fn app() -> Router {\n"
-            b"    Router::new().route(\"/items\", get(handler))\n"
+            b'    Router::new().route("/items", get(handler))\n'
             b"}\n"
         )
         tree = adapter.parse(content, "rust")
@@ -220,7 +233,10 @@ class RepoMapParserAstTests(unittest.TestCase):
 
         self.assertIn(
             ("default", "<anonymous@1>", None, "local"),
-            [(item.exported_name, item.source_name, item.module, item.kind) for item in bindings],
+            [
+                (item.exported_name, item.source_name, item.module, item.kind)
+                for item in bindings
+            ],
         )
 
     def test_extract_calls_returns_only_call_names(self) -> None:
@@ -242,7 +258,9 @@ class RepoMapParserAstTests(unittest.TestCase):
         self.assertNotIn("foo()", call_names)
         self.assertNotIn("obj.bar()", call_names)
 
-    def test_nested_function_end_lines_are_stable_when_parent_is_also_captured(self) -> None:
+    def test_nested_function_end_lines_are_stable_when_parent_is_also_captured(
+        self,
+    ) -> None:
         adapter = TreeSitterAdapter()
         content = (
             b"export function AuthProvider() {\n"

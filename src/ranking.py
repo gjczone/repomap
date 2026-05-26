@@ -33,15 +33,22 @@ class GraphAnalyzer:
     图分析器：执行 PageRank 和各种图查询。
     """
 
-    LOW_SIGNAL_KINDS = {"element", "selector", "class_selector", "id_selector", "json_key"}
+    LOW_SIGNAL_KINDS = {
+        "element",
+        "selector",
+        "class_selector",
+        "id_selector",
+        "json_key",
+    }
     BOILERPLATE_NAMES = {"__init__", "__main__"}
 
     def __init__(self, graph: RepoGraph) -> None:
         self.graph = graph
         self._file_analysis_cache: dict[str, dict[str, Any]] | None = None
 
-    def calculate_pagerank(self, damping: float = 0.85, max_iter: int = 50,
-                          tol: float = 1e-6) -> None:
+    def calculate_pagerank(
+        self, damping: float = 0.85, max_iter: int = 50, tol: float = 1e-6
+    ) -> None:
         """带收敛检测的 PageRank。"""
         syms = list(self.graph.symbols)
         n = len(syms)
@@ -51,8 +58,7 @@ class GraphAnalyzer:
         pr = {s: 1.0 / n for s in syms}
         # 预算 outgoing 权重和，过滤出权重>0的节点
         out_w: dict[str, float] = {
-            s: sum(e.weight for e in self.graph.outgoing.get(s, []))
-            for s in syms
+            s: sum(e.weight for e in self.graph.outgoing.get(s, [])) for s in syms
         }
         # 只保留有出边的节点，避免除零
         active_srcs = {s for s, w in out_w.items() if w > 0}
@@ -68,8 +74,7 @@ class GraphAnalyzer:
             new_pr: dict[str, float] = {}
             for s in syms:
                 score = base + sum(
-                    damping * pr[src] * w / out_w[src]
-                    for src, w in inc[s]
+                    damping * pr[src] * w / out_w[src] for src, w in inc[s]
                 )
                 new_pr[s] = score
             total = sum(new_pr.values()) or 1.0
@@ -101,17 +106,14 @@ class GraphAnalyzer:
             candidates,
             key=lambda s: (
                 s.pagerank
-                + sum(
-                    0.05
-                    for kw in context_keywords
-                    if kw in s.file.lower()
-                )
+                + sum(0.05 for kw in context_keywords if kw in s.file.lower())
             ),
             reverse=True,
         )
 
-    def call_chain(self, symbol_id: str, direction: str = "both",
-                   max_depth: int = 3) -> dict[str, list[Symbol]]:
+    def call_chain(
+        self, symbol_id: str, direction: str = "both", max_depth: int = 3
+    ) -> dict[str, list[Symbol]]:
         """
         返回指定符号的调用链。
         direction: "callers" | "callees" | "both"
@@ -134,8 +136,10 @@ class GraphAnalyzer:
         visited = {start}
         queue: deque[tuple[str, int]] = deque([(start, 0)])
         result: list[Symbol] = []
-        edges_map = self.graph.incoming if direction == "incoming" else self.graph.outgoing
-        
+        edges_map = (
+            self.graph.incoming if direction == "incoming" else self.graph.outgoing
+        )
+
         # 防止内存溢出：队列大小限制
         MAX_QUEUE_SIZE = 10000
         MAX_RESULTS = 1000
@@ -143,9 +147,11 @@ class GraphAnalyzer:
         while queue:
             # 队列大小安全检查
             if len(queue) > MAX_QUEUE_SIZE:
-                logger.warning(f"BFS queue size exceeded limit ({MAX_QUEUE_SIZE}), truncating search")
+                logger.warning(
+                    f"BFS queue size exceeded limit ({MAX_QUEUE_SIZE}), truncating search"
+                )
                 break
-            
+
             cur, depth = queue.popleft()
             if cur != start:
                 sym = self.graph.symbols.get(cur)
@@ -153,7 +159,9 @@ class GraphAnalyzer:
                     result.append(sym)
                     # 结果数量限制，防止内存溢出
                     if len(result) >= MAX_RESULTS:
-                        logger.debug(f"BFS reached max results ({MAX_RESULTS}), truncating")
+                        logger.debug(
+                            f"BFS reached max results ({MAX_RESULTS}), truncating"
+                        )
                         break
             if depth < max_depth:
                 for e in edges_map.get(cur, []):
@@ -171,7 +179,9 @@ class GraphAnalyzer:
         direction: str,
         allowed_kinds: set[str] | None = None,
     ) -> int:
-        edges_map = self.graph.incoming if direction == "incoming" else self.graph.outgoing
+        edges_map = (
+            self.graph.incoming if direction == "incoming" else self.graph.outgoing
+        )
         return sum(
             1
             for edge in edges_map.get(symbol_id, [])
@@ -192,8 +202,20 @@ class GraphAnalyzer:
         incoming_calls = self._edge_count(symbol.id, "incoming", {"call"})
         outgoing_calls = self._edge_count(symbol.id, "outgoing", {"call"})
         incoming_imports = self._edge_count(symbol.id, "incoming", {"import"})
-        visibility_bonus = 1.2 if symbol.visibility == "exported" else 0.45 if symbol.visibility == "public" else 0.0
-        kind_bonus = 1.0 if symbol.kind == "class" else 0.55 if symbol.kind in {"function", "method"} else 0.2
+        visibility_bonus = (
+            1.2
+            if symbol.visibility == "exported"
+            else 0.45
+            if symbol.visibility == "public"
+            else 0.0
+        )
+        kind_bonus = (
+            1.0
+            if symbol.kind == "class"
+            else 0.55
+            if symbol.kind in {"function", "method"}
+            else 0.2
+        )
         import_bonus = min(incoming_imports, 4) * 0.15
         centrality_bonus = symbol.pagerank * 40
         return (
@@ -210,7 +232,12 @@ class GraphAnalyzer:
         analysis = self.file_analysis()
         counts = sorted(
             analysis.values(),
-            key=lambda row: (row["is_test_file"], -row["semantic_symbol_count"], -row["score"], row["file"]),
+            key=lambda row: (
+                row["is_test_file"],
+                -row["semantic_symbol_count"],
+                -row["score"],
+                row["file"],
+            ),
         )
         return [
             {
@@ -231,16 +258,32 @@ class GraphAnalyzer:
     def entry_points(self) -> list[str]:
         """识别常见的入口文件。支持子目录路径匹配。"""
         candidates = [
-            "main.py", "app.py", "manage.py", "run.py", "server.py",
-            "main.go", "cmd/main.go",
-            "src/main.rs", "src/lib.rs",
-            "src/main.ts", "src/index.ts", "src/main.tsx", "src/index.tsx",
-            "src/main.js", "src/index.js",
-            "index.ts", "index.js",
+            "main.py",
+            "app.py",
+            "manage.py",
+            "run.py",
+            "server.py",
+            "main.go",
+            "cmd/main.go",
+            "src/main.rs",
+            "src/lib.rs",
+            "src/main.ts",
+            "src/index.ts",
+            "src/main.tsx",
+            "src/index.tsx",
+            "src/main.js",
+            "src/index.js",
+            "index.ts",
+            "index.js",
             # 支持 monorepo 子目录结构
-            "*/src/main.tsx", "*/src/main.ts", "*/src/index.tsx", "*/src/index.ts",
-            "*/src/main.js", "*/src/index.js",
-            "*/main.rs", "*/lib.rs",
+            "*/src/main.tsx",
+            "*/src/main.ts",
+            "*/src/index.tsx",
+            "*/src/index.ts",
+            "*/src/main.js",
+            "*/src/index.js",
+            "*/main.rs",
+            "*/lib.rs",
         ]
         result = []
         for c in candidates:
@@ -269,10 +312,18 @@ class GraphAnalyzer:
             ]
             ranked_symbols = sorted(
                 symbols,
-                key=lambda item: (-self._summary_symbol_score(item), item.line, item.name),
+                key=lambda item: (
+                    -self._summary_symbol_score(item),
+                    item.line,
+                    item.name,
+                ),
             )
-            semantic_symbol_count = sum(self._signal_weight(symbol) for symbol in symbols)
-            semantic_pagerank_sum = sum(symbol.pagerank * self._signal_weight(symbol) for symbol in symbols)
+            semantic_symbol_count = sum(
+                self._signal_weight(symbol) for symbol in symbols
+            )
+            semantic_pagerank_sum = sum(
+                symbol.pagerank * self._signal_weight(symbol) for symbol in symbols
+            )
             weighted_exported_count = sum(
                 self._signal_weight(symbol)
                 for symbol in symbols
@@ -289,7 +340,9 @@ class GraphAnalyzer:
                 "semantic_symbol_count": semantic_symbol_count,
                 "pagerank_sum": sum(symbol.pagerank for symbol in symbols),
                 "semantic_pagerank_sum": semantic_pagerank_sum,
-                "implementation_score": sum(self._summary_symbol_score(symbol) for symbol in ranked_symbols[:5]),
+                "implementation_score": sum(
+                    self._summary_symbol_score(symbol) for symbol in ranked_symbols[:5]
+                ),
                 "exported_count": weighted_exported_count,
                 "public_count": weighted_public_count,
                 "is_test_file": self._is_test_like_file(file_path),
@@ -297,10 +350,7 @@ class GraphAnalyzer:
                 "cross_file_call_edges": 0,
                 "import_edges": 0,
                 "neighbor_files": set(),
-                "top_symbols": [
-                    symbol.name
-                    for symbol in ranked_symbols[:3]
-                ],
+                "top_symbols": [symbol.name for symbol in ranked_symbols[:3]],
             }
 
         # 统计边关系
@@ -389,21 +439,37 @@ class GraphAnalyzer:
 
         rows: list[dict[str, Any]] = []
         for module_name, file_rows in modules.items():
-            ordered_files = sorted(file_rows, key=lambda row: (-row["score"], row["file"]))
+            ordered_files = sorted(
+                file_rows, key=lambda row: (-row["score"], row["file"])
+            )
             representative = ordered_files[0] if ordered_files else None
             rows.append(
                 {
                     "module": module_name,
                     "file_count": len(file_rows),
                     "symbol_count": sum(row["symbol_count"] for row in file_rows),
-                    "semantic_symbol_count": round(sum(row["semantic_symbol_count"] for row in file_rows), 1),
+                    "semantic_symbol_count": round(
+                        sum(row["semantic_symbol_count"] for row in file_rows), 1
+                    ),
                     "pagerank_sum": sum(row["pagerank_sum"] for row in file_rows),
-                    "semantic_pagerank_sum": sum(row["semantic_pagerank_sum"] for row in file_rows),
-                    "representative_file": representative["file"] if representative else "",
-                    "highlights": representative["top_symbols"][:3] if representative else [],
+                    "semantic_pagerank_sum": sum(
+                        row["semantic_pagerank_sum"] for row in file_rows
+                    ),
+                    "representative_file": representative["file"]
+                    if representative
+                    else "",
+                    "highlights": representative["top_symbols"][:3]
+                    if representative
+                    else [],
                 }
             )
-        rows.sort(key=lambda row: (-row["semantic_pagerank_sum"], -row["semantic_symbol_count"], row["module"]))
+        rows.sort(
+            key=lambda row: (
+                -row["semantic_pagerank_sum"],
+                -row["semantic_symbol_count"],
+                row["module"],
+            )
+        )
         return rows[:limit]
 
     def suggested_reading_order(self, limit: int = 8) -> list[dict[str, Any]]:
@@ -423,7 +489,9 @@ class GraphAnalyzer:
                     "reason": "Entry point, good starting path for understanding",
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
-                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
+                    "semantic_symbol_count": round(
+                        file_data["semantic_symbol_count"], 1
+                    ),
                 }
             )
             seen_files.add(entry)
@@ -458,7 +526,9 @@ class GraphAnalyzer:
                     "reason": ", ".join(reason_parts),
                     "top_symbols": file_data["top_symbols"][:3],
                     "symbol_count": file_data["symbol_count"],
-                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
+                    "semantic_symbol_count": round(
+                        file_data["semantic_symbol_count"], 1
+                    ),
                 }
             )
             seen_files.add(file_path)
@@ -474,7 +544,9 @@ class GraphAnalyzer:
     ) -> list[dict[str, Any]]:
         """给 overview 提供更适合阅读的关键实现符号。"""
         analysis = self.file_analysis()
-        suggestion_rows = self.suggested_reading_order(max(limit_files * 2, limit_files))
+        suggestion_rows = self.suggested_reading_order(
+            max(limit_files * 2, limit_files)
+        )
         reasons = {row["file"]: row["reason"] for row in suggestion_rows}
         ordered_files = [row["file"] for row in suggestion_rows]
         ordered_files.extend(
@@ -500,7 +572,11 @@ class GraphAnalyzer:
             ]
             ranked_symbols = sorted(
                 symbols,
-                key=lambda item: (-self._summary_symbol_score(item), item.line, item.name),
+                key=lambda item: (
+                    -self._summary_symbol_score(item),
+                    item.line,
+                    item.name,
+                ),
             )
             if not ranked_symbols:
                 continue
@@ -509,7 +585,9 @@ class GraphAnalyzer:
                     "file": file_path,
                     "reason": reasons.get(file_path, ""),
                     "symbol_count": file_data["symbol_count"],
-                    "semantic_symbol_count": round(file_data["semantic_symbol_count"], 1),
+                    "semantic_symbol_count": round(
+                        file_data["semantic_symbol_count"], 1
+                    ),
                     "symbols": [
                         {
                             "name": symbol.name,
@@ -518,9 +596,15 @@ class GraphAnalyzer:
                             "visibility": symbol.visibility,
                             "signature": symbol.signature,
                             "pagerank": symbol.pagerank,
-                            "summary_score": round(self._summary_symbol_score(symbol), 2),
-                            "incoming_calls": self._edge_count(symbol.id, "incoming", {"call"}),
-                            "outgoing_calls": self._edge_count(symbol.id, "outgoing", {"call"}),
+                            "summary_score": round(
+                                self._summary_symbol_score(symbol), 2
+                            ),
+                            "incoming_calls": self._edge_count(
+                                symbol.id, "incoming", {"call"}
+                            ),
+                            "outgoing_calls": self._edge_count(
+                                symbol.id, "outgoing", {"call"}
+                            ),
                         }
                         for symbol in ranked_symbols[:per_file]
                     ],
@@ -533,12 +617,24 @@ class GraphAnalyzer:
     @staticmethod
     def _module_bucket_for_file(file_path: str) -> str:
         """将文件路径归类到模块。"""
-        parts = [part for part in PurePosixPath(file_path).parts if part not in ("", ".")]
+        parts = [
+            part for part in PurePosixPath(file_path).parts if part not in ("", ".")
+        ]
         if not parts:
             return "(root)"
         if len(parts) == 1:
             return "(root)"
-        if parts[0] in {"src", "app", "apps", "packages", "services", "modules", "libs", "lib", "crates"}:
+        if parts[0] in {
+            "src",
+            "app",
+            "apps",
+            "packages",
+            "services",
+            "modules",
+            "libs",
+            "lib",
+            "crates",
+        }:
             return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
         return parts[0]
 
@@ -558,7 +654,17 @@ class EdgeBuilder:
 
     # 符号可见性排序权重（用于选每个文件最具代表性的符号建边）
     _VISIBILITY_RANK = {"exported": 3, "public": 2, "private": 1}
-    _KIND_RANK = {"class": 4, "function": 3, "method": 3, "anonymous_function": 2, "struct": 4, "interface": 4, "trait": 4, "enum": 4, "module": 3}
+    _KIND_RANK = {
+        "class": 4,
+        "function": 3,
+        "method": 3,
+        "anonymous_function": 2,
+        "struct": 4,
+        "interface": 4,
+        "trait": 4,
+        "enum": 4,
+        "module": 3,
+    }
 
     def __init__(self, graph: RepoGraph, resolver: Any) -> None:
         self.graph = graph
@@ -580,14 +686,16 @@ class EdgeBuilder:
             kind = self._KIND_RANK.get(sym.kind, 1)
             scored.append((vis + kind, sid))
         scored.sort(key=lambda x: -x[0])
-        return [sid for _, sid in scored[:max(max_count, int(len(ids) * 0.3))]]
+        return [sid for _, sid in scored[: max(max_count, int(len(ids) * 0.3))]]
 
     def build_edges(self) -> None:
         """构建 import 边和 call 边。"""
         self.resolver.build_indices()
 
         import_targets_by_file: dict[str, set[str]] = defaultdict(set)
-        import_symbol_targets_by_file: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        import_symbol_targets_by_file: dict[str, dict[str, set[str]]] = defaultdict(
+            lambda: defaultdict(set)
+        )
 
         # import 边
         for file, imports in sorted(self.graph.file_imports.items()):
@@ -607,11 +715,15 @@ class EdgeBuilder:
                 target_ids = self.resolver.resolve_import_binding_targets(file, binding)
                 if not target_ids:
                     continue
-                import_symbol_targets_by_file[file][binding.local_name].update(target_ids)
+                import_symbol_targets_by_file[file][binding.local_name].update(
+                    target_ids
+                )
                 for target_id in sorted(target_ids):
                     import_targets_by_file[file].add(self.graph.symbols[target_id].file)
                     for source_id in src_ids:
-                        self._add_edge(source_id, target_id, self.IMPORT_WEIGHT, "import")
+                        self._add_edge(
+                            source_id, target_id, self.IMPORT_WEIGHT, "import"
+                        )
 
         # call 边
         for file, calls in sorted(self.graph.file_calls.items()):
@@ -648,7 +760,9 @@ class EdgeBuilder:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def detect_file_clusters(graph: "RepoGraph", max_iterations: int = 20) -> dict[str, int]:
+def detect_file_clusters(
+    graph: "RepoGraph", max_iterations: int = 20
+) -> dict[str, int]:
     """Detect module clusters from the file import/call graph using label propagation.
 
     Returns dict mapping file_path -> cluster_id.
@@ -674,6 +788,7 @@ def detect_file_clusters(graph: "RepoGraph", max_iterations: int = 20) -> dict[s
 
     # Initialize labels by directory structure for meaningful cluster seeds
     from pathlib import PurePosixPath
+
     dir_labels: dict[str, int] = {}
     next_dir_id = 0
     labels: dict[str, int] = {}
@@ -696,6 +811,7 @@ def detect_file_clusters(graph: "RepoGraph", max_iterations: int = 20) -> dict[s
         changed = 0
         # Randomize order each iteration for stability
         import random
+
         order = list(files)
         random.shuffle(order)
         for f in order:
@@ -753,11 +869,13 @@ def format_cluster_summary(clusters: dict[str, int], top_n: int = 8) -> list[dic
         # Heuristic label from common directory
         label = top_dir.split("/")[-1] if "/" in top_dir else top_dir
 
-        results.append({
-            "cluster_id": cid,
-            "size": len(members),
-            "label": label,
-            "top_dir": top_dir,
-            "representatives": reps,
-        })
+        results.append(
+            {
+                "cluster_id": cid,
+                "size": len(members),
+                "label": label,
+                "top_dir": top_dir,
+                "representatives": reps,
+            }
+        )
     return results

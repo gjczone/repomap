@@ -418,29 +418,30 @@ class TreeSitterAdapter:
     def _init_parsers(self) -> None:
         """加载各语言 parser，并预编译 queries。"""
         bindings = {
-            "python":     ("tree_sitter_python",     "language"),
-            "javascript": ("tree_sitter_javascript",  "language"),
-            "go":         ("tree_sitter_go",          "language"),
-            "rust":       ("tree_sitter_rust",        "language"),
-            "html":       ("tree_sitter_html",        "language"),
-            "css":        ("tree_sitter_css",         "language"),
-            "json":       ("tree_sitter_json",        "language"),
-            "c":          ("tree_sitter_c",           "language"),
-            "java":       ("tree_sitter_java",        "language"),
-            "kotlin":     ("tree_sitter_kotlin",      "language"),
-            "swift":      ("tree_sitter_swift",       "language"),
-            "cpp":        ("tree_sitter_cpp",         "language"),
-            "c_sharp":    ("tree_sitter_c_sharp",     "language"),
-            "php":        ("tree_sitter_php",         "language"),
-            "ruby":       ("tree_sitter_ruby",        "language"),
+            "python": ("tree_sitter_python", "language"),
+            "javascript": ("tree_sitter_javascript", "language"),
+            "go": ("tree_sitter_go", "language"),
+            "rust": ("tree_sitter_rust", "language"),
+            "html": ("tree_sitter_html", "language"),
+            "css": ("tree_sitter_css", "language"),
+            "json": ("tree_sitter_json", "language"),
+            "c": ("tree_sitter_c", "language"),
+            "java": ("tree_sitter_java", "language"),
+            "kotlin": ("tree_sitter_kotlin", "language"),
+            "swift": ("tree_sitter_swift", "language"),
+            "cpp": ("tree_sitter_cpp", "language"),
+            "c_sharp": ("tree_sitter_c_sharp", "language"),
+            "php": ("tree_sitter_php", "language"),
+            "ruby": ("tree_sitter_ruby", "language"),
         }
 
         # 动态导入，失败则跳过
         for lang, (module, attr) in bindings.items():
             try:
-                mod  = __import__(module)
+                mod = __import__(module)
                 lang_fn = getattr(mod, attr)
                 from tree_sitter import Language, Parser  # type: ignore
+
                 self.parsers[lang] = Parser(Language(lang_fn()))
                 logger.debug(f"Parser loaded: {lang}")
             except Exception as e:
@@ -450,6 +451,7 @@ class TreeSitterAdapter:
         try:
             from tree_sitter_typescript import language_typescript, language_tsx  # type: ignore
             from tree_sitter import Language, Parser  # type: ignore
+
             self.parsers["typescript"] = Parser(Language(language_typescript()))
             self.parsers["tsx"] = Parser(Language(language_tsx()))
             logger.debug("Parser loaded: typescript (dedicated)")
@@ -458,6 +460,7 @@ class TreeSitterAdapter:
             try:
                 from tree_sitter_typescript import language_typescript  # type: ignore
                 from tree_sitter import Language, Parser  # type: ignore
+
                 self.parsers["typescript"] = Parser(Language(language_typescript()))
                 logger.debug("Parser loaded: typescript (dedicated)")
             except Exception:
@@ -470,15 +473,17 @@ class TreeSitterAdapter:
 
     def _precompile_queries(self) -> None:
         """预编译所有 tree-sitter queries，失败时记录警告。
-        
+
         要求 tree-sitter >= 0.21（支持 Query 类）
         """
         try:
             from tree_sitter import Query  # type: ignore
         except ImportError:
-            logger.warning("tree-sitter Query class not available (requires >=0.21), queries disabled")
+            logger.warning(
+                "tree-sitter Query class not available (requires >=0.21), queries disabled"
+            )
             return
-            
+
         for lang, patterns in QUERIES.items():
             if lang not in self.parsers:
                 continue
@@ -497,33 +502,37 @@ class TreeSitterAdapter:
         parser = self.parsers.get(lang)
         if not parser:
             return None
-        
+
         # 内容大小限制（防止内存溢出）
         MAX_PARSE_SIZE = 10 * 1024 * 1024  # 10MB
         if len(content) > MAX_PARSE_SIZE:
-            logger.warning(f"File too large for parsing ({len(content)} bytes > {MAX_PARSE_SIZE}), skipping")
+            logger.warning(
+                f"File too large for parsing ({len(content)} bytes > {MAX_PARSE_SIZE}), skipping"
+            )
             return None
-        
+
         # 检测异常内容模式（可能导致解析器崩溃）
         try:
             # 检查是否包含可能导致解析器栈溢出的极端嵌套模式
-            content_str = content.decode('utf-8', errors='ignore')
+            content_str = content.decode("utf-8", errors="ignore")
             # 检测极端深度的括号嵌套（可能导致递归溢出）
             max_nesting = 0
             current_nesting = 0
             for char in content_str[:100000]:  # 只检查前 100KB
-                if char in '({[<':
+                if char in "({[<":
                     current_nesting += 1
                     max_nesting = max(max_nesting, current_nesting)
-                elif char in ')}]>':
+                elif char in ")}]>":
                     current_nesting -= 1
             # 如果嵌套深度超过 1000，可能触发解析器栈溢出
             if max_nesting > 1000:
-                logger.warning(f"Extreme nesting detected ({max_nesting} levels), skipping file to prevent parser crash")
+                logger.warning(
+                    f"Extreme nesting detected ({max_nesting} levels), skipping file to prevent parser crash"
+                )
                 return None
         except Exception:
             pass  # 解码失败继续尝试解析
-        
+
         try:
             return parser.parse(content)
         except RecursionError:
@@ -536,7 +545,9 @@ class TreeSitterAdapter:
             logger.debug(f"Parse error [{lang}]: {e}")
             return None
 
-    def extract_symbols(self, tree: Any, lang: str, file: str, content: bytes) -> list[Symbol]:
+    def extract_symbols(
+        self, tree: Any, lang: str, file: str, content: bytes
+    ) -> list[Symbol]:
         """从 AST 提取函数 / 类等符号定义。"""
         if lang == "html":
             return self._extract_html_symbols(tree, file)
@@ -555,7 +566,7 @@ class TreeSitterAdapter:
 
             captures = self._run_query(query, root)
             name_nodes: list[Any] = []
-            def_nodes:  list[tuple[Any, str]] = []
+            def_nodes: list[tuple[Any, str]] = []
 
             for cap_name, node in captures:
                 if cap_name == "name":
@@ -571,21 +582,32 @@ class TreeSitterAdapter:
                 ]
                 matching_defs.sort(
                     key=lambda item: (
-                        (item[0].end_point[0] - item[0].start_point[0], item[0].end_point[1] - item[0].start_point[1]),
+                        (
+                            item[0].end_point[0] - item[0].start_point[0],
+                            item[0].end_point[1] - item[0].start_point[1],
+                        ),
                         item[0].start_point[0],
                         item[0].start_point[1],
                     )
                 )
                 for def_node, def_cap in matching_defs:
                     kind = def_cap.split(".")[-1] if "." in def_cap else def_cap
-                    vis  = "exported" if "export" in def_cap else "public"
+                    vis = "exported" if "export" in def_cap else "public"
                     name = self._text(name_node)
                     if not name:
                         break
-                    if lang == "python" and kind == "function" and self._is_python_class_member(def_node):
+                    if (
+                        lang == "python"
+                        and kind == "function"
+                        and self._is_python_class_member(def_node)
+                    ):
                         kind = "method"
                     # Python: _ 前缀视为 private
-                    if lang == "python" and name.startswith("_") and not name.startswith("__"):
+                    if (
+                        lang == "python"
+                        and name.startswith("_")
+                        and not name.startswith("__")
+                    ):
                         vis = "private"
                     sym_id = f"{file}::{name}::{name_node.start_point[0] + 1}"
                     symbols_by_id[sym_id] = Symbol(
@@ -602,7 +624,9 @@ class TreeSitterAdapter:
                     )
                     break
 
-        for symbol in self._extract_exported_function_expression_symbols(tree, lang, file):
+        for symbol in self._extract_exported_function_expression_symbols(
+            tree, lang, file
+        ):
             symbols_by_id.setdefault(symbol.id, symbol)
 
         for symbol in self._extract_object_literal_method_symbols(tree, lang, file):
@@ -623,7 +647,9 @@ class TreeSitterAdapter:
             ),
         )
 
-    def _extract_exported_function_expression_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+    def _extract_exported_function_expression_symbols(
+        self, tree: Any, lang: str, file: str
+    ) -> list[Symbol]:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
         symbols_by_id: dict[str, Symbol] = {}
@@ -652,7 +678,10 @@ class TreeSitterAdapter:
                 visibility="private",
                 signature=self._signature(node, lang),
             )
-        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name),
+        )
 
     @staticmethod
     def _is_python_class_member(node: Any) -> bool:
@@ -675,7 +704,9 @@ class TreeSitterAdapter:
             depth += 1
         return False
 
-    def _extract_object_literal_method_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+    def _extract_object_literal_method_symbols(
+        self, tree: Any, lang: str, file: str
+    ) -> list[Symbol]:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
         symbols_by_id: dict[str, Symbol] = {}
@@ -683,7 +714,10 @@ class TreeSitterAdapter:
             if node.type != "pair":
                 continue
             value_node = node.child_by_field_name("value")
-            if value_node is None or value_node.type not in {"arrow_function", "function_expression"}:
+            if value_node is None or value_node.type not in {
+                "arrow_function",
+                "function_expression",
+            }:
                 continue
             key_node = node.child_by_field_name("key")
             if key_node is None:
@@ -693,7 +727,11 @@ class TreeSitterAdapter:
                         break
             if key_node is None:
                 continue
-            name = self._identifier_text(key_node) or (self._string_literal_value(key_node) if key_node and key_node.type == "string" else "")
+            name = self._identifier_text(key_node) or (
+                self._string_literal_value(key_node)
+                if key_node and key_node.type == "string"
+                else ""
+            )
             if not name:
                 continue
             line = key_node.start_point[0] + 1
@@ -709,9 +747,14 @@ class TreeSitterAdapter:
                 visibility="public",
                 signature=self._signature(value_node, lang),
             )
-        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name),
+        )
 
-    def _extract_anonymous_symbols(self, tree: Any, lang: str, file: str) -> list[Symbol]:
+    def _extract_anonymous_symbols(
+        self, tree: Any, lang: str, file: str
+    ) -> list[Symbol]:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
 
@@ -719,13 +762,19 @@ class TreeSitterAdapter:
         for node in self._walk_tree(tree.root_node):
             if node.type not in {"arrow_function", "function_expression"}:
                 continue
-            if self._has_named_owner(node) and not self._is_exported_anonymous_expression(node):
+            if self._has_named_owner(
+                node
+            ) and not self._is_exported_anonymous_expression(node):
                 continue
-            if node.end_point[0] <= node.start_point[0] and not self._is_exported_anonymous_expression(node):
+            if node.end_point[0] <= node.start_point[
+                0
+            ] and not self._is_exported_anonymous_expression(node):
                 continue
 
             explicit_name = self._declaration_primary_name(node)
-            if explicit_name is not None and not self._is_exported_anonymous_expression(node):
+            if explicit_name is not None and not self._is_exported_anonymous_expression(
+                node
+            ):
                 continue
             line = node.start_point[0] + 1
 
@@ -784,7 +833,17 @@ class TreeSitterAdapter:
                     prop_node = func_node.child_by_field_name("property")
                     if prop_node is not None:
                         method_name = self._text(prop_node)
-                        if method_name in {"map", "filter", "reduce", "forEach", "find", "some", "every", "sort", "flatMap"}:
+                        if method_name in {
+                            "map",
+                            "filter",
+                            "reduce",
+                            "forEach",
+                            "find",
+                            "some",
+                            "every",
+                            "sort",
+                            "flatMap",
+                        }:
                             return f"<{method_name}_callback@{node.start_point[0] + 1}>"
 
         return self._anonymous_symbol_name(node)
@@ -793,11 +852,17 @@ class TreeSitterAdapter:
         current = getattr(node, "parent", None)
         depth = 0
         while current is not None and depth < 4:
-            if current.type == "export_statement" and self._first_child_of_type(current, "default") is not None:
+            if (
+                current.type == "export_statement"
+                and self._first_child_of_type(current, "default") is not None
+            ):
                 return True
             if current.type == "assignment_expression":
                 left_node = current.child_by_field_name("left")
-                if left_node is not None and self._commonjs_export_target(left_node) is not None:
+                if (
+                    left_node is not None
+                    and self._commonjs_export_target(left_node) is not None
+                ):
                     return True
             current = getattr(current, "parent", None)
             depth += 1
@@ -827,12 +892,12 @@ class TreeSitterAdapter:
         if not query:
             return []
         results = set()
-        
+
         # 对于Rust，需要特殊处理：优先使用path而不是name
         if lang == "rust":
             paths_by_line: dict[int, str] = {}
             names_by_line: dict[int, list[str]] = defaultdict(list)
-            
+
             for cap_name, node in self._run_query(query, tree.root_node):
                 text = self._text(node)
                 line = node.start_point[0] + 1
@@ -840,9 +905,11 @@ class TreeSitterAdapter:
                     paths_by_line[line] = text
                 elif cap_name == "name":
                     names_by_line[line].append(text)
-            
+
             # 优先使用path（模块名），其次使用name
-            for line in sorted(set(list(paths_by_line.keys()) + list(names_by_line.keys()))):
+            for line in sorted(
+                set(list(paths_by_line.keys()) + list(names_by_line.keys()))
+            ):
                 if line in paths_by_line:
                     results.add((paths_by_line[line], line))
                 else:
@@ -863,7 +930,12 @@ class TreeSitterAdapter:
         while parent is not None:
             if parent.type in {"call_expression", "call"}:
                 function_node = parent.child_by_field_name("function")
-                if function_node is not None and function_node.type in {"member_expression", "field_expression", "selector_expression", "attribute"}:
+                if function_node is not None and function_node.type in {
+                    "member_expression",
+                    "field_expression",
+                    "selector_expression",
+                    "attribute",
+                }:
                     return "member"
                 return "direct"
             parent = getattr(parent, "parent", None)
@@ -903,12 +975,20 @@ class TreeSitterAdapter:
                 visibility="public",
                 signature=visible_name,
             )
-        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name),
+        )
 
     def _extract_css_symbols(self, tree: Any, file: str) -> list[Symbol]:
         symbols_by_id: dict[str, Symbol] = {}
         seen_names: dict[tuple[str, int], int] = {}
-        selector_types = {"class_selector", "id_selector", "tag_name", "nesting_selector"}
+        selector_types = {
+            "class_selector",
+            "id_selector",
+            "tag_name",
+            "nesting_selector",
+        }
         for node in self._walk_tree(tree.root_node):
             if node.type not in selector_types:
                 continue
@@ -923,7 +1003,9 @@ class TreeSitterAdapter:
                 kind = "id_selector"
             key = (raw_name, line)
             seen_names[key] = seen_names.get(key, 0) + 1
-            visible_name = raw_name if seen_names[key] == 1 else f"{raw_name}#{seen_names[key]}"
+            visible_name = (
+                raw_name if seen_names[key] == 1 else f"{raw_name}#{seen_names[key]}"
+            )
             symbol_id = f"{file}::{visible_name}::{line}"
             symbols_by_id[symbol_id] = Symbol(
                 id=symbol_id,
@@ -936,7 +1018,10 @@ class TreeSitterAdapter:
                 visibility="public",
                 signature=raw_name,
             )
-        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name),
+        )
 
     def _extract_json_symbols(self, tree: Any, file: str) -> list[Symbol]:
         symbols_by_id: dict[str, Symbol] = {}
@@ -953,7 +1038,9 @@ class TreeSitterAdapter:
             line = node.start_point[0] + 1
             key = (key_name, line)
             seen_names[key] = seen_names.get(key, 0) + 1
-            visible_name = key_name if seen_names[key] == 1 else f"{key_name}#{seen_names[key]}"
+            visible_name = (
+                key_name if seen_names[key] == 1 else f"{key_name}#{seen_names[key]}"
+            )
             symbol_id = f"{file}::{visible_name}::{line}"
             symbols_by_id[symbol_id] = Symbol(
                 id=symbol_id,
@@ -966,7 +1053,10 @@ class TreeSitterAdapter:
                 visibility="public",
                 signature=f'"{key_name}"',
             )
-        return sorted(symbols_by_id.values(), key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name))
+        return sorted(
+            symbols_by_id.values(),
+            key=lambda symbol: (symbol.file, symbol.line, symbol.col, symbol.name),
+        )
 
     def extract_js_ts_import_bindings(
         self,
@@ -989,7 +1079,13 @@ class TreeSitterAdapter:
                 self._collect_commonjs_import_bindings(node, bindings)
         return sorted(
             bindings.values(),
-            key=lambda item: (item.line, item.module, item.local_name, item.imported_name, item.kind),
+            key=lambda item: (
+                item.line,
+                item.module,
+                item.local_name,
+                item.imported_name,
+                item.kind,
+            ),
         )
 
     def extract_js_ts_export_bindings(
@@ -1004,9 +1100,17 @@ class TreeSitterAdapter:
         parsed_tree = tree or self.parse(content, lang)
         if not parsed_tree:
             return []
-        bindings: dict[tuple[str, str | None, str | None, int, str], JSExportBinding] = {}
+        bindings: dict[
+            tuple[str, str | None, str | None, int, str], JSExportBinding
+        ] = {}
 
-        def add_binding(exported_name: str, source_name: str | None, module: str | None, line: int, kind: str) -> None:
+        def add_binding(
+            exported_name: str,
+            source_name: str | None,
+            module: str | None,
+            line: int,
+            kind: str,
+        ) -> None:
             key = (exported_name, source_name, module, line, kind)
             bindings[key] = JSExportBinding(
                 exported_name=exported_name,
@@ -1047,7 +1151,14 @@ class TreeSitterAdapter:
             return
         for child in import_clause.children:
             if child.type == "identifier":
-                self._add_import_binding(bindings, child.text.decode("utf-8"), "default", module, line, "default")
+                self._add_import_binding(
+                    bindings,
+                    child.text.decode("utf-8"),
+                    "default",
+                    module,
+                    line,
+                    "default",
+                )
             elif child.type == "named_imports":
                 for specifier in child.children:
                     if specifier.type != "import_specifier":
@@ -1057,11 +1168,15 @@ class TreeSitterAdapter:
                     source_name = self._identifier_text(source_node)
                     local_name = self._identifier_text(alias_node) or source_name
                     if source_name and local_name:
-                        self._add_import_binding(bindings, local_name, source_name, module, line, "named")
+                        self._add_import_binding(
+                            bindings, local_name, source_name, module, line, "named"
+                        )
             elif child.type == "namespace_import":
                 local_name = self._last_identifier(child)
                 if local_name:
-                    self._add_import_binding(bindings, local_name, "*", module, line, "namespace")
+                    self._add_import_binding(
+                        bindings, local_name, "*", module, line, "namespace"
+                    )
 
     def _collect_commonjs_import_bindings(
         self,
@@ -1077,7 +1192,14 @@ class TreeSitterAdapter:
             return
         line = node.start_point[0] + 1
         if name_node.type == "identifier":
-            self._add_import_binding(bindings, name_node.text.decode("utf-8"), "default", module, line, "default")
+            self._add_import_binding(
+                bindings,
+                name_node.text.decode("utf-8"),
+                "default",
+                module,
+                line,
+                "default",
+            )
             return
         if name_node.type != "object_pattern":
             return
@@ -1089,7 +1211,9 @@ class TreeSitterAdapter:
                 source_name = self._identifier_text(child.child_by_field_name("key"))
                 local_name = self._identifier_text(child.child_by_field_name("value"))
                 if source_name and local_name:
-                    self._add_import_binding(bindings, local_name, source_name, module, line, "named")
+                    self._add_import_binding(
+                        bindings, local_name, source_name, module, line, "named"
+                    )
 
     def _collect_es_export_bindings(
         self,
@@ -1118,8 +1242,13 @@ class TreeSitterAdapter:
             for specifier in export_clause.children:
                 if specifier.type != "export_specifier":
                     continue
-                source_name = self._identifier_text(specifier.child_by_field_name("name"))
-                exported_name = self._identifier_text(specifier.child_by_field_name("alias")) or source_name
+                source_name = self._identifier_text(
+                    specifier.child_by_field_name("name")
+                )
+                exported_name = (
+                    self._identifier_text(specifier.child_by_field_name("alias"))
+                    or source_name
+                )
                 if source_name and exported_name:
                     add_binding(exported_name, source_name, module, line, kind)
             return
@@ -1140,7 +1269,11 @@ class TreeSitterAdapter:
     ) -> None:
         target_node = node.child_by_field_name("left")
         value_node = node.child_by_field_name("right")
-        if target_node is None or value_node is None or target_node.type != "member_expression":
+        if (
+            target_node is None
+            or value_node is None
+            or target_node.type != "member_expression"
+        ):
             return
         export_target = self._commonjs_export_target(target_node)
         if export_target is None:
@@ -1153,8 +1286,14 @@ class TreeSitterAdapter:
                         name = child.text.decode("utf-8")
                         add_binding(name, name, None, line, "local")
                     elif child.type == "pair":
-                        exported_name = self._identifier_text(child.child_by_field_name("key"))
-                        source_name = self._identifier_text(child.child_by_field_name("value")) or self._expression_binding_name(child.child_by_field_name("value"))
+                        exported_name = self._identifier_text(
+                            child.child_by_field_name("key")
+                        )
+                        source_name = self._identifier_text(
+                            child.child_by_field_name("value")
+                        ) or self._expression_binding_name(
+                            child.child_by_field_name("value")
+                        )
                         if exported_name and source_name:
                             add_binding(exported_name, source_name, None, line, "local")
                 return
@@ -1203,7 +1342,10 @@ class TreeSitterAdapter:
         property_node = node.child_by_field_name("property")
         if object_node is None or property_node is None:
             return None
-        if object_node.type == "identifier" and object_node.text.decode("utf-8") == "exports":
+        if (
+            object_node.type == "identifier"
+            and object_node.text.decode("utf-8") == "exports"
+        ):
             return property_node.text.decode("utf-8")
         if object_node.type == "member_expression":
             inner_object = object_node.child_by_field_name("object")
@@ -1239,7 +1381,9 @@ class TreeSitterAdapter:
                 return child
         return None
 
-    def _export_default_source_name(self, node: Any, declaration: Any | None) -> str | None:
+    def _export_default_source_name(
+        self, node: Any, declaration: Any | None
+    ) -> str | None:
         if declaration is not None:
             return self._declaration_primary_name(declaration)
         for child in node.children:
@@ -1280,8 +1424,14 @@ class TreeSitterAdapter:
             return None
         if node.type in {"identifier", "property_identifier", "type_identifier"}:
             return node.text.decode("utf-8")
-        if node.type in {"function_declaration", "class_declaration", "function_expression"}:
-            return self._declaration_primary_name(node) or self._anonymous_symbol_name(node)
+        if node.type in {
+            "function_declaration",
+            "class_declaration",
+            "function_expression",
+        }:
+            return self._declaration_primary_name(node) or self._anonymous_symbol_name(
+                node
+            )
         if node.type == "arrow_function":
             return self._anonymous_symbol_name(node)
         return None
@@ -1317,7 +1467,13 @@ class TreeSitterAdapter:
     def _identifier_text(self, node: Any | None) -> str | None:
         if node is None:
             return None
-        if node.type in {"identifier", "property_identifier", "type_identifier", "shorthand_property_identifier", "shorthand_property_identifier_pattern"}:
+        if node.type in {
+            "identifier",
+            "property_identifier",
+            "type_identifier",
+            "shorthand_property_identifier",
+            "shorthand_property_identifier_pattern",
+        }:
             return node.text.decode("utf-8")
         return None
 
@@ -1340,7 +1496,9 @@ class TreeSitterAdapter:
                 continue
             name = self._text(node)
             if name:
-                results.append((name, node.start_point[0] + 1, self._call_reference_kind(node)))
+                results.append(
+                    (name, node.start_point[0] + 1, self._call_reference_kind(node))
+                )
         return sorted(set(results), key=lambda item: (item[1], item[0], item[2]))
 
     def extract_http_routes(self, tree: Any, lang: str, file: str) -> list[Any]:
@@ -1367,10 +1525,18 @@ class TreeSitterAdapter:
 
         return sorted(
             routes,
-            key=lambda route: (route.file, route.line, route.method, route.path, route.handler),
+            key=lambda route: (
+                route.file,
+                route.line,
+                route.method,
+                route.path,
+                route.handler,
+            ),
         )
 
-    def _http_route_from_captures(self, captures: dict[str, list[Any]], lang: str, file: str) -> Any | None:
+    def _http_route_from_captures(
+        self, captures: dict[str, list[Any]], lang: str, file: str
+    ) -> Any | None:
         from . import HttpRoute
 
         path_node = self._first_capture(captures, "path")
@@ -1378,26 +1544,64 @@ class TreeSitterAdapter:
         if path_node is None or handler_node is None:
             return None
 
-        method_node = self._first_capture(captures, "method") or self._first_capture(captures, "http_method")
+        method_node = self._first_capture(captures, "method") or self._first_capture(
+            captures, "http_method"
+        )
         method = (self._text(method_node) if method_node is not None else "").lower()
         if not method:
             return None
 
         if lang == "python":
             obj = self._text(self._first_capture(captures, "_obj"))
-            if obj not in {"app", "router", "api"} or method not in {"get", "post", "put", "delete", "patch", "head", "options"}:
+            if obj not in {"app", "router", "api"} or method not in {
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "head",
+                "options",
+            }:
                 return None
             framework = "fastapi"
         elif lang in ("javascript", "typescript", "tsx"):
             router = self._text(self._first_capture(captures, "_router"))
-            if router not in {"app", "router"} or method not in {"get", "post", "put", "delete", "patch", "use", "all"}:
+            if router not in {"app", "router"} or method not in {
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "use",
+                "all",
+            }:
                 return None
-            if method in {"describe", "test", "it", "expect", "log", "some", "map", "filter", "find", "reduce", "foreach"}:
+            if method in {
+                "describe",
+                "test",
+                "it",
+                "expect",
+                "log",
+                "some",
+                "map",
+                "filter",
+                "find",
+                "reduce",
+                "foreach",
+            }:
                 return None
             framework = "express"
         elif lang == "rust":
             method_name = self._text(self._first_capture(captures, "_method_name"))
-            if method_name != "route" or method not in {"get", "post", "put", "delete", "patch", "head", "options"}:
+            if method_name != "route" or method not in {
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "head",
+                "options",
+            }:
                 return None
             if method in {"some", "ok", "err", "is_some", "unwrap", "map", "filter"}:
                 return None
@@ -1425,6 +1629,7 @@ class TreeSitterAdapter:
         """按 tree-sitter match 返回 captures，避免跨匹配错位拼接 route。"""
         try:
             from tree_sitter import QueryCursor  # type: ignore
+
             cursor = QueryCursor(query)
             if hasattr(cursor, "matches"):
                 raw_matches = cursor.matches(root)
@@ -1437,7 +1642,9 @@ class TreeSitterAdapter:
                         continue
                     normalized: dict[str, list[Any]] = {}
                     for cap_name, nodes in captures.items():
-                        normalized[cap_name] = nodes if isinstance(nodes, list) else [nodes]
+                        normalized[cap_name] = (
+                            nodes if isinstance(nodes, list) else [nodes]
+                        )
                     results.append(normalized)
                 if results:
                     return results
@@ -1463,7 +1670,11 @@ class TreeSitterAdapter:
         if parts & {"e2e", "tests", "__tests__"}:
             return True
         name = normalized.rsplit("/", 1)[-1].lower()
-        return bool(re.search(r"(_test\.rs|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts))$", name))
+        return bool(
+            re.search(
+                r"(_test\.rs|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts))$", name
+            )
+        )
 
     def _route_handler_name(self, node: Any) -> str:
         explicit = self._identifier_text(node)
@@ -1473,16 +1684,20 @@ class TreeSitterAdapter:
             return self._anonymous_symbol_name(node)
         return self._text(node)
 
-    def _parse_import_specifiers(self, spec: str, module: str, line: int) -> list[JSImportBinding]:
+    def _parse_import_specifiers(
+        self, spec: str, module: str, line: int
+    ) -> list[JSImportBinding]:
         bindings: list[JSImportBinding] = []
         remaining = spec.strip()
         if not remaining:
             return bindings
 
         if remaining.startswith("{"):
-            named_text = remaining[1:remaining.rfind("}")]
+            named_text = remaining[1 : remaining.rfind("}")]
             for imported_name, local_name in self._parse_named_clause(named_text):
-                bindings.append(JSImportBinding(local_name, imported_name, module, line, "named"))
+                bindings.append(
+                    JSImportBinding(local_name, imported_name, module, line, "named")
+                )
             return bindings
 
         if remaining.startswith("*"):
@@ -1516,9 +1731,11 @@ class TreeSitterAdapter:
             )
         rest = rest.strip()
         if rest.startswith("{") and "}" in rest:
-            named_text = rest[1:rest.rfind("}")]
+            named_text = rest[1 : rest.rfind("}")]
             for imported_name, local_name in self._parse_named_clause(named_text):
-                bindings.append(JSImportBinding(local_name, imported_name, module, line, "named"))
+                bindings.append(
+                    JSImportBinding(local_name, imported_name, module, line, "named")
+                )
         elif rest.startswith("*"):
             namespace_match = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)", rest)
             if namespace_match:
@@ -1545,7 +1762,9 @@ class TreeSitterAdapter:
                 source_name, exported_name = parts[0].strip(), parts[1].strip()
             else:
                 source_name = exported_name = item
-            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(r"[A-Za-z_$][\w$]*", exported_name):
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(
+                r"[A-Za-z_$][\w$]*", exported_name
+            ):
                 pairs.append((source_name, exported_name))
         return pairs
 
@@ -1554,11 +1773,12 @@ class TreeSitterAdapter:
     def _run_query(self, query: Any, root: Any) -> list[tuple[str, Any]]:
         """
         执行 tree-sitter query 并返回统一格式 list[(cap_name, Node)]
-        
+
         要求 tree-sitter >= 0.22（使用 QueryCursor）
         """
         try:
             from tree_sitter import QueryCursor  # type: ignore
+
             cursor = QueryCursor(query)
             raw = cursor.captures(root)
 
@@ -1582,8 +1802,10 @@ class TreeSitterAdapter:
 
     @staticmethod
     def _within(child: Any, parent: Any) -> bool:
-        return (child.start_point >= parent.start_point and
-                child.end_point   <= parent.end_point)
+        return (
+            child.start_point >= parent.start_point
+            and child.end_point <= parent.end_point
+        )
 
     @staticmethod
     def _text(node: Any) -> str:
@@ -1613,11 +1835,11 @@ class TreeSitterAdapter:
         try:
             first_line = self._text(node).split("\n")[0]
             patterns = {
-                "python":     r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
+                "python": r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
                 "javascript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)",
                 "typescript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)(?:\s*:\s*\S+)?\s*=>)",
-                "rust":       r"(?:pub\s+)?(?:async\s+)?fn\s+\w+(?:<[^>]*>)?\s*\([^)]*\)(?:\s*->\s*[^{]+)?",
-                "go":         r"func\s+(?:\([^)]+\)\s+)?\w+\s*\([^)]*\)(?:\s*\([^)]*\))?(?:\s*[^{]+)?",
+                "rust": r"(?:pub\s+)?(?:async\s+)?fn\s+\w+(?:<[^>]*>)?\s*\([^)]*\)(?:\s*->\s*[^{]+)?",
+                "go": r"func\s+(?:\([^)]+\)\s+)?\w+\s*\([^)]*\)(?:\s*\([^)]*\))?(?:\s*[^{]+)?",
             }
             pat = patterns.get(lang, "")
             if pat:

@@ -25,7 +25,14 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
         cls.output_dir = Path(cls.temp_dir.name)
 
         build = subprocess.run(
-            [sys.executable, "-m", "src.cli", "build-binary", "--output", str(cls.output_dir)],
+            [
+                sys.executable,
+                "-m",
+                "src.cli",
+                "build-binary",
+                "--output",
+                str(cls.output_dir),
+            ],
             cwd=cls.repo_root,
             capture_output=True,
             encoding="utf-8",
@@ -34,7 +41,9 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
             check=False,
         )
         if build.returncode != 0:
-            raise AssertionError(f"binary build failed:\nSTDOUT:\n{build.stdout}\nSTDERR:\n{build.stderr}")
+            raise AssertionError(
+                f"binary build failed:\nSTDOUT:\n{build.stdout}\nSTDERR:\n{build.stderr}"
+            )
 
         binary_name = "repomap.exe" if os.name == "nt" else "repomap"
         cls.binary_path = cls.output_dir / binary_name
@@ -69,7 +78,14 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                [str(self.binary_path), "query-symbol", "--project", project_root, "--symbol", "helper"],
+                [
+                    str(self.binary_path),
+                    "query-symbol",
+                    "--project",
+                    project_root,
+                    "--symbol",
+                    "helper",
+                ],
                 cwd=self.repo_root,
                 capture_output=True,
                 encoding="utf-8",

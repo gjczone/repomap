@@ -21,6 +21,7 @@ logger = logging.getLogger("repomap.search")
 _HAS_BM25 = False
 try:
     from rank_bm25 import BM25Okapi
+
     _HAS_BM25 = True
 except ImportError:
     BM25Okapi = None
@@ -73,6 +74,7 @@ class SymbolSearchIndex:
                 self._built = True
             except Exception as exc:
                 logger.debug(f"BM25 index build failed: {exc}")
+
     def search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
         """
         搜索与 query 最相关的符号。

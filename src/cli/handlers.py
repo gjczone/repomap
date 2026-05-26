@@ -1,5 +1,6 @@
 """Command implementations and shared helpers.
 Separated from CLI dispatch (cli.py)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -15,10 +16,16 @@ from typing import Any
 
 from .. import json_dumps, json_dump, json_loads
 
-from .. import (Edge, HttpRoute, RepoGraph, ScanStats, Symbol,
+from .. import (
+    Edge,
+    HttpRoute,
+    RepoGraph,
+    ScanStats,
+    Symbol,
     call_reference_parts,
     get_session_cache_path,
-    serialize_edge, serialize_symbol,
+    serialize_edge,
+    serialize_symbol,
     SESSION_CACHE_VERSION,
     DEFAULT_OVERVIEW_JSON_HOTSPOTS,
     DEFAULT_OVERVIEW_JSON_MODULES,
@@ -28,29 +35,56 @@ from .. import (Edge, HttpRoute, RepoGraph, ScanStats, Symbol,
     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
 )
-from ..ai import (_build_query_reading_order, _get_hot_files, _rank_symbols_for_file,
-    _truncate_output, render_impact_report, render_query_report, render_routes_report,
-    render_verify_report)
+from ..ai import (
+    _build_query_reading_order,
+    _get_hot_files,
+    _rank_symbols_for_file,
+    _truncate_output,
+    render_impact_report,
+    render_query_report,
+    render_routes_report,
+    render_verify_report,
+)
 from ..check import RepoMapChecker
 from ..core import RepoMapEngine
 from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
 from ..ranking import GraphAnalyzer
 from ..toolkit import diff_project, save_cache, scan_project
-from ..topic import (FileMatch, TestMatch, classify_file_role, compute_keyword_weights,
-    expand_keywords, find_related_tests, find_untested_symbols, is_test_like_file,
-    split_identifier, topic_score)
+from ..topic import (
+    FileMatch,
+    TestMatch,
+    classify_file_role,
+    compute_keyword_weights,
+    expand_keywords,
+    find_related_tests,
+    find_untested_symbols,
+    is_test_like_file,
+    split_identifier,
+    topic_score,
+)
 
 CLI_NAME = "repomap"
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
 PYINSTALLER_BINDINGS = [
-    "tree_sitter", "tree_sitter_python", "tree_sitter_javascript",
-    "tree_sitter_typescript", "tree_sitter_go", "tree_sitter_rust",
-    "tree_sitter_html", "tree_sitter_css", "tree_sitter_json",
-    "tree_sitter_c", "tree_sitter_java", "tree_sitter_kotlin",
-    "tree_sitter_swift", "tree_sitter_cpp", "tree_sitter_c_sharp",
-    "tree_sitter_php", "tree_sitter_ruby",
+    "tree_sitter",
+    "tree_sitter_python",
+    "tree_sitter_javascript",
+    "tree_sitter_typescript",
+    "tree_sitter_go",
+    "tree_sitter_rust",
+    "tree_sitter_html",
+    "tree_sitter_css",
+    "tree_sitter_json",
+    "tree_sitter_c",
+    "tree_sitter_java",
+    "tree_sitter_kotlin",
+    "tree_sitter_swift",
+    "tree_sitter_cpp",
+    "tree_sitter_c_sharp",
+    "tree_sitter_php",
+    "tree_sitter_ruby",
     "repomap_lsp",
 ]
 
@@ -74,7 +108,9 @@ def _resolve_project(project: str) -> str:
     return str(project_path)
 
 
-def _normalize_project_relative_path(project_root: str | Path, value: str, *, must_exist: bool = False) -> str:
+def _normalize_project_relative_path(
+    project_root: str | Path, value: str, *, must_exist: bool = False
+) -> str:
     raw = value.strip()
     if not raw:
         raise ValueError("path is empty")
@@ -82,7 +118,11 @@ def _normalize_project_relative_path(project_root: str | Path, value: str, *, mu
         raise ValueError(f"unsafe path starts with '-': {value}")
     project_path = Path(project_root).resolve()
     input_path = Path(raw).expanduser()
-    abs_path = input_path.resolve() if input_path.is_absolute() else (project_path / input_path).resolve()
+    abs_path = (
+        input_path.resolve()
+        if input_path.is_absolute()
+        else (project_path / input_path).resolve()
+    )
     try:
         rel = abs_path.relative_to(project_path)
     except ValueError:
@@ -95,12 +135,19 @@ def _normalize_project_relative_path(project_root: str | Path, value: str, *, mu
     return rel_path
 
 
-def _normalize_project_relative_paths(project_root: str | Path, values: list[str], *, must_exist: bool = False) -> list[str]:
-    return [_normalize_project_relative_path(project_root, value, must_exist=must_exist) for value in values]
+def _normalize_project_relative_paths(
+    project_root: str | Path, values: list[str], *, must_exist: bool = False
+) -> list[str]:
+    return [
+        _normalize_project_relative_path(project_root, value, must_exist=must_exist)
+        for value in values
+    ]
 
 
 def _normalize_path_prefix(project_root: str | Path, prefix: str) -> str:
-    return _normalize_project_relative_path(project_root, prefix.rstrip("/"), must_exist=False)
+    return _normalize_project_relative_path(
+        project_root, prefix.rstrip("/"), must_exist=False
+    )
 
 
 def _path_matches_prefix(file_path: str, prefix: str) -> bool:
@@ -121,12 +168,20 @@ def _iter_source_files(project_root: Path) -> list[str]:
     files: list[str] = []
     for root, dir_names, file_names in os.walk(project_root):
         rel_root = Path(root).relative_to(project_root)
-        dir_names[:] = [n for n in dir_names if not gitignore.is_ignored(rel_root / n if str(rel_root) != "." else Path(n))]
+        dir_names[:] = [
+            n
+            for n in dir_names
+            if not gitignore.is_ignored(
+                rel_root / n if str(rel_root) != "." else Path(n)
+            )
+        ]
         for file_name in file_names:
             suffix = Path(file_name).suffix.lower()
             if suffix not in EXT_TO_LANG:
                 continue
-            rel_path = (rel_root / file_name).as_posix() if str(rel_root) != "." else file_name
+            rel_path = (
+                (rel_root / file_name).as_posix() if str(rel_root) != "." else file_name
+            )
             if gitignore.is_ignored(rel_path):
                 continue
             files.append(rel_path)
@@ -161,7 +216,9 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
     return digest.hexdigest()
 
 
-def _scan_engine(project: str, max_files: int, incremental: bool = False) -> RepoMapEngine:
+def _scan_engine(
+    project: str, max_files: int, incremental: bool = False
+) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (
         resolved_project,
@@ -188,7 +245,9 @@ def _scan_engine(project: str, max_files: int, incremental: bool = False) -> Rep
     return engine
 
 
-def _engine_to_session_payload(project_root: str, fingerprint: str, engine: RepoMapEngine) -> dict[str, Any]:
+def _engine_to_session_payload(
+    project_root: str, fingerprint: str, engine: RepoMapEngine
+) -> dict[str, Any]:
     symbols = [serialize_symbol(symbol) for symbol in engine.graph.symbols.values()]
     outgoing = {
         source_id: [serialize_edge(edge) for edge in edges]
@@ -227,25 +286,38 @@ def _engine_to_session_payload(project_root: str, fingerprint: str, engine: Repo
             for file_path, calls in engine.graph.file_calls.items()
         },
         "file_import_bindings": {
-            file_path: [{"local_name": b.local_name, "imported_name": b.imported_name,
-                         "module": b.module, "line": b.line, "kind": b.kind}
-                        for b in bindings]
+            file_path: [
+                {
+                    "local_name": b.local_name,
+                    "imported_name": b.imported_name,
+                    "module": b.module,
+                    "line": b.line,
+                    "kind": b.kind,
+                }
+                for b in bindings
+            ]
             for file_path, bindings in engine.graph.file_import_bindings.items()
         },
         "file_exports": {
-            file_path: [{"exported_name": b.exported_name, "source_name": b.source_name,
-                         "module": b.module, "line": b.line, "kind": b.kind}
-                        for b in exports]
+            file_path: [
+                {
+                    "exported_name": b.exported_name,
+                    "source_name": b.source_name,
+                    "module": b.module,
+                    "line": b.line,
+                    "kind": b.kind,
+                }
+                for b in exports
+            ]
             for file_path, exports in engine.graph.file_exports.items()
         },
-        "routes": [
-            _route_payload(r)
-            for r in engine.routes
-        ],
+        "routes": [_route_payload(r) for r in engine.routes],
     }
 
 
-def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngine | None:
+def _restore_engine_from_session_payload(
+    payload: dict[str, Any],
+) -> RepoMapEngine | None:
     if payload.get("version") != SESSION_CACHE_VERSION:
         return None
     project_root = payload.get("project_root")
@@ -295,15 +367,13 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
 
     for file_path, bindings in payload.get("file_import_bindings", {}).items():
         from .. import JSImportBinding
-        graph.file_import_bindings[file_path] = [
-            JSImportBinding(**b) for b in bindings
-        ]
+
+        graph.file_import_bindings[file_path] = [JSImportBinding(**b) for b in bindings]
 
     for file_path, exports in payload.get("file_exports", {}).items():
         from .. import JSExportBinding
-        graph.file_exports[file_path] = [
-            JSExportBinding(**e) for e in exports
-        ]
+
+        graph.file_exports[file_path] = [JSExportBinding(**e) for e in exports]
 
     stats_row = payload.get("scan_stats", {})
     engine.graph = graph
@@ -322,9 +392,7 @@ def _restore_engine_from_session_payload(payload: dict[str, Any]) -> RepoMapEngi
     engine.scan_state = payload.get("scan_state", "scanned")
     engine._analyzer = type(engine._analyzer)(engine.graph)
     # 恢复路由数据
-    engine.routes = [
-        HttpRoute(**r) for r in payload.get("routes", [])
-    ]
+    engine.routes = [HttpRoute(**r) for r in payload.get("routes", [])]
     return engine if engine.scan_state == "scanned" else None
 
 
@@ -343,7 +411,9 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     return _restore_engine_from_session_payload(payload)
 
 
-def _save_session_engine(project_root: str, fingerprint: str, engine: RepoMapEngine) -> None:
+def _save_session_engine(
+    project_root: str, fingerprint: str, engine: RepoMapEngine
+) -> None:
     if engine.scan_state != "scanned":
         return
     cache_path = get_session_cache_path(project_root)
@@ -389,11 +459,15 @@ def _select_symbol_match(
     # Tier 1: LSP definition lookup (highest precision)
     if with_lsp and matches:
         from ..lsp import collect_lsp_symbol_evidence
+
         try:
             best_match = matches[0]
             lsp_result = collect_lsp_symbol_evidence(
-                str(engine.project_root), best_match.file,
-                best_match.line, symbol, timeout=lsp_timeout,
+                str(engine.project_root),
+                best_match.file,
+                best_match.line,
+                symbol,
+                timeout=lsp_timeout,
             )
             if lsp_result.status == "ok" and lsp_result.definitions:
                 # LSP confirmed the definition location
@@ -429,17 +503,23 @@ def _select_symbol_match(
         return candidates[0], None, resolution_tier
 
     # Ambiguous: multiple candidates
-    lines = [f"> Symbol `{symbol}` has multiple candidates; use `--file-path` to specify:"]
+    lines = [
+        f"> Symbol `{symbol}` has multiple candidates; use `--file-path` to specify:"
+    ]
     for item in candidates[:10]:
         lines.append(f"- `{item.file}:{item.line}` ({item.kind})")
     if len(candidates) > 10:
         lines.append(f"- ... {len(candidates) - 10} more candidates")
     lines.append("\nTip: use `--file-path <file>` to specify the target file, e.g.:")
-    lines.append(f"  repomap call-chain --symbol {symbol} --file-path {candidates[0].file}")
+    lines.append(
+        f"  repomap call-chain --symbol {symbol} --file-path {candidates[0].file}"
+    )
     return None, "\n".join(lines), resolution_tier
 
 
-def _group_symbol_matches(results: list[Any], symbol: str) -> tuple[list[Any], list[Any]]:
+def _group_symbol_matches(
+    results: list[Any], symbol: str
+) -> tuple[list[Any], list[Any]]:
     exact = [item for item in results if item.name == symbol]
     fuzzy = [item for item in results if item.name != symbol]
     return exact, fuzzy
@@ -461,7 +541,9 @@ def _render_selected_call_chain(engine: RepoMapEngine, symbol: Any, depth: int) 
     lines.append(f"### Called by（{len(callers)}）\n")
     if callers:
         for caller in callers[:20]:
-            lines.append(f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`")
+            lines.append(
+                f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`"
+            )
         if len(callers) > 20:
             lines.append(f"- ... {len(callers) - 20} more")
     else:
@@ -471,14 +553,15 @@ def _render_selected_call_chain(engine: RepoMapEngine, symbol: Any, depth: int) 
     lines.append(f"\n### Calls（{len(callees)}）\n")
     if callees:
         for callee in callees[:20]:
-            lines.append(f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`")
+            lines.append(
+                f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`"
+            )
         if len(callees) > 20:
             lines.append(f"- ... {len(callees) - 20} more")
     else:
         lines.append("- (None — leaf function)")
 
     return "\n".join(lines)
-
 
 
 def run_scan(project: str, max_files: int) -> int:
@@ -493,10 +576,16 @@ def run_scan(project: str, max_files: int) -> int:
             "\n**High-Density Files (Top 5)**:",
         ]
         if engine.scan_stats.truncated_files:
-            lines.insert(6, f"- max_files truncated: {engine.scan_stats.truncated_files}")
+            lines.insert(
+                6, f"- max_files truncated: {engine.scan_stats.truncated_files}"
+            )
         for item in hot:
-            lines.append(f"  - `{item['file']}` — {item['symbol_count']} symbols ({item['risk']} risk)")
-        lines.append("\n> Next: run `repomap overview --project <path>` for a full project map.")
+            lines.append(
+                f"  - `{item['file']}` — {item['symbol_count']} symbols ({item['risk']} risk)"
+            )
+        lines.append(
+            "\n> Next: run `repomap overview --project <path>` for a full project map."
+        )
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -515,7 +604,6 @@ def _route_payload(route: HttpRoute) -> dict[str, Any]:
     }
 
 
-
 def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
     return {
         "listed_source_files": engine.scan_stats.listed_source_files,
@@ -532,9 +620,15 @@ def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
     }
 
 
-def run_overview(project: str, max_files: int, max_chars: int, as_json: bool,
-                with_heat: bool = False, with_co_change: bool = False,
-                granularity: str = "auto") -> int:
+def run_overview(
+    project: str,
+    max_files: int,
+    max_chars: int,
+    as_json: bool,
+    with_heat: bool = False,
+    with_co_change: bool = False,
+    granularity: str = "auto",
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
 
@@ -544,18 +638,31 @@ def run_overview(project: str, max_files: int, max_chars: int, as_json: bool,
                 "scan_stats": _scan_stats_payload(engine),
                 "entry_points": engine.entry_points(),
                 "hotspots": engine.hotspots(DEFAULT_OVERVIEW_JSON_HOTSPOTS),
-                "reading_order": engine.suggested_reading_order(DEFAULT_OVERVIEW_JSON_READING_ORDER),
+                "reading_order": engine.suggested_reading_order(
+                    DEFAULT_OVERVIEW_JSON_READING_ORDER
+                ),
                 "modules": engine.module_summary(DEFAULT_OVERVIEW_JSON_MODULES),
                 "summary_symbols": engine.summary_symbols(
                     DEFAULT_OVERVIEW_JSON_SUMMARY_FILES,
                     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
                 ),
-                "supporting_files": engine.supporting_files(DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES),
-                "hot_files": list(_get_hot_files(str(engine.project_root))) if with_heat else [],
+                "supporting_files": engine.supporting_files(
+                    DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES
+                ),
+                "hot_files": list(_get_hot_files(str(engine.project_root)))
+                if with_heat
+                else [],
             }
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
-        print(engine.render_overview(max_chars, with_heat=with_heat, with_co_change=with_co_change, granularity=granularity))
+        print(
+            engine.render_overview(
+                max_chars,
+                with_heat=with_heat,
+                with_co_change=with_co_change,
+                granularity=granularity,
+            )
+        )
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] overview failed: {exc}", file=sys.stderr)
@@ -574,7 +681,9 @@ def run_call_chain(
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
+        selected, error, tier = _select_symbol_match(
+            engine, symbol, file_path=file_path
+        )
         if error:
             print(error, file=sys.stderr)
             return 1
@@ -593,8 +702,12 @@ def run_call_chain(
                 },
                 "direction": direction,
                 "depth": depth,
-                "callers": [_format_symbol_ref(engine, item.id) for item in chain["callers"]],
-                "callees": [_format_symbol_ref(engine, item.id) for item in chain["callees"]],
+                "callers": [
+                    _format_symbol_ref(engine, item.id) for item in chain["callers"]
+                ],
+                "callees": [
+                    _format_symbol_ref(engine, item.id) for item in chain["callees"]
+                ],
             }
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
@@ -605,14 +718,20 @@ def run_call_chain(
                 lines.append(f"- `{item.name}` ({item.file}:{item.line})")
             print(_truncate_output("\n".join(lines), max_chars))
             return 0
-        print(_truncate_output(_render_selected_call_chain(engine, selected, depth), max_chars))
+        print(
+            _truncate_output(
+                _render_selected_call_chain(engine, selected, depth), max_chars
+            )
+        )
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] call-chain failed: {exc}", file=sys.stderr)
         return 1
 
 
-def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout: float) -> dict[str, Any]:
+def _collect_lsp_evidence_for_symbol(
+    engine: RepoMapEngine, symbol: Any, timeout: float
+) -> dict[str, Any]:
     from ..lsp import collect_lsp_symbol_evidence, collect_lsp_hover, run_result_to_dict
 
     run = collect_lsp_symbol_evidence(
@@ -625,9 +744,16 @@ def _collect_lsp_evidence_for_symbol(engine: RepoMapEngine, symbol: Any, timeout
     result = run_result_to_dict(run)
     # 附加 hover 信息
     if run.status == "ok":
-        hover = collect_lsp_hover(engine.project_root, symbol.file, symbol.line, symbol.name, timeout=timeout)
+        hover = collect_lsp_hover(
+            engine.project_root, symbol.file, symbol.line, symbol.name, timeout=timeout
+        )
         if hover:
-            result["hover"] = {"file": hover.file, "line": hover.line, "col": hover.col, "contents": hover.contents}
+            result["hover"] = {
+                "file": hover.file,
+                "line": hover.line,
+                "col": hover.col,
+                "contents": hover.contents,
+            }
     return result
 
 
@@ -672,16 +798,27 @@ def run_query_symbol(
             results = [item for item in results if item.file == file_path]
         if not results:
             if as_json:
-                print(json_dumps({"matches": [], "query": symbol, "file_filter": file_path}, ensure_ascii=False))
+                print(
+                    json_dumps(
+                        {"matches": [], "query": symbol, "file_filter": file_path},
+                        ensure_ascii=False,
+                    )
+                )
                 return 0
             print(f"> No matches found for `{symbol}`", file=sys.stderr)
             return EXIT_NO_RESULTS
         exact_matches, fuzzy_matches = _group_symbol_matches(results, symbol)
 
         if as_json:
+
             def _symbol_item(item):
-                d = {"name": item.name, "kind": item.kind, "file": item.file, "line": item.line,
-                     "pagerank": item.pagerank}
+                d = {
+                    "name": item.name,
+                    "kind": item.kind,
+                    "file": item.file,
+                    "line": item.line,
+                    "pagerank": item.pagerank,
+                }
                 if item.signature:
                     d["signature"] = item.signature
                 if item.return_type:
@@ -689,6 +826,7 @@ def run_query_symbol(
                 if item.params:
                     d["params"] = item.params
                 return d
+
             payload = {
                 "query": symbol,
                 "total_results": len(results),
@@ -699,7 +837,9 @@ def run_query_symbol(
                 payload["file_filter"] = file_path
             if with_lsp and (exact_matches or results):
                 selected = (exact_matches or results)[0]
-                payload["lsp"] = _collect_lsp_evidence_for_symbol(engine, selected, lsp_timeout)
+                payload["lsp"] = _collect_lsp_evidence_for_symbol(
+                    engine, selected, lsp_timeout
+                )
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
@@ -707,13 +847,17 @@ def run_query_symbol(
         if file_path:
             lines.append(f"Filtered by file: `{file_path}`\n")
         if len(exact_matches) > 1 and not file_path:
-            lines.append(f"{len(exact_matches)} exact candidates; use `--file-path` to narrow.\n")
+            lines.append(
+                f"{len(exact_matches)} exact candidates; use `--file-path` to narrow.\n"
+            )
 
         if exact_matches:
             lines.append(f"## Exact matches `{symbol}` ({len(exact_matches)})\n")
             for item in exact_matches[:10]:
                 pr = item.pagerank * 1000
-                lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
+                lines.append(
+                    f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}"
+                )
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
                 if item.return_type:
@@ -725,7 +869,9 @@ def run_query_symbol(
             lines.append(f"\n## Fuzzy matches ({len(fuzzy_matches)})\n")
             for item in fuzzy_matches[:10]:
                 pr = item.pagerank * 1000
-                lines.append(f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}")
+                lines.append(
+                    f"- **{item.name}** ({item.kind}) `{item.file}:{item.line}` PR={pr:.1f}"
+                )
                 if item.signature:
                     lines.append(f"  - sig: `{item.signature}`")
                 if item.return_type:
@@ -737,7 +883,11 @@ def run_query_symbol(
             lines.append("\n> Many results; use `--file-path` to narrow.")
         if with_lsp:
             selected = (exact_matches or results)[0]
-            lines.extend(_format_lsp_evidence(_collect_lsp_evidence_for_symbol(engine, selected, lsp_timeout)))
+            lines.extend(
+                _format_lsp_evidence(
+                    _collect_lsp_evidence_for_symbol(engine, selected, lsp_timeout)
+                )
+            )
         print(_truncate_output("\n".join(lines), max_chars))
         return 0
     except Exception as exc:
@@ -745,14 +895,26 @@ def run_query_symbol(
         return 1
 
 
-def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: int, max_chars: int,
-                    with_lsp: bool = False, lsp_timeout: float = 8.0, as_json: bool = False) -> int:
+def run_file_detail(
+    project: str,
+    max_files: int,
+    file_path: str,
+    max_symbols: int,
+    max_chars: int,
+    with_lsp: bool = False,
+    lsp_timeout: float = 8.0,
+    as_json: bool = False,
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        normalized_file_path = _normalize_project_relative_path(engine.project_root, file_path, must_exist=True)
+        normalized_file_path = _normalize_project_relative_path(
+            engine.project_root, file_path, must_exist=True
+        )
 
         if max_symbols == DEFAULT_FILE_DETAIL_MAX_SYMBOLS:
-            file_symbol_count = len(engine.graph.file_symbols.get(normalized_file_path, []))
+            file_symbol_count = len(
+                engine.graph.file_symbols.get(normalized_file_path, [])
+            )
             if file_symbol_count > 50:
                 max_symbols = min(file_symbol_count, 50)
             elif file_symbol_count > 20:
@@ -764,7 +926,12 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
                 sym = engine.graph.symbols.get(sid)
                 if not sym:
                     continue
-                s = {"name": sym.name, "kind": sym.kind, "line": sym.line, "pagerank": sym.pagerank}
+                s = {
+                    "name": sym.name,
+                    "kind": sym.kind,
+                    "line": sym.line,
+                    "pagerank": sym.pagerank,
+                }
                 if sym.signature:
                     s["signature"] = sym.signature
                 if sym.return_type:
@@ -775,14 +942,22 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
             payload = {
                 "file": normalized_file_path,
                 "symbol_count": len(symbols),
-                "symbols": sorted(symbols, key=lambda x: x.get("pagerank", 0), reverse=True)[:max_symbols],
+                "symbols": sorted(
+                    symbols, key=lambda x: x.get("pagerank", 0), reverse=True
+                )[:max_symbols],
                 "imports": engine.graph.file_imports.get(normalized_file_path, []),
-                "calls": [list(c) for c in engine.graph.file_calls.get(normalized_file_path, [])],
+                "calls": [
+                    list(c)
+                    for c in engine.graph.file_calls.get(normalized_file_path, [])
+                ],
             }
             if with_lsp:
                 from dataclasses import asdict as dc_asdict
                 from ..lsp import collect_lsp_symbol_tree
-                lsp_tree = collect_lsp_symbol_tree(engine.project_root, normalized_file_path, timeout=lsp_timeout)
+
+                lsp_tree = collect_lsp_symbol_tree(
+                    engine.project_root, normalized_file_path, timeout=lsp_timeout
+                )
                 if lsp_tree:
                     payload["lsp_symbol_tree"] = [dc_asdict(item) for item in lsp_tree]
                 else:
@@ -793,17 +968,28 @@ def run_file_detail(project: str, max_files: int, file_path: str, max_symbols: i
         lsp_tree = None
         if with_lsp:
             from ..lsp import collect_lsp_symbol_tree
-            lsp_tree = collect_lsp_symbol_tree(engine.project_root, normalized_file_path, timeout=lsp_timeout)
 
-        print(engine.render_file_detail(normalized_file_path, max_symbols=max_symbols, max_chars=max_chars,
-                                        lsp_symbol_tree=lsp_tree))
+            lsp_tree = collect_lsp_symbol_tree(
+                engine.project_root, normalized_file_path, timeout=lsp_timeout
+            )
+
+        print(
+            engine.render_file_detail(
+                normalized_file_path,
+                max_symbols=max_symbols,
+                max_chars=max_chars,
+                lsp_symbol_tree=lsp_tree,
+            )
+        )
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] file-detail failed: {exc}", file=sys.stderr)
         return 1
 
 
-def run_routes(project: str, max_files: int, as_json: bool, with_consumers: bool = False) -> int:
+def run_routes(
+    project: str, max_files: int, as_json: bool, with_consumers: bool = False
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         if as_json:
@@ -815,12 +1001,18 @@ def run_routes(project: str, max_files: int, as_json: bool, with_consumers: bool
             }
             if with_consumers:
                 from ..consumers import find_route_consumers
+
                 consumers = find_route_consumers(engine, engine.list_routes())
                 consumer_json = {}
                 for key, clist in consumers.items():
                     consumer_json[key] = [
-                        {"file": c.file, "line": c.line, "context": c.context,
-                         "confidence": c.confidence, "match_type": c.match_type}
+                        {
+                            "file": c.file,
+                            "line": c.line,
+                            "context": c.context,
+                            "confidence": c.confidence,
+                            "match_type": c.match_type,
+                        }
                         for c in clist
                     ]
                 payload["consumers"] = consumer_json
@@ -828,6 +1020,7 @@ def run_routes(project: str, max_files: int, as_json: bool, with_consumers: bool
             return 0
         if with_consumers:
             from ..consumers import find_route_consumers
+
             consumers = find_route_consumers(engine, engine.list_routes())
             print(render_routes_report(engine, consumers))
         else:
@@ -845,7 +1038,9 @@ def run_hotspots(project: str, max_files: int, limit: int) -> int:
         risk_mark = {"high": "🔴", "medium": "🟡", "low": "🟢"}
         lines = ["## High-Density Files (by symbol count)\n"]
         for index, item in enumerate(hotspots, 1):
-            lines.append(f"{index}. {risk_mark[item['risk']]} `{item['file']}` — **{item['symbol_count']}** symbols")
+            lines.append(
+                f"{index}. {risk_mark[item['risk']]} `{item['file']}` — **{item['symbol_count']}** symbols"
+            )
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -874,7 +1069,6 @@ def run_cache(project: str, action: str) -> int:
         return 1
 
 
-
 def run_diff(project: str, as_json: bool) -> int:
     result = diff_project(_resolve_project(project))
     if "error" in result:
@@ -884,7 +1078,9 @@ def run_diff(project: str, as_json: bool) -> int:
         print(json_dumps(result, ensure_ascii=False, indent=2))
         return 0
     lines = ["## Change Detection\n"]
-    lines.append(f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n")
+    lines.append(
+        f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n"
+    )
     lines.append(f"- Added symbols: {result['summary']['added']}")
     lines.append(f"- Removed symbols: {result['summary']['removed']}")
     lines.append(f"- Modified symbols: {result['summary']['modified']}")
@@ -897,8 +1093,14 @@ def run_diff(project: str, as_json: bool) -> int:
     if result["call_chain_changes"]["new_calls"]:
         lines.append("\n**Added calls** (Top 10):")
         for change in result["call_chain_changes"]["new_calls"][:10]:
-            src_name = change["from"].split("::")[-2] if "::" in change["from"] else change["from"]
-            tgt_name = change["to"].split("::")[-2] if "::" in change["to"] else change["to"]
+            src_name = (
+                change["from"].split("::")[-2]
+                if "::" in change["from"]
+                else change["from"]
+            )
+            tgt_name = (
+                change["to"].split("::")[-2] if "::" in change["to"] else change["to"]
+            )
             lines.append(f"  - `{src_name}` -[{change['kind']}]-> `{tgt_name}`")
     print("\n".join(lines))
     return 0
@@ -923,29 +1125,55 @@ def run_query(
         # 过滤搜索范围
         candidate_files = list(engine.graph.file_symbols.keys())
         if paths:
-            allowed = {_normalize_path_prefix(engine.project_root, p) for p in paths.split(",") if p.strip()}
-            candidate_files = [f for f in candidate_files if any(_path_matches_prefix(f, a) for a in allowed)]
+            allowed = {
+                _normalize_path_prefix(engine.project_root, p)
+                for p in paths.split(",")
+                if p.strip()
+            }
+            candidate_files = [
+                f
+                for f in candidate_files
+                if any(_path_matches_prefix(f, a) for a in allowed)
+            ]
         if exclude:
-            excluded = {_normalize_path_prefix(engine.project_root, e) for e in exclude.split(",") if e.strip()}
-            candidate_files = [f for f in candidate_files if not any(_path_matches_prefix(f, e) for e in excluded)]
+            excluded = {
+                _normalize_path_prefix(engine.project_root, e)
+                for e in exclude.split(",")
+                if e.strip()
+            }
+            candidate_files = [
+                f
+                for f in candidate_files
+                if not any(_path_matches_prefix(f, e) for e in excluded)
+            ]
         if no_tests:
             candidate_files = [f for f in candidate_files if not is_test_like_file(f)]
 
         # 计算高频词权重（命中文件过多的关键词降权）
-        kw_weights = compute_keyword_weights(query.lower().split(), candidate_files, engine.graph)
+        kw_weights = compute_keyword_weights(
+            query.lower().split(), candidate_files, engine.graph
+        )
 
         # 主题评分
         matches: list[FileMatch] = []
         for file_path in candidate_files:
             file_data = analysis.get(file_path, {})
-            score = topic_score(query, file_path, file_data, engine.graph, keyword_weights=kw_weights)
+            score = topic_score(
+                query, file_path, file_data, engine.graph, keyword_weights=kw_weights
+            )
             if score > 0:
                 role = classify_file_role(file_path, engine.graph)
-                reasons = _build_match_reasons(query, file_path, engine.graph, engine.list_routes())
-                matches.append(FileMatch(path=file_path, role=role, score=score, reasons=reasons))
+                reasons = _build_match_reasons(
+                    query, file_path, engine.graph, engine.list_routes()
+                )
+                matches.append(
+                    FileMatch(path=file_path, role=role, score=score, reasons=reasons)
+                )
 
         # 调用邻居传播：高分文件的调用者/被调用者文件获得传播分数
-        matches = _propagate_call_neighbor_scores(matches, candidate_files, engine.graph)
+        matches = _propagate_call_neighbor_scores(
+            matches, candidate_files, engine.graph
+        )
 
         matches.sort(key=lambda m: (-m.score, m.path))
         top_matches = matches[:max_result_files]
@@ -953,8 +1181,12 @@ def run_query(
         # 找相关测试
         tests: list[TestMatch] = []
         if not no_tests:
-            target_files = [m.path for m in top_matches if not is_test_like_file(m.path)]
-            tests = find_related_tests(target_files, engine.graph, analysis, str(engine.project_root))
+            target_files = [
+                m.path for m in top_matches if not is_test_like_file(m.path)
+            ]
+            tests = find_related_tests(
+                target_files, engine.graph, analysis, str(engine.project_root)
+            )
 
         if as_json:
             payload = {
@@ -965,28 +1197,57 @@ def run_query(
                 "result": {
                     "filesConsidered": len(candidate_files),
                     "matchedFiles": len(matches),
-                    "readingOrder": _build_query_reading_order(top_matches, analysis, max_result_files),
+                    "readingOrder": _build_query_reading_order(
+                        top_matches, analysis, max_result_files
+                    ),
                     "coreFiles": [
-                        {"path": m.path, "role": m.role, "score": m.score, "reasons": m.reasons}
-                        for m in top_matches if m.score >= 30 and not is_test_like_file(m.path)
+                        {
+                            "path": m.path,
+                            "role": m.role,
+                            "score": m.score,
+                            "reasons": m.reasons,
+                        }
+                        for m in top_matches
+                        if m.score >= 30 and not is_test_like_file(m.path)
                     ],
                     "supportingFiles": [
-                        {"path": m.path, "role": m.role, "score": m.score, "reasons": m.reasons}
-                        for m in top_matches if m.score < 30
+                        {
+                            "path": m.path,
+                            "role": m.role,
+                            "score": m.score,
+                            "reasons": m.reasons,
+                        }
+                        for m in top_matches
+                        if m.score < 30
                     ],
                     "tests": [
-                        {"testFile": t.test_file, "targetFile": t.target_file,
-                         "confidence": t.confidence, "reason": t.reason}
+                        {
+                            "testFile": t.test_file,
+                            "targetFile": t.target_file,
+                            "confidence": t.confidence,
+                            "reason": t.reason,
+                        }
                         for t in tests
                     ],
-                    "symbols": _query_symbols_json(engine, top_matches, max_result_symbols),
+                    "symbols": _query_symbols_json(
+                        engine, top_matches, max_result_symbols
+                    ),
                 },
             }
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
-        print(render_query_report(engine, query, top_matches, tests, max_result_files, max_result_symbols,
-                                  context_lines=context_lines))
+        print(
+            render_query_report(
+                engine,
+                query,
+                top_matches,
+                tests,
+                max_result_files,
+                max_result_symbols,
+                context_lines=context_lines,
+            )
+        )
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
@@ -1074,7 +1335,9 @@ def _propagate_call_neighbor_scores(
     return result
 
 
-def _build_match_reasons(query: str, file_path: str, graph: RepoGraph, routes: list | None = None) -> list[str]:
+def _build_match_reasons(
+    query: str, file_path: str, graph: RepoGraph, routes: list | None = None
+) -> list[str]:
     """Build match reason list with hit type tags."""
     reasons: list[str] = []
     keywords = query.lower().split()
@@ -1089,10 +1352,18 @@ def _build_match_reasons(query: str, file_path: str, graph: RepoGraph, routes: l
             label = f"synonym hit: {source} -> {kw}" if source else f"path hit: {kw}"
             reasons.append(label)
         if kw in file_name:
-            label = f"synonym hit: {source} -> {kw} (filename)" if source else f"filename hit: {kw}"
+            label = (
+                f"synonym hit: {source} -> {kw} (filename)"
+                if source
+                else f"filename hit: {kw}"
+            )
             reasons.append(label)
         elif any(kw in t for t in tokens):
-            label = f"synonym hit: {source} -> {kw} (token)" if source else f"filename token hit: {kw}"
+            label = (
+                f"synonym hit: {source} -> {kw} (token)"
+                if source
+                else f"filename token hit: {kw}"
+            )
             reasons.append(label)
 
     # Symbol name hits
@@ -1102,7 +1373,11 @@ def _build_match_reasons(query: str, file_path: str, graph: RepoGraph, routes: l
             continue
         for kw, source in expanded:
             if kw in sym.name.lower():
-                tag = f"synonym hit: {source} -> {kw}" if source else f"symbol hit: {sym.name}"
+                tag = (
+                    f"synonym hit: {source} -> {kw}"
+                    if source
+                    else f"symbol hit: {sym.name}"
+                )
                 if tag not in reasons:
                     reasons.append(tag)
         if len(reasons) >= 5:
@@ -1112,7 +1387,11 @@ def _build_match_reasons(query: str, file_path: str, graph: RepoGraph, routes: l
     if routes:
         for r in routes:
             rel_file = file_path
-            if hasattr(r, 'file') and (r.file == rel_file or rel_file.endswith(r.file) or r.file.endswith(rel_file)):
+            if hasattr(r, "file") and (
+                r.file == rel_file
+                or rel_file.endswith(r.file)
+                or r.file.endswith(rel_file)
+            ):
                 for kw, source in expanded:
                     if kw in r.path.lower() or kw in r.handler.lower():
                         tag = f"route hit: {r.method} {r.path}"
@@ -1141,17 +1420,21 @@ def _query_symbols_json(
         for sym in _rank_symbols_for_file(engine, m.path):
             if len(result) >= max_symbols:
                 break
-            result.append({
-                "name": sym["name"],
-                "kind": sym["kind"],
-                "file": m.path,
-                "line": sym["line"],
-                "role": classify_file_role(m.path, engine.graph),
-            })
+            result.append(
+                {
+                    "name": sym["name"],
+                    "kind": sym["kind"],
+                    "file": m.path,
+                    "line": sym["line"],
+                    "role": classify_file_role(m.path, engine.graph),
+                }
+            )
     return result
 
 
-def _impact_key_symbols(engine: RepoMapEngine, target_files: list[str], limit_per_file: int = 8) -> list[dict[str, Any]]:
+def _impact_key_symbols(
+    engine: RepoMapEngine, target_files: list[str], limit_per_file: int = 8
+) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for file_path in target_files:
         symbols = [
@@ -1168,16 +1451,18 @@ def _impact_key_symbols(engine: RepoMapEngine, target_files: list[str], limit_pe
             )
         )
         for symbol in symbols[:limit_per_file]:
-            result.append({
-                "name": symbol.name,
-                "kind": symbol.kind,
-                "file": symbol.file,
-                "line": symbol.line,
-                "pagerank": symbol.pagerank,
-                "incomingCount": len(engine.graph.incoming.get(symbol.id, [])),
-                "outgoingCount": len(engine.graph.outgoing.get(symbol.id, [])),
-                "signature": symbol.signature,
-            })
+            result.append(
+                {
+                    "name": symbol.name,
+                    "kind": symbol.kind,
+                    "file": symbol.file,
+                    "line": symbol.line,
+                    "pagerank": symbol.pagerank,
+                    "incomingCount": len(engine.graph.incoming.get(symbol.id, [])),
+                    "outgoingCount": len(engine.graph.outgoing.get(symbol.id, [])),
+                    "signature": symbol.signature,
+                }
+            )
     return result
 
 
@@ -1208,11 +1493,18 @@ def _impact_read_next(
     return result
 
 
-def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[str, Any]:
+def _impact_lsp_hint(
+    project_root: str | Path, target_files: list[str]
+) -> dict[str, Any]:
     try:
         from ..lsp import detect_lsp_server, detection_to_dict, language_for_file
     except Exception as exc:
-        return {"available": False, "servers": [], "suggestedCommands": [], "reason": str(exc)}
+        return {
+            "available": False,
+            "servers": [],
+            "suggestedCommands": [],
+            "reason": str(exc),
+        }
 
     servers: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
@@ -1230,8 +1522,12 @@ def _impact_lsp_hint(project_root: str | Path, target_files: list[str]) -> dict[
     suggested: list[str] = []
     if available and target_files:
         files_arg = " ".join(target_files)
-        suggested.append(f"repomap check --project {project_root} --modified-file {files_arg}")
-        suggested.append(f"repomap refs --project {project_root} --symbol <symbol> --file-path <file>")
+        suggested.append(
+            f"repomap check --project {project_root} --modified-file {files_arg}"
+        )
+        suggested.append(
+            f"repomap refs --project {project_root} --symbol <symbol> --file-path <file>"
+        )
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 
 
@@ -1248,7 +1544,9 @@ def run_impact(
     try:
         engine = _scan_engine(project, max_files, incremental=incremental)
 
-        target_files = _normalize_project_relative_paths(engine.project_root, target_files)
+        target_files = _normalize_project_relative_paths(
+            engine.project_root, target_files
+        )
 
         # 收集目标文件符号
         target_symbols: set[str] = set()
@@ -1312,26 +1610,36 @@ def run_impact(
 
         # 找相关测试
         analysis = engine.file_analysis()
-        tests = find_related_tests(target_files, engine.graph, analysis, str(engine.project_root))
+        tests = find_related_tests(
+            target_files, engine.graph, analysis, str(engine.project_root)
+        )
 
         # 风险评估
         risk_level, risk_notes = _assess_risk(target_files, set(affected_files), engine)
 
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
         # 按影响严重程度排序：受影响文件中符号的外部调用者越多越靠前
-        affected_list.sort(key=lambda x: (
-            {"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
-            -_affected_severity(x[0], engine),
-            x[0],
-        ), reverse=True)
-        affected_list = sorted(affected_list, key=lambda x: (
-            -{"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
-            -_affected_severity(x[0], engine),
-        ))
+        affected_list.sort(
+            key=lambda x: (
+                {"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
+                -_affected_severity(x[0], engine),
+                x[0],
+            ),
+            reverse=True,
+        )
+        affected_list = sorted(
+            affected_list,
+            key=lambda x: (
+                -{"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
+                -_affected_severity(x[0], engine),
+            ),
+        )
         affected_list = affected_list[:max_affected_files]
         key_symbols = _impact_key_symbols(engine, target_files) if with_symbols else []
         read_next = _impact_read_next(target_files, affected_list, tests)
-        lsp_hint = _impact_lsp_hint(engine.project_root, target_files) if with_symbols else {}
+        lsp_hint = (
+            _impact_lsp_hint(engine.project_root, target_files) if with_symbols else {}
+        )
 
         if as_json:
             payload = {
@@ -1346,8 +1654,12 @@ def run_impact(
                         for f, why, conf in affected_list
                     ],
                     "tests": [
-                        {"testFile": t.test_file, "targetFile": t.target_file,
-                         "confidence": t.confidence, "reason": t.reason}
+                        {
+                            "testFile": t.test_file,
+                            "targetFile": t.target_file,
+                            "confidence": t.confidence,
+                            "reason": t.reason,
+                        }
                         for t in tests
                     ],
                     "riskLevel": risk_level,
@@ -1360,17 +1672,19 @@ def run_impact(
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
-        print(render_impact_report(
-            engine,
-            target_files,
-            affected_list,
-            tests,
-            risk_level,
-            risk_notes,
-            key_symbols=key_symbols,
-            read_next=read_next,
-            lsp_hint=lsp_hint,
-        ))
+        print(
+            render_impact_report(
+                engine,
+                target_files,
+                affected_list,
+                tests,
+                risk_level,
+                risk_notes,
+                key_symbols=key_symbols,
+                read_next=read_next,
+                lsp_hint=lsp_hint,
+            )
+        )
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
@@ -1406,7 +1720,9 @@ def _assess_risk(
         nc = file_data.get("neighbor_count", 0)
         if nc >= 10:
             structural_risk += 4
-            risk_notes.append(f"`{f}` associated with {nc} files, very high blast radius")
+            risk_notes.append(
+                f"`{f}` associated with {nc} files, very high blast radius"
+            )
         elif nc >= 5:
             structural_risk += 3
             risk_notes.append(f"`{f}` associated with {nc} files, high blast radius")
@@ -1419,10 +1735,27 @@ def _assess_risk(
 
     # 第2层：领域关键词风险
     domain_risk = 0
-    risk_keywords_high = ["auth", "token", "session", "password", "security",
-                          "migration", "database", "schema", "persistence"]
-    risk_keywords_medium = ["terminal", "websocket", "pty", "input", "config",
-                            "build", "deploy", "ci"]
+    risk_keywords_high = [
+        "auth",
+        "token",
+        "session",
+        "password",
+        "security",
+        "migration",
+        "database",
+        "schema",
+        "persistence",
+    ]
+    risk_keywords_medium = [
+        "terminal",
+        "websocket",
+        "pty",
+        "input",
+        "config",
+        "build",
+        "deploy",
+        "ci",
+    ]
     all_paths = " ".join(target_files + list(affected_files)).lower()
     for kw in risk_keywords_high:
         if kw in all_paths:
@@ -1441,7 +1774,9 @@ def _assess_risk(
     for f in target_files:
         if is_test_like_file(f):
             pass  # 只改测试不改实现，低风险
-        elif any(f.endswith(ext) for ext in [".config.ts", ".config.js", "package.json"]):
+        elif any(
+            f.endswith(ext) for ext in [".config.ts", ".config.js", "package.json"]
+        ):
             change_type_risk += 2
             risk_notes.append(f"`{f}` is a config file change with global impact")
         elif "types" in PurePosixPath(f).parts or f.endswith(".d.ts"):
@@ -1490,6 +1825,7 @@ def _child_git_project_candidates(project_path: Path, limit: int = 8) -> list[Pa
 
 def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | None]:
     from ..git_backend import GitBackend
+
     project_path = Path(project_root).resolve()
     git = GitBackend(str(project_path))
     git_root = git.show_toplevel()
@@ -1500,7 +1836,9 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
         )
         candidates = _child_git_project_candidates(project_path)
         if candidates:
-            candidate_lines = "\n".join(f"- --project {candidate}" for candidate in candidates)
+            candidate_lines = "\n".join(
+                f"- --project {candidate}" for candidate in candidates
+            )
             message = (
                 f"{message}\n"
                 "LLM action: select the intended project root, then re-run the same repomap command with exactly one --project argument.\n"
@@ -1519,7 +1857,9 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
     return changed_files, None
 
 
-def _detect_contract_risks(engine: RepoMapEngine, changed_files: list[str]) -> list[dict[str, str]]:
+def _detect_contract_risks(
+    engine: RepoMapEngine, changed_files: list[str]
+) -> list[dict[str, str]]:
     """Detect contract-level risks from changed files: route changes, signature changes, test gaps."""
     warnings: list[dict[str, str]] = []
     routes = engine.list_routes()
@@ -1528,10 +1868,12 @@ def _detect_contract_risks(engine: RepoMapEngine, changed_files: list[str]) -> l
     # Route/API risks
     for route in routes:
         if route.file in changed_set:
-            warnings.append({
-                "level": "MED",
-                "message": f"Route `{route.method} {route.path}` (handler in `{route.file}`) changed; review consumers and related tests.",
-            })
+            warnings.append(
+                {
+                    "level": "MED",
+                    "message": f"Route `{route.method} {route.path}` (handler in `{route.file}`) changed; review consumers and related tests.",
+                }
+            )
 
     # Symbol/public surface risks: check exported/public symbols in changed files
     for file_path in changed_files:
@@ -1541,20 +1883,26 @@ def _detect_contract_risks(engine: RepoMapEngine, changed_files: list[str]) -> l
                 continue
             # Count cross-file incoming edges only (import + call references from other files)
             cross_file_refs = [
-                e for e in engine.graph.incoming.get(sid, [])
-                if engine.graph.symbols.get(e.source) and engine.graph.symbols[e.source].file != sym.file
+                e
+                for e in engine.graph.incoming.get(sid, [])
+                if engine.graph.symbols.get(e.source)
+                and engine.graph.symbols[e.source].file != sym.file
             ]
             ref_count = len(cross_file_refs)
             if sym.visibility in ("exported", "public") and ref_count >= 3:
-                warnings.append({
-                    "level": "MED",
-                    "message": f"Exported symbol `{sym.name}` in `{sym.file}` has {ref_count} cross-file references.",
-                })
+                warnings.append(
+                    {
+                        "level": "MED",
+                        "message": f"Exported symbol `{sym.name}` in `{sym.file}` has {ref_count} cross-file references.",
+                    }
+                )
             elif ref_count >= 10:
-                warnings.append({
-                    "level": "MED",
-                    "message": f"Heavily referenced symbol `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {ref_count} cross-file references.",
-                })
+                warnings.append(
+                    {
+                        "level": "MED",
+                        "message": f"Heavily referenced symbol `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {ref_count} cross-file references.",
+                    }
+                )
 
     # Enum/type risks
     for file_path in changed_files:
@@ -1562,42 +1910,72 @@ def _detect_contract_risks(engine: RepoMapEngine, changed_files: list[str]) -> l
             sym = engine.graph.symbols.get(sid)
             if sym and sym.kind in ("enum", "type", "struct", "class"):
                 cross_file_refs = [
-                    e for e in engine.graph.incoming.get(sid, [])
-                    if engine.graph.symbols.get(e.source) and engine.graph.symbols[e.source].file != sym.file
+                    e
+                    for e in engine.graph.incoming.get(sid, [])
+                    if engine.graph.symbols.get(e.source)
+                    and engine.graph.symbols[e.source].file != sym.file
                 ]
                 if cross_file_refs:
-                    warnings.append({
-                        "level": "MED",
-                        "message": f"Type `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {len(cross_file_refs)} cross-file references.",
-                    })
+                    warnings.append(
+                        {
+                            "level": "MED",
+                            "message": f"Type `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {len(cross_file_refs)} cross-file references.",
+                        }
+                    )
 
     # Test/implementation mismatch
     test_files = [f for f in changed_files if is_test_like_file(f)]
-    impl_files = [f for f in changed_files if not is_test_like_file(f) and not f.endswith(('.md',)) and 'dist/' not in f and 'docs/' not in f]
+    impl_files = [
+        f
+        for f in changed_files
+        if not is_test_like_file(f)
+        and not f.endswith((".md",))
+        and "dist/" not in f
+        and "docs/" not in f
+    ]
     if test_files and not impl_files:
-        warnings.append({
-            "level": "LOW",
-            "message": f"Only test files changed ({len(test_files)} file(s)); verify tests are intentional.",
-        })
+        warnings.append(
+            {
+                "level": "LOW",
+                "message": f"Only test files changed ({len(test_files)} file(s)); verify tests are intentional.",
+            }
+        )
     if impl_files and not test_files:
-        warnings.append({
-            "level": "MED",
-            "message": f"Implementation file(s) changed ({len(impl_files)} file(s)) without related tests.",
-        })
+        warnings.append(
+            {
+                "level": "MED",
+                "message": f"Implementation file(s) changed ({len(impl_files)} file(s)) without related tests.",
+            }
+        )
 
     # Config/runtime risks
-    config_patterns = [".env", "config", "Dockerfile", "Makefile", "migration", "schema"]
-    config_files = [f for f in changed_files if any(p in f.lower() for p in config_patterns) and not f.endswith('.md')]
+    config_patterns = [
+        ".env",
+        "config",
+        "Dockerfile",
+        "Makefile",
+        "migration",
+        "schema",
+    ]
+    config_files = [
+        f
+        for f in changed_files
+        if any(p in f.lower() for p in config_patterns) and not f.endswith(".md")
+    ]
     if config_files:
-        warnings.append({
-            "level": "MED",
-            "message": f"Config/runtime files changed: {', '.join(f'`{f}`' for f in config_files[:3])}.",
-        })
+        warnings.append(
+            {
+                "level": "MED",
+                "message": f"Config/runtime files changed: {', '.join(f'`{f}`' for f in config_files[:3])}.",
+            }
+        )
 
     return warnings
 
 
-def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict[str, Any]:
+def _diff_risk_evidence(
+    engine: RepoMapEngine, changed_files: list[str]
+) -> dict[str, Any]:
     analysis = engine.file_analysis()
 
     target_symbols: set[str] = set()
@@ -1615,21 +1993,34 @@ def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict
                     "high",
                 )
 
-    affected_list = [(file_path, why, confidence) for file_path, (why, confidence) in affected_files_dict.items()]
+    affected_list = [
+        (file_path, why, confidence)
+        for file_path, (why, confidence) in affected_files_dict.items()
+    ]
     affected_list.sort(key=lambda item: (item[2], item[0]))
 
-    source_files = [file_path for file_path in changed_files if not is_test_like_file(file_path)]
-    tests = find_related_tests(source_files, engine.graph, analysis, str(engine.project_root))
-    risk_level, risk_reasons = _assess_risk(source_files, set(file_path for file_path, _, _ in affected_list), engine)
+    source_files = [
+        file_path for file_path in changed_files if not is_test_like_file(file_path)
+    ]
+    tests = find_related_tests(
+        source_files, engine.graph, analysis, str(engine.project_root)
+    )
+    risk_level, risk_reasons = _assess_risk(
+        source_files, set(file_path for file_path, _, _ in affected_list), engine
+    )
 
     missing_checks: list[str] = []
     all_exts = set(Path(file_path).suffix for file_path in changed_files)
     if ".ts" in all_exts or ".tsx" in all_exts:
         if not any(test.test_file.endswith((".ts", ".tsx")) for test in tests):
-            missing_checks.append("No frontend test file changes detected; consider adding frontend tests")
+            missing_checks.append(
+                "No frontend test file changes detected; consider adding frontend tests"
+            )
     if ".py" in all_exts:
         if not any(test.test_file.endswith(".py") for test in tests):
-            missing_checks.append("No Python test file changes detected; consider adding backend tests")
+            missing_checks.append(
+                "No Python test file changes detected; consider adding backend tests"
+            )
 
     return {
         "affectedList": affected_list,
@@ -1638,8 +2029,6 @@ def _diff_risk_evidence(engine: RepoMapEngine, changed_files: list[str]) -> dict
         "riskReasons": risk_reasons,
         "missingChecks": missing_checks,
     }
-
-
 
 
 def _run_check_payload(
@@ -1678,14 +2067,26 @@ def _verify_lsp_payload(
     if not enabled:
         return {"enabled": False, "status": "skipped", "runs": [], "summary": {}}
     if not changed_files:
-        return {"enabled": True, "status": "skipped", "runs": [], "summary": {}, "reason": "no changed files"}
+        return {
+            "enabled": True,
+            "status": "skipped",
+            "runs": [],
+            "summary": {},
+            "reason": "no changed files",
+        }
     try:
         from ..lsp import collect_lsp_diagnostics, run_result_to_dict
 
-        runs = collect_lsp_diagnostics(project_root, changed_files, timeout=timeout, max_files=max_files)
+        runs = collect_lsp_diagnostics(
+            project_root, changed_files, timeout=timeout, max_files=max_files
+        )
         run_dicts = [run_result_to_dict(run) for run in runs]
-        total_errors = sum(1 for run in runs for item in run.diagnostics if item.severity == "error")
-        total_warnings = sum(1 for run in runs for item in run.diagnostics if item.severity != "error")
+        total_errors = sum(
+            1 for run in runs for item in run.diagnostics if item.severity == "error"
+        )
+        total_warnings = sum(
+            1 for run in runs for item in run.diagnostics if item.severity != "error"
+        )
         failed_runs = sum(1 for run in runs if run.status in {"failed", "timeout"})
         skipped_runs = sum(1 for run in runs if run.status == "skipped")
         status = "failed" if total_errors or failed_runs else "passed"
@@ -1703,36 +2104,62 @@ def _verify_lsp_payload(
             },
         }
     except Exception as exc:
-        return {"enabled": True, "status": "failed", "runs": [], "summary": {}, "reason": str(exc)}
+        return {
+            "enabled": True,
+            "status": "failed",
+            "runs": [],
+            "summary": {},
+            "reason": str(exc),
+        }
 
 
-def _verify_graph_diff_payload(project_root: str, enabled: bool, incoming_map: dict | None = None) -> dict[str, Any]:
+def _verify_graph_diff_payload(
+    project_root: str, enabled: bool, incoming_map: dict | None = None
+) -> dict[str, Any]:
     if not enabled:
-        return {"enabled": False, "status": "skipped", "summary": {}, "breakingChanges": []}
+        return {
+            "enabled": False,
+            "status": "skipped",
+            "summary": {},
+            "breakingChanges": [],
+        }
     result = diff_project(project_root)
     if "error" in result:
-        return {"enabled": True, "status": "skipped", "summary": {}, "breakingChanges": [], "reason": result["error"]}
+        return {
+            "enabled": True,
+            "status": "skipped",
+            "summary": {},
+            "breakingChanges": [],
+            "reason": result["error"],
+        }
     # 如果提供了 incoming_map，二次调用带调用者分析的 compare
     if incoming_map is not None:
         from ..toolkit import load_cache
         from .. import compare_graph_snapshots
+
         cache = load_cache(project_root)
         if cache:
             current_symbols, current_edges = scan_project(project_root, max_files=5000)
             enriched = compare_graph_snapshots(
-                current_symbols=current_symbols, current_edges=current_edges,
-                previous_symbols=cache.symbols, previous_edges=cache.edges,
+                current_symbols=current_symbols,
+                current_edges=current_edges,
+                previous_symbols=cache.symbols,
+                previous_edges=cache.edges,
                 incoming_map=incoming_map,
             )
             breaking = [
-                ms for ms in enriched.get("modified_symbols", [])
+                ms
+                for ms in enriched.get("modified_symbols", [])
                 if ms.get("risk") in ("HIGH", "MEDIUM") and ms.get("signature_changed")
             ]
             result["breakingChanges"] = breaking[:20]
     if "breakingChanges" not in result:
         result["breakingChanges"] = []
     summary = result.get("summary", {})
-    changed = any(summary.get(key, 0) for key in ("added", "removed", "modified", "edges_added", "edges_removed"))
+    changed = any(
+        summary.get(key, 0)
+        for key in ("added", "removed", "modified", "edges_added", "edges_removed")
+    )
     result["status"] = "changed" if changed else "unchanged"
     return result
 
@@ -1785,8 +2212,19 @@ def run_verify(
         contract_risks = _detect_contract_risks(engine, changed_files)
 
         if quick:
-            check_payload = {"status": "skipped", "summary": {}, "runs": [], "reason": "verify --quick"}
-            lsp_payload = {"enabled": False, "status": "skipped", "runs": [], "summary": {}, "reason": "verify --quick"}
+            check_payload = {
+                "status": "skipped",
+                "summary": {},
+                "runs": [],
+                "reason": "verify --quick",
+            }
+            lsp_payload = {
+                "enabled": False,
+                "status": "skipped",
+                "runs": [],
+                "summary": {},
+                "reason": "verify --quick",
+            }
         else:
             check_payload = _run_check_payload(
                 project_root=project_root,
@@ -1798,10 +2236,13 @@ def run_verify(
                 lsp_timeout=lsp_timeout,
                 lsp_max_files=lsp_max_files,
             )
-            lsp_payload = _verify_lsp_payload(project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files)
+            lsp_payload = _verify_lsp_payload(
+                project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files
+            )
 
         graph_diff_payload = _verify_graph_diff_payload(
-            project_root, with_diff,
+            project_root,
+            with_diff,
             incoming_map=engine.graph.incoming if with_diff else None,
         )
         status = _overall_verify_status(
@@ -1832,8 +2273,12 @@ def run_verify(
                     for file_path, why, confidence in evidence["affectedList"]
                 ],
                 "tests": [
-                    {"testFile": test.test_file, "targetFile": test.target_file,
-                     "confidence": test.confidence, "reason": test.reason}
+                    {
+                        "testFile": test.test_file,
+                        "targetFile": test.target_file,
+                        "confidence": test.confidence,
+                        "reason": test.reason,
+                    }
                     for test in evidence["tests"]
                 ],
                 "untestedSymbols": untested,
@@ -1858,10 +2303,19 @@ def run_verify(
         if not changed_files:
             print("\n> No git changes detected.", file=sys.stderr)
             if quick:
-                print("> verify --quick mode only analyzes git changes; no changes found, risk assessment unavailable.", file=sys.stderr)
-                print("> Suggestion: make code changes first, then run `repomap verify` for full verification.", file=sys.stderr)
+                print(
+                    "> verify --quick mode only analyzes git changes; no changes found, risk assessment unavailable.",
+                    file=sys.stderr,
+                )
+                print(
+                    "> Suggestion: make code changes first, then run `repomap verify` for full verification.",
+                    file=sys.stderr,
+                )
             else:
-                print("> Suggestion: use `repomap overview` for project structure or `repomap check` for compilation checks.", file=sys.stderr)
+                print(
+                    "> Suggestion: use `repomap overview` for project structure or `repomap check` for compilation checks.",
+                    file=sys.stderr,
+                )
 
         return 1 if status == "failed" else 0
     except Exception as exc:
@@ -1891,7 +2345,9 @@ def run_refs(
                 calls_in.setdefault(edge.target, set()).add(source_id)
 
         if symbol:
-            selected, error, tier = _select_symbol_match(engine, symbol, file_path=file_path)
+            selected, error, tier = _select_symbol_match(
+                engine, symbol, file_path=file_path
+            )
             if error:
                 print(error, file=sys.stderr)
                 return 1
@@ -1901,38 +2357,62 @@ def run_refs(
             payload = {
                 "symbol": target.name,
                 "id": sid,
-                "called_by": [_format_symbol_ref(engine, item) for item in sorted(calls_in[sid])[:20]],
-                "calls": [_format_symbol_ref(engine, item) for item in sorted(calls_out[sid])[:20]],
+                "called_by": [
+                    _format_symbol_ref(engine, item)
+                    for item in sorted(calls_in[sid])[:20]
+                ],
+                "calls": [
+                    _format_symbol_ref(engine, item)
+                    for item in sorted(calls_out[sid])[:20]
+                ],
                 "ref_count": len(calls_in[sid]),
                 "is_entry": len(calls_in[sid]) == 0,
                 "is_leaf": len(calls_out[sid]) == 0,
             }
             if with_lsp:
-                payload["lsp"] = _collect_lsp_evidence_for_symbol(engine, target, lsp_timeout)
+                payload["lsp"] = _collect_lsp_evidence_for_symbol(
+                    engine, target, lsp_timeout
+                )
             if as_json:
                 print(json_dumps(payload, ensure_ascii=False, indent=2))
             else:
                 lines = [f"## Reference Analysis — `{target.name}`\n"]
                 lines.append(f"- Referenced by:  {payload['ref_count']}")
                 lines.append(f"- Calls: {len(payload['calls'])}")
-                lines.append(f"- Entry point:  {'Yes' if payload['is_entry'] else 'No'}")
-                lines.append(f"- Leaf function:  {'Yes' if payload['is_leaf'] else 'No'}\n")
+                lines.append(
+                    f"- Entry point:  {'Yes' if payload['is_entry'] else 'No'}"
+                )
+                lines.append(
+                    f"- Leaf function:  {'Yes' if payload['is_leaf'] else 'No'}\n"
+                )
                 if payload["called_by"]:
                     lines.append("**Called by** (Top 10):")
                     for row in payload["called_by"][:10]:
-                        lines.append(f"  - `{row['name']}` ({row['file']}:{row['line']})")
+                        lines.append(
+                            f"  - `{row['name']}` ({row['file']}:{row['line']})"
+                        )
                 if payload["calls"]:
                     lines.append("\n**Calls** (Top 10):")
                     for row in payload["calls"][:10]:
-                        lines.append(f"  - `{row['name']}` ({row['file']}:{row['line']})")
+                        lines.append(
+                            f"  - `{row['name']}` ({row['file']}:{row['line']})"
+                        )
                 if with_lsp:
                     lines.extend(_format_lsp_evidence(payload["lsp"]))
                 print("\n".join(lines))
             return 0
 
         entries = [sid for sid in symbol_ids if len(calls_in[sid]) == 0]
-        orphans = [sid for sid in symbol_ids if len(calls_in[sid]) == 0 and len(calls_out[sid]) == 0]
-        ref_counts = sorted(((sid, len(calls_in[sid])) for sid in symbol_ids), key=lambda item: item[1], reverse=True)
+        orphans = [
+            sid
+            for sid in symbol_ids
+            if len(calls_in[sid]) == 0 and len(calls_out[sid]) == 0
+        ]
+        ref_counts = sorted(
+            ((sid, len(calls_in[sid])) for sid in symbol_ids),
+            key=lambda item: item[1],
+            reverse=True,
+        )
         payload = {
             "total_symbols": len(symbol_ids),
             "entry_points": [_format_symbol_ref(engine, sid) for sid in entries],
@@ -1951,7 +2431,9 @@ def run_refs(
         lines.append(f"- Orphaned symbols:  {len(payload['orphaned_symbols'])}\n")
         lines.append("**Most referenced** (Top 10):")
         for row in payload["most_referenced"][:10]:
-            lines.append(f"  - `{row['name']}`: {row['ref_count']}  references ({row['file']})")
+            lines.append(
+                f"  - `{row['name']}`: {row['ref_count']}  references ({row['file']})"
+            )
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -1961,15 +2443,22 @@ def run_refs(
 
 # Kinds that are always structural noise, never dead code.
 _ORPHAN_EXCLUDED_KINDS: set[str] = {
-    "element",        # HTML tags in JSX/HTML files
-    "json_key",       # JSON object keys in config files
-    "module",         # mod declarations, import wrappers
-    "handler",        # web route handlers (framework-dispatched)
+    "element",  # HTML tags in JSX/HTML files
+    "json_key",  # JSON object keys in config files
+    "module",  # mod declarations, import wrappers
+    "handler",  # web route handlers (framework-dispatched)
 }
 
 # File extensions that are pure config — skip orphan detection entirely.
 _ORPHAN_EXCLUDED_EXTENSIONS: set[str] = {
-    ".json", ".toml", ".yaml", ".yml", ".html", ".css", ".scss", ".less",
+    ".json",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".html",
+    ".css",
+    ".scss",
+    ".less",
 }
 
 # Test-related path markers.
@@ -2009,7 +2498,9 @@ def _orphan_confidence(symbol: Symbol, orphan_names: set[str]) -> int:
 
     # Name-based signals for test helpers
     name_lower = symbol.name.lower()
-    if any(name_lower.startswith(prefix) for prefix in ("test_", "it_", "should_", "test")):
+    if any(
+        name_lower.startswith(prefix) for prefix in ("test_", "it_", "should_", "test")
+    ):
         score -= 30
 
     # Visibility signal: private symbols are more likely truly dead
@@ -2049,7 +2540,13 @@ def _orphan_note(symbol: Symbol) -> str:
     return "; ".join(reasons)
 
 
-def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int = 20, min_confidence: int = 0) -> int:
+def run_orphan(
+    project: str,
+    max_files: int,
+    as_json: bool = False,
+    limit: int = 20,
+    min_confidence: int = 0,
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         symbol_ids = set(engine.graph.symbols.keys())
@@ -2074,7 +2571,10 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
                 if symbol.kind in _ORPHAN_EXCLUDED_KINDS:
                     filtered_structural_count += 1
                     continue
-                if any(symbol.file.lower().endswith(ext) for ext in _ORPHAN_EXCLUDED_EXTENSIONS):
+                if any(
+                    symbol.file.lower().endswith(ext)
+                    for ext in _ORPHAN_EXCLUDED_EXTENSIONS
+                ):
                     filtered_structural_count += 1
                     continue
                 candidates.append(symbol)
@@ -2086,13 +2586,22 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
         scored: list[dict] = []
         for symbol in candidates:
             conf = _orphan_confidence(symbol, orphan_names)
-            scored.append({
-                "symbol": symbol,
-                "confidence": conf,
-                "note": _orphan_note(symbol),
-            })
+            scored.append(
+                {
+                    "symbol": symbol,
+                    "confidence": conf,
+                    "note": _orphan_note(symbol),
+                }
+            )
 
-        scored.sort(key=lambda x: (-x["confidence"], x["symbol"].file, x["symbol"].line, x["symbol"].name))
+        scored.sort(
+            key=lambda x: (
+                -x["confidence"],
+                x["symbol"].file,
+                x["symbol"].line,
+                x["symbol"].name,
+            )
+        )
 
         # Filter by min_confidence
         if min_confidence > 0:
@@ -2104,6 +2613,7 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
         low = [s for s in scored if s["confidence"] < 40]
 
         if as_json:
+
             def _to_dict(item):
                 sym = item["symbol"]
                 return {
@@ -2129,9 +2639,13 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
 
         # Text output
         lines = ["## Dead Code Analysis\n"]
-        lines.append(f"Total {len(candidates)} candidates ({filtered_structural_count} structural elements filtered)")
+        lines.append(
+            f"Total {len(candidates)} candidates ({filtered_structural_count} structural elements filtered)"
+        )
         if min_confidence > 0:
-            lines.append(f"Confidence threshold: {min_confidence} (low-confidence items filtered)")
+            lines.append(
+                f"Confidence threshold: {min_confidence} (low-confidence items filtered)"
+            )
         lines.append("")
 
         _module_for_file = GraphAnalyzer._module_bucket_for_file
@@ -2147,13 +2661,19 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
                 by_module.setdefault(mod, []).append(item)
             tier_lines.append("")
             for mod in sorted(by_module, key=lambda m: -len(by_module[m])):
-                mod_items = by_module[mod][:max(3, max_items // max(len(by_module), 1))]
+                mod_items = by_module[mod][
+                    : max(3, max_items // max(len(by_module), 1))
+                ]
                 tier_lines.append(f"**`{mod}/`** ({len(by_module[mod])})")
                 for item in mod_items:
                     sym = item["symbol"]
-                    tier_lines.append(f"- `{sym.name}` ({sym.kind}) `{sym.file}:{sym.line}` — {item['confidence']}% | {item['note']}")
+                    tier_lines.append(
+                        f"- `{sym.name}` ({sym.kind}) `{sym.file}:{sym.line}` — {item['confidence']}% | {item['note']}"
+                    )
                 if len(by_module[mod]) > len(mod_items):
-                    tier_lines.append(f"  ... {len(by_module[mod]) - len(mod_items)} more")
+                    tier_lines.append(
+                        f"  ... {len(by_module[mod]) - len(mod_items)} more"
+                    )
             tier_lines.append("")
             return tier_lines
 
@@ -2164,22 +2684,40 @@ def run_orphan(project: str, max_files: int, as_json: bool = False, limit: int =
         # 如果过滤后无结果，给出建议
         if not high and not medium and not low:
             if min_confidence > 0:
-                lines.append(f"\n> Using `--min-confidence {min_confidence}` filter returned no results.")
-                lines.append(f"> Try a lower threshold, e.g.: `--min-confidence {max(0, min_confidence - 20)}`")
+                lines.append(
+                    f"\n> Using `--min-confidence {min_confidence}` filter returned no results."
+                )
+                lines.append(
+                    f"> Try a lower threshold, e.g.: `--min-confidence {max(0, min_confidence - 20)}`"
+                )
             else:
                 lines.append("\n> No dead code candidates found.")
-                lines.append("> This may indicate good code quality, or analysis parameters need adjustment.")
+                lines.append(
+                    "> This may indicate good code quality, or analysis parameters need adjustment."
+                )
         else:
             if low:
-                lines.append("> Using `--min-confidence 40` filter low-confidence items.")
-            lines.append("> Do not delete solely based on this output. Verify with `refs` and business review. Use `--json` for structured output.")
+                lines.append(
+                    "> Using `--min-confidence 40` filter low-confidence items."
+                )
+            lines.append(
+                "> Do not delete solely based on this output. Verify with `refs` and business review. Use `--json` for structured output."
+            )
             lines.append("")
             lines.append("## Pre-deletion checklist\n")
-            lines.append("1. Verify each candidate with `refs --project <project> --symbol <name>` or `query-symbol` before deletion.")
-            lines.append("2. Check for dynamic references: string-based calls, reflection, macro expansions, test fixtures, config-driven dispatch.")
-            lines.append("3. Check project-specific rules about code ownership, generated code, or feature flags.")
+            lines.append(
+                "1. Verify each candidate with `refs --project <project> --symbol <name>` or `query-symbol` before deletion."
+            )
+            lines.append(
+                "2. Check for dynamic references: string-based calls, reflection, macro expansions, test fixtures, config-driven dispatch."
+            )
+            lines.append(
+                "3. Check project-specific rules about code ownership, generated code, or feature flags."
+            )
             lines.append("4. Run the full test suite after deletion.")
-            lines.append("5. Never delete solely from `orphan` output; treat it as a starting point for investigation.")
+            lines.append(
+                "5. Never delete solely from `orphan` output; treat it as a starting point for investigation."
+            )
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -2223,11 +2761,17 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
             lines.append("\n| Language | Server | Status | Source | Workspace |")
             lines.append("|---|---|---|---|---|")
             for item in detections:
-                status = "available" if item.status == "available" else f"missing ({item.reason or 'not found'})"
+                status = (
+                    "available"
+                    if item.status == "available"
+                    else f"missing ({item.reason or 'not found'})"
+                )
                 lines.append(
                     f"| {item.language} | {item.server_name or '-'} | {status} | {item.source or '-'} | `{item.workspace_root or project_root}` |"
                 )
-        lines.append("\n> repomap checks project-local executables, PATH, and trusted user tool bins such as npm/pnpm/yarn/bun/pipx/uv/mason/cargo/go directories; it does not install or bundle servers.")
+        lines.append(
+            "\n> repomap checks project-local executables, PATH, and trusted user tool bins such as npm/pnpm/yarn/bun/pipx/uv/mason/cargo/go directories; it does not install or bundle servers."
+        )
         print("\n".join(lines))
         return 0
     except Exception as exc:
@@ -2261,7 +2805,9 @@ def run_lsp_setup(project: str, languages: list[str] | None, dry_run: bool) -> i
             print("\nAll LSP servers are already available.")
             return 0
 
-        print(f"\n{'Would install' if dry_run else 'Installing'} {len(missing)} server(s):")
+        print(
+            f"\n{'Would install' if dry_run else 'Installing'} {len(missing)} server(s):"
+        )
         print()
         for d in missing:
             strategy = LSP_INSTALL_STRATEGIES.get(d.language, {})
@@ -2301,9 +2847,14 @@ def run_check(
         normalized_modified_files = None
         if modified_files:
             try:
-                normalized_modified_files = _normalize_project_relative_paths(project_root, modified_files, must_exist=False)
+                normalized_modified_files = _normalize_project_relative_paths(
+                    project_root, modified_files, must_exist=False
+                )
             except ValueError as exc:
-                print(f"[{CLI_NAME}] check failed: unsafe modified file: {exc}", file=sys.stderr)
+                print(
+                    f"[{CLI_NAME}] check failed: unsafe modified file: {exc}",
+                    file=sys.stderr,
+                )
                 return 1
         symbols_map = None
         if resolve_symbols:
@@ -2334,7 +2885,9 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     status_label = {
         "passed": "✅ Passed",
         "warning": "⚠️ Warnings",
-        "unknown": "ℹ️ No diagnostic tools ran" if result.get("message") else "ℹ️ No supported types detected",
+        "unknown": "ℹ️ No diagnostic tools ran"
+        if result.get("message")
+        else "ℹ️ No supported types detected",
     }.get(result["status"], "❌ Errors")
     lines.append(f"**Status**: {status_label}")
     if result.get("message"):
@@ -2347,18 +2900,30 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
     lines.append(f"- Total errors: **{summary.get('total_errors', 0)}** 🔴")
     lines.append(f"- Total warnings: **{summary.get('total_warnings', 0)}** ⚠️")
     lines.append(f"- Files with issues: {summary.get('files_with_errors', 0)}")
-    lines.append(f"- Tools run: {summary.get('tools_run', 0)} |  Skipped: {summary.get('tools_skipped', 0)}")
+    lines.append(
+        f"- Tools run: {summary.get('tools_run', 0)} |  Skipped: {summary.get('tools_skipped', 0)}"
+    )
     if summary.get("tool_failures", 0):
         lines.append(f"- Tool failures: **{summary.get('tool_failures', 0)}**")
     if summary.get("tools_run", 0) == 0 and summary.get("tools_skipped", 0) > 0:
-        lines.append("\n⚠️ No diagnostic tool was available; status is unknown, not passed.")
+        lines.append(
+            "\n⚠️ No diagnostic tool was available; status is unknown, not passed."
+        )
     lines.append("")
 
     runs = result.get("runs", [])
     if runs:
         lines.append("### Tool Execution Details\n")
         for run in runs:
-            status = "⏭️ Skipped" if run.get("skipped") else ("✅ Passed" if run["exit_code"] == 0 and run["error_count"] == 0 else "❌ Failed")
+            status = (
+                "⏭️ Skipped"
+                if run.get("skipped")
+                else (
+                    "✅ Passed"
+                    if run["exit_code"] == 0 and run["error_count"] == 0
+                    else "❌ Failed"
+                )
+            )
             lines.append(f"**{run['tool']}** {status} ({run['duration_ms']}ms)")
             if run.get("skipped"):
                 lines.append(f"  - Reason: {run.get('skip_reason', 'unknown')}")
@@ -2376,7 +2941,9 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
                 if run["warning_count"] > 0:
                     lines.append(f"  - Warnings: {run['warning_count']}")
                 if run.get("truncated"):
-                    lines.append(f"  - ⚠️ Output truncated; showing first {max_issues} items")
+                    lines.append(
+                        f"  - ⚠️ Output truncated; showing first {max_issues} items"
+                    )
             lines.append("")
 
     errors_by_file = result.get("errors_by_file", {})
@@ -2395,10 +2962,20 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
                 counts.append(f"{info_count} infos")
             lines.append(f"**{file_path}**: {', '.join(counts)}")
             for issue in issues[:3]:
-                icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(issue["severity"], "❌")
-                confidence_icon = {"exact": "🎯", "line": "📍", "none": ""}.get(issue.get("symbol_confidence", "none"), "")
-                symbol_info = f" {confidence_icon}`{issue['symbol']}`" if issue.get("symbol") else ""
-                lines.append(f"  {icon} line{issue['line']}{symbol_info}: [{issue['code']}] {issue['message'][:50]}")
+                icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(
+                    issue["severity"], "❌"
+                )
+                confidence_icon = {"exact": "🎯", "line": "📍", "none": ""}.get(
+                    issue.get("symbol_confidence", "none"), ""
+                )
+                symbol_info = (
+                    f" {confidence_icon}`{issue['symbol']}`"
+                    if issue.get("symbol")
+                    else ""
+                )
+                lines.append(
+                    f"  {icon} line{issue['line']}{symbol_info}: [{issue['code']}] {issue['message'][:50]}"
+                )
             lines.append("")
 
     return "\n".join(lines)
@@ -2439,6 +3016,7 @@ def run_doctor(project: str, show_lsp: bool = False) -> int:
     if show_lsp:
         from ..lsp import detect_lsp_servers
         from ..lsp import LSP_INSTALL_STRATEGIES
+
         detections = detect_lsp_servers(project_root)
         available = [d for d in detections if d.status == "available"]
         missing = [d for d in detections if d.status != "available"]
@@ -2449,7 +3027,9 @@ def run_doctor(project: str, show_lsp: bool = False) -> int:
             print(f"\nMissing ({len(missing)}):")
             for d in missing:
                 strategy = LSP_INSTALL_STRATEGIES.get(d.language, {})
-                print(f"  {d.language}: {d.server_name} — install: {strategy.get('cmd', 'manual')}")
+                print(
+                    f"  {d.language}: {d.server_name} — install: {strategy.get('cmd', 'manual')}"
+                )
         else:
             print("\nAll LSP servers available.")
         print("\nTip: run `repomap lsp setup --dry-run` to preview auto-install.")
@@ -2458,7 +3038,9 @@ def run_doctor(project: str, show_lsp: bool = False) -> int:
     if pyinstaller_spec is not None:
         print("PyInstaller: available")
     else:
-        print("PyInstaller: not installed in current runtime, only required for build-binary")
+        print(
+            "PyInstaller: not installed in current runtime, only required for build-binary"
+        )
     return 0
 
 
@@ -2488,7 +3070,9 @@ def _pyinstaller_command(output_dir: Path, name: str) -> list[str]:
     return command
 
 
-def run_state_map(project: str, max_files: int, symbol: str | None, query: str | None, as_json: bool) -> int:
+def run_state_map(
+    project: str, max_files: int, symbol: str | None, query: str | None, as_json: bool
+) -> int:
     from ..state_map import find_state_definitions
 
     if not symbol and not query:
@@ -2511,9 +3095,18 @@ def run_state_map(project: str, max_files: int, symbol: str | None, query: str |
                         "file": d.file,
                         "line": d.line,
                         "kind": d.kind,
-                        "values": [{"name": v.name, "file": v.file, "line": v.line} for v in d.values],
-                        "writers": [{"name": w.name, "file": w.file, "line": w.line} for w in d.writers],
-                        "readers": [{"name": r.name, "file": r.file, "line": r.line} for r in d.readers],
+                        "values": [
+                            {"name": v.name, "file": v.file, "line": v.line}
+                            for v in d.values
+                        ],
+                        "writers": [
+                            {"name": w.name, "file": w.file, "line": w.line}
+                            for w in d.writers
+                        ],
+                        "readers": [
+                            {"name": r.name, "file": r.file, "line": r.line}
+                            for r in d.readers
+                        ],
                     }
                     for d in defs
                 ],
@@ -2541,10 +3134,14 @@ def run_state_map(project: str, max_files: int, symbol: str | None, query: str |
                 for r in d.readers[:10]:
                     lines.append(f"- `{r.file}:{r.line}` — {r.name}")
                 lines.append("")
-            lines.append("**Risk hint**: Adding or removing a state value requires checking all writers, readers, and tests.\n")
+            lines.append(
+                "**Risk hint**: Adding or removing a state value requires checking all writers, readers, and tests.\n"
+            )
 
         if not defs:
-            print(f"> No state definitions found for symbol={symbol or 'N/A'} query={query or 'N/A'}.")
+            print(
+                f"> No state definitions found for symbol={symbol or 'N/A'} query={query or 'N/A'}."
+            )
         else:
             print("\n".join(lines))
         return 0
@@ -2556,9 +3153,14 @@ def run_state_map(project: str, max_files: int, symbol: str | None, query: str |
 def run_build_binary(output: str, name: str) -> int:
     output_dir = Path(output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(_pyinstaller_command(output_dir, name), cwd=str(PROJECT_ROOT), check=False)
+    result = subprocess.run(
+        _pyinstaller_command(output_dir, name), cwd=str(PROJECT_ROOT), check=False
+    )
     if result.returncode != 0:
-        print(f"[{CLI_NAME}] build failed with exit code {result.returncode}", file=sys.stderr)
+        print(
+            f"[{CLI_NAME}] build failed with exit code {result.returncode}",
+            file=sys.stderr,
+        )
         return result.returncode or 1
     print(f"binary ready: {output_dir / name}")
     return 0
@@ -2573,12 +3175,15 @@ def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
             return EXIT_NO_RESULTS
 
         from ..search import _HAS_BM25
+
         backend = "BM25" if _HAS_BM25 else "keyword"
         lines = [f"Found {len(results)} symbols (backend: {backend})\n"]
         lines.append(f"## Search results for `{query}`\n")
         for sym, score in results:
             pr = sym.pagerank * 1000
-            lines.append(f"- **{sym.name}** ({sym.kind}) `{sym.file}:{sym.line}` score={score:.2f} PR={pr:.1f}")
+            lines.append(
+                f"- **{sym.name}** ({sym.kind}) `{sym.file}:{sym.line}` score={score:.2f} PR={pr:.1f}"
+            )
             if sym.return_type:
                 lines.append(f"  - returns: `{sym.return_type}`")
             if sym.signature:

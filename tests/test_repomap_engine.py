@@ -15,16 +15,38 @@ def write_file(root: str, relative_path: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-@unittest.skipIf(sys.platform == 'win32', "engine path normalization differs on Windows")
+@unittest.skipIf(
+    sys.platform == "win32", "engine path normalization differs on Windows"
+)
 class RepoMapEngineTests(unittest.TestCase):
     def test_git_changed_files_uses_project_root_as_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def app():\n    return 1\n")
-            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, check=True)
-            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, check=True)
+            subprocess.run(
+                ["git", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "repomap@example.com"],
+                cwd=project_root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "RepoMap Test"],
+                cwd=project_root,
+                check=True,
+            )
             subprocess.run(["git", "add", "main.py"], cwd=project_root, check=True)
-            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             write_file(project_root, "main.py", "def app():\n    return 2\n")
 
             with tempfile.TemporaryDirectory() as outside_cwd:
@@ -41,27 +63,62 @@ class RepoMapEngineTests(unittest.TestCase):
     def test_incremental_scan_rescans_clean_file_with_stale_mtime(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def app():\n    return 1\n")
-            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.email", "repomap@example.com"], cwd=project_root, check=True)
-            subprocess.run(["git", "config", "user.name", "RepoMap Test"], cwd=project_root, check=True)
+            subprocess.run(
+                ["git", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "repomap@example.com"],
+                cwd=project_root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "RepoMap Test"],
+                cwd=project_root,
+                check=True,
+            )
             subprocess.run(["git", "add", "main.py"], cwd=project_root, check=True)
-            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
             full = RepoMapEngine(project_root)
             full.scan(max_files=10, incremental=False)
             original_mtime = Path(project_root, "main.py").stat().st_mtime
-            os.utime(Path(project_root, "main.py"), (original_mtime + 5, original_mtime + 5))
+            os.utime(
+                Path(project_root, "main.py"), (original_mtime + 5, original_mtime + 5)
+            )
 
             incremental = RepoMapEngine(project_root)
             incremental.scan(max_files=10, incremental=True)
 
             self.assertIn("main.py", incremental.graph.file_symbols)
-            self.assertTrue(any(symbol.name == "app" for symbol in incremental.graph.symbols.values()))
+            self.assertTrue(
+                any(
+                    symbol.name == "app"
+                    for symbol in incremental.graph.symbols.values()
+                )
+            )
 
     def test_tsx_test_file_is_marked_as_test_file_in_analysis(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "src/App.tsx", "export function App() {\n  return <div />;\n}\n")
-            write_file(project_root, "src/App.test.tsx", "export function renders() {\n  return <div />;\n}\n")
+            write_file(
+                project_root,
+                "src/App.tsx",
+                "export function App() {\n  return <div />;\n}\n",
+            )
+            write_file(
+                project_root,
+                "src/App.test.tsx",
+                "export function renders() {\n  return <div />;\n}\n",
+            )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
@@ -73,9 +130,21 @@ class RepoMapEngineTests(unittest.TestCase):
     def test_package_exports_scan_skips_dependency_directories(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "package.json", "{}\n")
-            write_file(project_root, "node_modules/pkg/package.json", '{"exports":"./index.js"}\n')
-            write_file(project_root, "packages/pkg/package.json", '{"exports":"./src/index.js"}\n')
-            write_file(project_root, "packages/pkg/src/index.js", "export function helper() { return 1; }\n")
+            write_file(
+                project_root,
+                "node_modules/pkg/package.json",
+                '{"exports":"./index.js"}\n',
+            )
+            write_file(
+                project_root,
+                "packages/pkg/package.json",
+                '{"exports":"./src/index.js"}\n',
+            )
+            write_file(
+                project_root,
+                "packages/pkg/src/index.js",
+                "export function helper() { return 1; }\n",
+            )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
@@ -91,7 +160,9 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(project_root, "small.py", "def keep_me():\n    return 1\n")
             write_file(project_root, "large.js", "function giant() {}\n" * 5000)
 
-            with patch.dict(os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False):
+            with patch.dict(
+                os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False
+            ):
                 engine = RepoMapEngine(project_root)
                 engine.scan()
 
@@ -118,7 +189,11 @@ class RepoMapEngineTests(unittest.TestCase):
 
     def test_lockfiles_are_skipped_from_symbol_scan(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "package-lock.json", '{ "name": "demo", "packages": {} }\n')
+            write_file(
+                project_root,
+                "package-lock.json",
+                '{ "name": "demo", "packages": {} }\n',
+            )
             write_file(project_root, "main.py", "def app():\n    return 1\n")
 
             engine = RepoMapEngine(project_root)
@@ -145,15 +220,24 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("shared_helper") if symbol.file == "lib.py")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("shared_helper")
+                if symbol.file == "lib.py"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
             self.assertNotIn("only_imports", callers)
 
     def test_call_chain_ignores_low_signal_non_callable_targets(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "package.json", '{ "name": "demo", "test": "vitest" }\n')
+            write_file(
+                project_root, "package.json", '{ "name": "demo", "test": "vitest" }\n'
+            )
             write_file(
                 project_root,
                 "main.ts",
@@ -166,7 +250,11 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            wrapper = next(symbol for symbol in engine.query_symbol("wrapper") if symbol.file == "main.ts")
+            wrapper = next(
+                symbol
+                for symbol in engine.query_symbol("wrapper")
+                if symbol.file == "main.ts"
+            )
             callees = engine.call_chain(wrapper.id, "callees", 2)["callees"]
 
             self.assertEqual(callees, [])
@@ -187,12 +275,21 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "main.py")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "main.py"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertNotIn("unrelated", callers)
 
-    def test_member_calls_do_not_fall_back_to_unrelated_global_unique_symbol(self) -> None:
+    def test_member_calls_do_not_fall_back_to_unrelated_global_unique_symbol(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root,
@@ -206,19 +303,22 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(
                 project_root,
                 "tests/mock.ts",
-                (
-                    "export function onData(): void {\n"
-                    "}\n"
-                ),
+                ("export function onData(): void {\n}\n"),
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            create = next(symbol for symbol in engine.query_symbol("create") if symbol.file == "main.ts")
-            callees = {(symbol.name, symbol.file) for symbol in engine.call_chain(create.id, "callees", 2)["callees"]}
+            create = next(
+                symbol
+                for symbol in engine.query_symbol("create")
+                if symbol.file == "main.ts"
+            )
+            callees = {
+                (symbol.name, symbol.file)
+                for symbol in engine.call_chain(create.id, "callees", 2)["callees"]
+            }
 
             self.assertNotIn(("onData", "tests/mock.ts"), callees)
-
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "small.py", "def keep_me():\n    return 1\n")
@@ -229,7 +329,9 @@ class RepoMapEngineTests(unittest.TestCase):
                 "def vendored():\n    return 1\n",
             )
 
-            with patch.dict(os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False):
+            with patch.dict(
+                os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False
+            ):
                 engine = RepoMapEngine(project_root)
                 engine.scan()
 
@@ -239,7 +341,11 @@ class RepoMapEngineTests(unittest.TestCase):
 
     def test_cache_save_then_immediate_diff_is_stable(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "helper.ts", "export function helper(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "helper.ts",
+                "export function helper(): number {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "main.ts",
@@ -257,8 +363,16 @@ class RepoMapEngineTests(unittest.TestCase):
             save_cache(project_root, symbols, edges)
             diff = diff_project(project_root)
 
-            self.assertEqual(diff["summary"], {"added": 0, "removed": 0, "modified": 0, "edges_added": 0, "edges_removed": 0})
-
+            self.assertEqual(
+                diff["summary"],
+                {
+                    "added": 0,
+                    "removed": 0,
+                    "modified": 0,
+                    "edges_added": 0,
+                    "edges_removed": 0,
+                },
+            )
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
@@ -279,10 +393,23 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "helper.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "helper.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
-            self.assertTrue(any("<anonymous@" in c or "_callback@" in c or "_handler@" in c for c in callers), f"Expected a callback-type caller in {callers}")
+            self.assertTrue(
+                any(
+                    "<anonymous@" in c or "_callback@" in c or "_handler@" in c
+                    for c in callers
+                ),
+                f"Expected a callback-type caller in {callers}",
+            )
 
     def test_two_hop_typescript_barrel_reexport_resolves_call_target(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -314,8 +441,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "lib/internal/helper.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "lib/internal/helper.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
@@ -327,10 +461,10 @@ class RepoMapEngineTests(unittest.TestCase):
                 (
                     "{\n"
                     "  // comment should be ignored\n"
-                    "  \"compilerOptions\": {\n"
-                    "    \"baseUrl\": \".\",\n"
-                    "    \"paths\": {\n"
-                    "      \"@/*\": [\"src/*\"]\n"
+                    '  "compilerOptions": {\n'
+                    '    "baseUrl": ".",\n'
+                    '    "paths": {\n'
+                    '      "@/*": ["src/*"]\n'
                     "    }\n"
                     "  }\n"
                     "}\n"
@@ -354,8 +488,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/lib/helper.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "src/lib/helper.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
@@ -366,25 +507,29 @@ class RepoMapEngineTests(unittest.TestCase):
                 "tsconfig.json",
                 (
                     "{\n"
-                    "  \"compilerOptions\": {\n"
-                    "    \"baseUrl\": \".\",\n"
-                    "    \"paths\": {\n"
-                    "      \"@/*\": [\"src/*\"]\n"
+                    '  "compilerOptions": {\n'
+                    '    "baseUrl": ".",\n'
+                    '    "paths": {\n'
+                    '      "@/*": ["src/*"]\n'
                     "    }\n"
                     "  }\n"
                     "}\n"
                 ),
             )
-            write_file(project_root, "src/helper.ts", "export function helper(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/helper.ts",
+                "export function helper(): number {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "packages/app/tsconfig.json",
                 (
                     "{\n"
-                    "  \"compilerOptions\": {\n"
-                    "    \"baseUrl\": \".\",\n"
-                    "    \"paths\": {\n"
-                    "      \"@/*\": [\"app-src/*\"]\n"
+                    '  "compilerOptions": {\n'
+                    '    "baseUrl": ".",\n'
+                    '    "paths": {\n'
+                    '      "@/*": ["app-src/*"]\n'
                     "    }\n"
                     "  }\n"
                     "}\n"
@@ -416,11 +561,20 @@ class RepoMapEngineTests(unittest.TestCase):
             )
             package_callers = {
                 symbol.name
-                for symbol in engine.call_chain(package_helper.id, "callers", 2)["callers"]
+                for symbol in engine.call_chain(package_helper.id, "callers", 2)[
+                    "callers"
+                ]
             }
 
-            root_helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/helper.ts")
-            root_callers = {symbol.name for symbol in engine.call_chain(root_helper.id, "callers", 2)["callers"]}
+            root_helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "src/helper.ts"
+            )
+            root_callers = {
+                symbol.name
+                for symbol in engine.call_chain(root_helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", package_callers)
             self.assertNotIn("caller", root_callers)
@@ -432,16 +586,20 @@ class RepoMapEngineTests(unittest.TestCase):
                 "tsconfig.json",
                 (
                     "{\n"
-                    "  \"compilerOptions\": {\n"
-                    "    \"baseUrl\": \"src\",\n"
-                    "    \"paths\": {\n"
-                    "      \"@/*\": [\"*\"]\n"
+                    '  "compilerOptions": {\n'
+                    '    "baseUrl": "src",\n'
+                    '    "paths": {\n'
+                    '      "@/*": ["*"]\n'
                     "    }\n"
                     "  }\n"
                     "}\n"
                 ),
             )
-            write_file(project_root, "src/utils/foo.ts", "export function foo(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "src/utils/foo.ts",
+                "export function foo(): number {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "src/main.ts",
@@ -455,14 +613,23 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "src/utils/foo.ts")
-            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+            foo = next(
+                symbol
+                for symbol in engine.query_symbol("foo")
+                if symbol.file == "src/utils/foo.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("run", callers)
 
     def test_explicit_extension_import_resolves_target_file(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "foo.js", "export function foo() {\n  return 1;\n}\n")
+            write_file(
+                project_root, "foo.js", "export function foo() {\n  return 1;\n}\n"
+            )
             write_file(
                 project_root,
                 "main.ts",
@@ -476,14 +643,25 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "foo.js")
-            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+            foo = next(
+                symbol
+                for symbol in engine.query_symbol("foo")
+                if symbol.file == "foo.js"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("run", callers)
 
     def test_node16_js_runtime_import_resolves_typescript_source(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "foo.ts", "export function foo(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "foo.ts",
+                "export function foo(): number {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "main.ts",
@@ -497,8 +675,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            foo = next(symbol for symbol in engine.query_symbol("foo") if symbol.file == "foo.ts")
-            callers = {symbol.name for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]}
+            foo = next(
+                symbol
+                for symbol in engine.query_symbol("foo")
+                if symbol.file == "foo.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(foo.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("run", callers)
 
@@ -508,23 +693,32 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "from pkg.sub import helper\n\n"
-                    "def run():\n"
-                    "    return helper()\n"
-                ),
+                ("from pkg.sub import helper\n\ndef run():\n    return helper()\n"),
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "pkg/sub.py")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "pkg/sub.py"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("run", callers)
 
-    def test_relative_import_above_project_root_does_not_remap_inside_project(self) -> None:
+    def test_relative_import_above_project_root_does_not_remap_inside_project(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "outside.ts", "export function outside(): number {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "outside.ts",
+                "export function outside(): number {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "src/main.ts",
@@ -538,8 +732,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            outside = next(symbol for symbol in engine.query_symbol("outside") if symbol.file == "outside.ts")
-            callers = {symbol.name for symbol in engine.call_chain(outside.id, "callers", 2)["callers"]}
+            outside = next(
+                symbol
+                for symbol in engine.query_symbol("outside")
+                if symbol.file == "outside.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(outside.id, "callers", 2)["callers"]
+            }
 
             self.assertNotIn("run", callers)
 
@@ -549,16 +750,20 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "def run(client):\n"
-                    "    return client.send()\n"
-                ),
+                ("def run(client):\n    return client.send()\n"),
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            send = next(symbol for symbol in engine.query_symbol("send") if symbol.file == "helper.py")
-            callers = {symbol.name for symbol in engine.call_chain(send.id, "callers", 2)["callers"]}
+            send = next(
+                symbol
+                for symbol in engine.query_symbol("send")
+                if symbol.file == "helper.py"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(send.id, "callers", 2)["callers"]
+            }
 
             self.assertNotIn("run", callers)
 
@@ -578,12 +783,21 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "main.py")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "main.py"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("run", callers)
 
-    def test_typescript_member_call_does_not_fall_back_to_same_file_function(self) -> None:
+    def test_typescript_member_call_does_not_fall_back_to_same_file_function(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root,
@@ -599,8 +813,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            save = next(symbol for symbol in engine.query_symbol("save") if symbol.file == "main.ts")
-            callers = {symbol.name for symbol in engine.call_chain(save.id, "callers", 2)["callers"]}
+            save = next(
+                symbol
+                for symbol in engine.query_symbol("save")
+                if symbol.file == "main.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(save.id, "callers", 2)["callers"]
+            }
 
             self.assertNotIn("run", callers)
 
@@ -629,8 +850,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "lib.js")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "lib.js"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
@@ -645,14 +873,26 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            default_symbol = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.ts" and ("<anonymous@" in symbol.name or "<default_export" in symbol.name))
-            incoming = {(edge.source, edge.kind) for edge in engine.graph.incoming[default_symbol.id]}
+            default_symbol = next(
+                symbol
+                for symbol in engine.graph.symbols.values()
+                if symbol.file == "lib.ts"
+                and ("<anonymous@" in symbol.name or "<default_export" in symbol.name)
+            )
+            incoming = {
+                (edge.source, edge.kind)
+                for edge in engine.graph.incoming[default_symbol.id]
+            }
 
             self.assertIn(("main.ts::caller::3", "import"), incoming)
 
     def test_commonjs_function_export_resolves_require_default(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "lib.js", "module.exports = function run() {\n  return 1;\n};\n")
+            write_file(
+                project_root,
+                "lib.js",
+                "module.exports = function run() {\n  return 1;\n};\n",
+            )
             write_file(
                 project_root,
                 "main.js",
@@ -661,14 +901,27 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            default_symbol = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.js" and symbol.name == "run")
-            callers = {symbol.name for symbol in engine.call_chain(default_symbol.id, "callers", 2)["callers"]}
+            default_symbol = next(
+                symbol
+                for symbol in engine.graph.symbols.values()
+                if symbol.file == "lib.js" and symbol.name == "run"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(default_symbol.id, "callers", 2)[
+                    "callers"
+                ]
+            }
 
             self.assertIn("caller", callers)
 
     def test_commonjs_named_function_export_resolves_destructured_require(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "lib.js", "exports.helper = function helper() {\n  return 1;\n};\n")
+            write_file(
+                project_root,
+                "lib.js",
+                "exports.helper = function helper() {\n  return 1;\n};\n",
+            )
             write_file(
                 project_root,
                 "main.js",
@@ -677,15 +930,30 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.graph.symbols.values() if symbol.file == "lib.js" and symbol.name == "helper")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.graph.symbols.values()
+                if symbol.file == "lib.js" and symbol.name == "helper"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
     def test_package_self_reference_resolves_root_export(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "package.json", '{"name":"@scope/app","exports":{".":"./src/index.ts"}}\n')
-            write_file(project_root, "src/index.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "package.json",
+                '{"name":"@scope/app","exports":{".":"./src/index.ts"}}\n',
+            )
+            write_file(
+                project_root,
+                "src/index.ts",
+                "export function helper() {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "src/consumer.ts",
@@ -694,15 +962,30 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/index.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "src/index.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
     def test_package_self_reference_resolves_subpath_export(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "package.json", '{"name":"@scope/app","exports":{"./feature":"./src/feature.ts"}}\n')
-            write_file(project_root, "src/feature.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "package.json",
+                '{"name":"@scope/app","exports":{"./feature":"./src/feature.ts"}}\n',
+            )
+            write_file(
+                project_root,
+                "src/feature.ts",
+                "export function helper() {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "src/consumer.ts",
@@ -711,15 +994,32 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "src/feature.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "src/feature.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
-    def test_monorepo_package_name_exports_resolves_without_root_package_json(self) -> None:
+    def test_monorepo_package_name_exports_resolves_without_root_package_json(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "packages/pkg/package.json", '{"name":"@scope/pkg","exports":{".":"./src/index.ts"}}\n')
-            write_file(project_root, "packages/pkg/src/index.ts", "export function helper() {\n  return 1;\n}\n")
+            write_file(
+                project_root,
+                "packages/pkg/package.json",
+                '{"name":"@scope/pkg","exports":{".":"./src/index.ts"}}\n',
+            )
+            write_file(
+                project_root,
+                "packages/pkg/src/index.ts",
+                "export function helper() {\n  return 1;\n}\n",
+            )
             write_file(
                 project_root,
                 "apps/app/main.ts",
@@ -728,8 +1028,15 @@ class RepoMapEngineTests(unittest.TestCase):
 
             engine = RepoMapEngine(project_root)
             engine.scan()
-            helper = next(symbol for symbol in engine.query_symbol("helper") if symbol.file == "packages/pkg/src/index.ts")
-            callers = {symbol.name for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]}
+            helper = next(
+                symbol
+                for symbol in engine.query_symbol("helper")
+                if symbol.file == "packages/pkg/src/index.ts"
+            )
+            callers = {
+                symbol.name
+                for symbol in engine.call_chain(helper.id, "callers", 2)["callers"]
+            }
 
             self.assertIn("caller", callers)
 
@@ -756,7 +1063,9 @@ class RepoMapEngineTests(unittest.TestCase):
             )
 
             write_file(project_root, "README.md", "# Demo\n")
-            write_file(project_root, "scripts/validate.sh", "#!/usr/bin/env bash\necho ok\n")
+            write_file(
+                project_root, "scripts/validate.sh", "#!/usr/bin/env bash\necho ok\n"
+            )
             write_file(project_root, ".env", "SECRET=hidden\n")
 
             engine = RepoMapEngine(project_root)
@@ -777,88 +1086,86 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "def run():\n"
-                    "    return 1\n\n"
-                    "def helper():\n"
-                    "    return run()\n"
-                ),
+                ("def run():\n    return 1\n\ndef helper():\n    return run()\n"),
             )
             write_file(
                 project_root,
                 "templates/index.html",
-                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(40)) + "</body></html>",
+                "<html><body>"
+                + "".join("<div><span>x</span></div>" for _ in range(40))
+                + "</body></html>",
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
             if "html" not in engine.ts.parsers:
-                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+                self.skipTest(
+                    "tree-sitter-html parser unavailable in current interpreter"
+                )
 
             summary = engine.summary_symbols(2, 2)
 
             self.assertEqual(summary[0]["file"], "main.py")
-            self.assertEqual([item["name"] for item in summary[0]["symbols"]], ["run", "helper"])
+            self.assertEqual(
+                [item["name"] for item in summary[0]["symbols"]], ["run", "helper"]
+            )
 
     def test_hotspots_deprioritize_markup_only_density(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "def run():\n"
-                    "    return 1\n\n"
-                    "def helper():\n"
-                    "    return run()\n"
-                ),
+                ("def run():\n    return 1\n\ndef helper():\n    return run()\n"),
             )
             write_file(
                 project_root,
                 "templates/index.html",
-                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(40)) + "</body></html>",
+                "<html><body>"
+                + "".join("<div><span>x</span></div>" for _ in range(40))
+                + "</body></html>",
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
             if "html" not in engine.ts.parsers:
-                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+                self.skipTest(
+                    "tree-sitter-html parser unavailable in current interpreter"
+                )
 
             hotspots = engine.hotspots(2)
 
             self.assertEqual(hotspots[0]["file"], "main.py")
-            self.assertGreater(hotspots[0]["semantic_symbol_count"], hotspots[1]["semantic_symbol_count"])
+            self.assertGreater(
+                hotspots[0]["semantic_symbol_count"],
+                hotspots[1]["semantic_symbol_count"],
+            )
 
     def test_reading_order_deprioritizes_markup_noise_when_code_exists(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "from service import helper\n\n"
-                    "def run():\n"
-                    "    return helper()\n"
-                ),
+                ("from service import helper\n\ndef run():\n    return helper()\n"),
             )
             write_file(
                 project_root,
                 "service.py",
-                (
-                    "def helper():\n"
-                    "    return build()\n\n"
-                    "def build():\n"
-                    "    return 1\n"
-                ),
+                ("def helper():\n    return build()\n\ndef build():\n    return 1\n"),
             )
             write_file(
                 project_root,
                 "prototype.html",
-                "<html><body>" + "".join("<div><span>x</span></div>" for _ in range(80)) + "</body></html>",
+                "<html><body>"
+                + "".join("<div><span>x</span></div>" for _ in range(80))
+                + "</body></html>",
             )
 
             engine = RepoMapEngine(project_root)
             engine.scan()
             if "html" not in engine.ts.parsers:
-                self.skipTest("tree-sitter-html parser unavailable in current interpreter")
+                self.skipTest(
+                    "tree-sitter-html parser unavailable in current interpreter"
+                )
 
             reading_order = engine.suggested_reading_order(3)
 
@@ -870,21 +1177,13 @@ class RepoMapEngineTests(unittest.TestCase):
             write_file(
                 project_root,
                 "main.py",
-                (
-                    "from service import helper\n\n"
-                    "def run():\n"
-                    "    return helper()\n"
-                ),
+                ("from service import helper\n\ndef run():\n    return helper()\n"),
             )
             write_file(project_root, "service.py", "def helper():\n    return 1\n")
             write_file(
                 project_root,
                 "tests/test_main.py",
-                (
-                    "from main import run\n\n"
-                    "def test_run():\n"
-                    "    assert run() == 1\n"
-                ),
+                ("from main import run\n\ndef test_run():\n    assert run() == 1\n"),
             )
 
             engine = RepoMapEngine(project_root)
