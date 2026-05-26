@@ -1,6 +1,6 @@
 # RepoMap — 编程代理的代码库感知工具
 
-> Tree-sitter 项目地图、13 语言 LSP、编辑前后影响分析 — 为 Claude Code、Cursor、Codex、OpenCode 设计。
+> Tree-sitter 项目地图、18 语言 LSP、编辑前后影响分析 — 为 Claude Code、Cursor、Codex、OpenCode 设计。
 >
 > 灵感源自 [aider](https://github.com/Aider-AI/aider) 的 repo map。由 [@gjczone](https://github.com/gjczone) 与 deepseek-v4-pro 和 glm-5.1 共同构建。
 
@@ -9,8 +9,11 @@
 **编程代理获得的能力**：结构化仓库上下文，替代 grep + 原始文件读取：
 
 - **从哪里开始**：`overview`、`query`（同义词扩展）、`routes`
-- **什么会被破坏**：`impact`、`call-chain`、`refs`、`state-map`
-- **遗漏了什么**：`verify`（合约风险警告）、`check`、`orphan`
+- **什么会被破坏**：`impact`（含类型级）、`call-chain`、`refs`、`state-map`
+- **遗漏了什么**：`verify`（合约风险 + 漏改检测）、`check`、`orphan`
+- **自动修复与就绪检查**：`fix`（ruff + eslint 自动修复）、`ready`（提交前检查）
+- **编码自动检测**：UTF-8 → GBK → GB2312 回退，消除老项目扫描盲区
+- **自适应搜索**：永不返回空结果 — 关键词扩展 → 热点兜底
 
 ---
 
@@ -62,6 +65,11 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | Ruby | `ruby-lsp` | `gem install ruby-lsp` |
 | Swift | `sourcekit-lsp` | Xcode / Swift toolchain 自带 |
 | Kotlin | `kotlin-language-server` | mason 或手动安装 |
+| Bash | `bash-language-server` | `npm install -g bash-language-server` |
+| CSS / SCSS | `vscode-css-language-server` | `npm install -g vscode-langservers-extracted` |
+| HTML | `vscode-html-language-server` | `npm install -g vscode-langservers-extracted` |
+| JSON | `vscode-json-language-server` | `npm install -g vscode-langservers-extracted` |
+| YAML | `yaml-language-server` | `npm install -g yaml-language-server` |
 
 支持 LSP 的命令会在服务器可用时默认使用本地 LSP。所有命令在没有 LSP 时仍可工作；缺失服务器会显示为 skipped，需要时可用 `--no-lsp` 关闭 LSP 证据。
 
@@ -81,8 +89,10 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `refs --symbol <名称>` | 符号的所有引用；默认获取 LSP 精确跨文件结果；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
 | `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
-| `verify [--quick] [--no-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断 |
-| `check [--no-lsp]` | 编译器/类型/lint 诊断（tsc、mypy、ruff、cargo check、go vet） |
+| `verify [--quick] [--no-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、漏改检测 |
+| `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
+| `ready` | 提交就绪检查：verify + check + format 一键执行 |
+| `check [--no-lsp]` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
 | `orphan [--json]` | 死代码候选发现，含置信度分级 |
 | `hotspots` | 按复杂度排名的高密度文件 |
 | `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
@@ -104,7 +114,9 @@ repomap routes --project . --with-consumers           # API 消费者映射
 repomap call-chain --project . --symbol refreshToken
 
 # 编辑后
-repomap verify --project .                            # 完整证据门；默认运行 LSP
+repomap verify --project .                            # 完整证据门（含漏改检测）
+repomap fix --project .                               # 自动修复 lint 问题
+repomap ready --project .                             # 提交就绪检查
 repomap check --project .                             # 编译器诊断
 repomap orphan --project . --min-confidence 70        # 死代码检查
 ```

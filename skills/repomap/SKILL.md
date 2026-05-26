@@ -24,7 +24,7 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 
 | Agent situation | Command | Use when |
 |---|---|---|
-| First repository overview | `repomap overview --project <project>` | ALWAYS at the start of any project. Gives you modules, entrypoints, reading order, hotspots. Co-change analysis is OFF by default (opt-in via `--with-co-change`). |
+| First repository overview | `repomap overview --project <project>` | ALWAYS at the start of any project. Gives you modules, entrypoints, reading order, hotspots. Co-change analysis is OFF by default (opt-in via `--with-co-change`, window configurable with `--co-change-days`). |
 | Reading a file for the first time | `repomap file-detail --project <project> --file-path <file>` | ALWAYS before opening a file you haven't read. Shows symbols, signatures, called-by, and LSP tree. |
 | Finding where something is defined | `repomap query-symbol --project <project> --symbol <name>` | ALWAYS instead of grep for symbol lookup. LSP precision by default. Add `--file-path` to narrow. |
 | Finding all callers of a function | `repomap refs --project <project> --symbol <name>` | ALWAYS before changing a function signature or behavior. Shows every reference. |
@@ -34,6 +34,8 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 | Before editing any file | `repomap impact --project <project> --files <file...> --with-symbols` | ALWAYS before non-trivial edits. Shows key symbols, affected files, suggested tests, risk level, and "Read Next" files. |
 | After editing any file | `repomap verify --project <project>` | ALWAYS after edits. Aggregates git changes, risk, contract warnings, diagnostics, and test suggestions. |
 | Quick post-edit check | `repomap verify --project <project> --quick` | After small changes; git-changed files + risk only (skips compiler/LSP). |
+| Auto-fix lint | `repomap fix --project <project>` | After making changes, before committing — auto-fixes ruff and eslint issues. |
+| Pre-commit readiness | `repomap ready --project <project>` | One command to verify + check + format before committing. Use right before `git commit`. |
 | Compiler/lint diagnostics | `repomap check --project <project>` | When you need to know if the code compiles or has lint errors. Use `--modified-file` for focused checks. |
 | Before deleting anything | `repomap orphan --project <project>` | ALWAYS before deleting code. Finds dead-code candidates. Verify ≥70 confidence with `refs` first. |
 | Finding API routes | `repomap routes --project <project> --json` | When working with HTTP/API endpoints. Add `--with-consumers` to find frontend callers. |
@@ -45,7 +47,7 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 | Graph comparison | `repomap diff --project <project>` | Compare current graph against baseline. Prefer `verify --with-diff` for integrated view. |
 | Quick project scan | `repomap scan --project <project>` | When you only need file/symbol counts and entrypoints. Usually `overview` is better. |
 | Binary health check | `repomap doctor --project <project>` | When suspecting stale binary or PATH issues. |
-| Implicit coupling detection | `repomap overview --project <project> --with-co-change` | When changing a cross-module hub file, or when `impact` shows surprisingly few dependents for a heavily-used module. Analyzes 90-day git history to find files that frequently change together without explicit code dependencies. Expensive: adds 30-60s and ~100 MB RSS. |
+| Implicit coupling detection | `repomap overview --project <project> --with-co-change` | When changing a cross-module hub file, or when `impact` shows surprisingly few dependents for a heavily-used module. Analyzes git history to find co-changing files (window configurable via `--co-change-days`, default 30 days). Expensive: adds 30-60s and ~100 MB RSS. |
 
 ## Workflow recipes
 
@@ -127,7 +129,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 - **`verify` reports contract risk warnings** → address each one before claiming completion. They flag API/signature/state mismatches the graph detected.
 - **Orphan high-confidence (≥70)** → still requires `refs` verification. The graph cannot see string dispatch, reflection, macros, or config-driven routing.
 - **`cache save` must run *before* target edits** — `diff`/`verify --with-diff` need a pre-edit baseline. Missing baseline is not proof of safety.
-- **`--with-co-change` is opt-in, not default** → adds 30-60s and reads 90 days of git history. Only use it when: (a) changing a file with many cross-module callers, (b) `impact` shows fewer dependents than expected, or (c) working in a module where history suggests hidden coupling. Never use on first contact or routine edits.
+- **`--with-co-change` is opt-in, not default** → adds 30-60s and reads git history. Window configurable with `--co-change-days` (default 30 days). Only use it when: (a) changing a file with many cross-module callers, (b) `impact` shows fewer dependents than expected, or (c) working in a module where history suggests hidden coupling. Never use on first contact or routine edits.
 - **Skipping repomap for "simple" tasks** → a "simple read" becomes a "simple edit" becomes a multi-file change. `file-detail` + `impact` cost seconds and prevent hours of debugging. When in doubt, run it.
 
 ## Capabilities

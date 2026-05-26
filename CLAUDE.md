@@ -57,7 +57,7 @@ src/                    # Python package (flat)
 │   ├── __init__.py
 │   ├── __main__.py        # python -m repomap entry
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~410 lines)
-│   └── handlers.py        # All run_* command implementations + shared helpers (~2450 lines)
+│   └── handlers.py        # All run_* command implementations + shared helpers (~3500 lines)
 ├── gitignore.py            # GitignoreParser: pathspec-based file filtering
 ├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
