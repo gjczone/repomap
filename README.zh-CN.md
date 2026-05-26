@@ -28,7 +28,7 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. 安装 CLI（跨平台：Linux / macOS / Windows）
+# 2. 安装 CLI（仅 Linux x64）
 npm install -g repomap-bin
 
 # 3. 验证
@@ -41,6 +41,31 @@ repomap doctor --project .
 
 ---
 
+
+### 从源码构建（Windows / macOS）
+
+预编译二进制仅支持 Linux x64。Windows 和 macOS 用户可以从源码构建：
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/gjczone/repomap.git
+cd repomap
+
+# 2. 安装 uv（Python 包管理器）
+# macOS:    brew install uv
+# Windows:  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 3. 安装依赖
+uv sync --all-extras
+
+# 4. 构建二进制
+uv run --with pyinstaller python -m src.cli build-binary --output dist
+
+# 5. 验证
+./dist/repomap doctor --project .
+```
+
+也可以不构建，直接用源码运行：`uv run repomap <command> --project <path>`
 ### LSP 设置
 
 为符号查找提供编译器级精度。代理自动处理：

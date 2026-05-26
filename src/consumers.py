@@ -22,34 +22,20 @@ class RouteConsumer:
 
 
 # Patterns per language for HTTP client calls with literal route strings
+_JS_TS_CONSUMER_PATTERNS: list[tuple[str, int]] = [
+    (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+    (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
+    (
+        r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
+        1,
+    ),
+    (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
+]
+
 _CONSUMER_PATTERNS: dict[str, list[tuple[str, int]]] = {
-    "javascript": [
-        (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
-        (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (
-            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
-            1,
-        ),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
-    ],
-    "typescript": [
-        (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
-        (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (
-            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
-            1,
-        ),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
-    ],
-    "tsx": [
-        (r"""fetch\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
-        (r"""fetch\s*\(\s*`(/[^`]*)`""", 1),
-        (
-            r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"`](/[^'"`)]*)['"`]""",
-            1,
-        ),
-        (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
-    ],
+    "javascript": _JS_TS_CONSUMER_PATTERNS,
+    "typescript": _JS_TS_CONSUMER_PATTERNS,
+    "tsx": _JS_TS_CONSUMER_PATTERNS,
     "python": [
         (
             r"""requests\.(?:get|post|put|patch|delete|head|options)\s*\(\s*['"](/[^'"]*)['"]""",

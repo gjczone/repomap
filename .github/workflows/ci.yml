@@ -1,85 +1,73 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.github/workflows/ci.yml'
-  pull_request:
-    branches: [main]
+   push:
+      branches: [main]
+   pull_request:
+      branches: [main]
+   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+   group: ${{ github.workflow }}-${{ github.ref }}
+   cancel-in-progress: true
 
 permissions: read-all
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
+   lint:
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
-        with:
-          enable-cache: true
+         - name: Install uv
+           run: pip install uv
 
-      - name: Install dependencies
-        run: uv sync --all-extras --group dev
+         - name: Install dependencies
+           run: uv sync --all-extras --group dev
 
-      - name: Ruff format check
-        run: uv run ruff format --check .
+         - name: Ruff format check
+           run: uv run ruff format --check .
 
-      - name: Ruff lint
-        run: uv run ruff check .
+         - name: Ruff lint
+           run: uv run ruff check .
 
-      # Pyright has 43 pre-existing type errors — re-enable once fixed.
-      # - name: Pyright type check
-      #   run: uv run pyright .
+   test:
+      needs: lint
+      runs-on: ubuntu-latest
+      timeout-minutes: 15
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
 
-  test:
-    needs: lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
+         - name: Install uv
+           run: pip install uv
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
-        with:
-          enable-cache: true
+         - name: Install dependencies
+           run: uv sync --all-extras --group dev
 
-      - name: Install dependencies
-        run: uv sync --all-extras --group dev
+         - name: Run tests
+           run: uv run pytest --tb=short -q
 
-      - name: Run tests
-        run: uv run pytest --tb=short -q
+   security:
+      needs: lint
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
 
-  security:
-    needs: lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
+         - name: Install uv
+           run: pip install uv
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
-        with:
-          enable-cache: true
+         - name: Install dependencies
+           run: |
+              uv sync --all-extras
+              uv pip install pip-audit
 
-      - name: Install pip-audit
-        run: |
-          uv sync --all-extras
-          uv pip install pip-audit
-
-      - name: Audit Python dependencies
-        run: uv run pip-audit
+         - name: Audit Python dependencies
+           run: uv run pip-audit

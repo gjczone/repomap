@@ -239,7 +239,7 @@ class RepoMapEngine:
             value = int(raw)
         except ValueError:
             return DEFAULT_MAX_FILE_BYTES
-        return max(0, value)
+        return max(1, value)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 扫描主流程
@@ -308,6 +308,12 @@ class RepoMapEngine:
             files_to_scan = self._list_files(max_files)
             logger.info(f"Found {len(files_to_scan)} source files")
 
+        # 一次性清理过期缓存（避免 _process_file 内 O(n²) 检查）
+        stale_before = [
+            k for k in list(self._cache) if not (self.project_root / k).exists()
+        ]
+        for k in stale_before:
+            del self._cache[k]
         try:
             for f in files_to_scan:
                 # 超时熔断检查
@@ -332,7 +338,8 @@ class RepoMapEngine:
             self._analyzer = GraphAnalyzer(self.graph)
             self._calculate_pagerank()
             self.scan_state = "scanned"
-        except Exception:
+        except Exception as e:
+            logger.error(f"Scan pipeline fatal error: {type(e).__name__}: {e}")
             self.scan_state = "invalid"
             raise
         finally:
@@ -389,7 +396,8 @@ class RepoMapEngine:
                     logger.debug("Incremental cache stale: git HEAD changed")
                     return None
             return cache
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Incremental cache load failed: {e}")
             return None
 
     def _git_changed_files(self) -> tuple[list[str], list[str]]:
@@ -401,7 +409,8 @@ class RepoMapEngine:
             modified = git.changed_files()
             deleted = git.deleted_files()
             return sorted(set(modified)), sorted(set(deleted))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get git changed files: {e}")
             return [], []
 
     def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
@@ -499,12 +508,30 @@ class RepoMapEngine:
                 if line and Path(line).suffix.lower() in EXT_TO_LANG
             )
         except Exception:
-            # fallback：一次遍历过滤扩展名
+            # fallback：一次遍历过滤扩展名，跳过已知大型目录
             valid_exts = set(EXT_TO_LANG)
+            skip_dirs = {
+                "node_modules",
+                ".git",
+                "__pycache__",
+                ".venv",
+                "venv",
+                "target",
+                "build",
+                "dist",
+                ".next",
+                ".nuxt",
+                ".cache",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".ruff_cache",
+            }
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
-                if p.is_file() and p.suffix.lower() in valid_exts
+                if p.is_file()
+                and p.suffix.lower() in valid_exts
+                and not any(d in p.parts for d in skip_dirs)
             )
 
         filtered_files: list[str] = []
@@ -722,11 +749,6 @@ class RepoMapEngine:
         self._cache[file] = mtime
         self.scan_stats.processed_files += 1
 
-        # 清理已消失文件的缓存
-        stale = [k for k in list(self._cache) if not (self.project_root / k).exists()]
-        for k in stale:
-            del self._cache[k]
-
     def _mark_exported_symbols(self, file: str) -> None:
         exported_names = {
             binding.source_name
@@ -742,101 +764,47 @@ class RepoMapEngine:
             if symbol and symbol.name in exported_names:
                 symbol.visibility = "exported"
 
-    def _enrich_python_call_edges(self) -> None:
-        python_files = [
-            f
-            for f in self.graph.file_symbols
-            if f.endswith(".py") or f.endswith(".pyi")
-        ]
-        if not python_files:
+    def _enrich_call_edges(
+        self,
+        label: str,
+        extensions: tuple[str, ...],
+        analyze_fn_name: str,
+        needs_ts: bool = False,
+    ) -> None:
+        """统一参数化的调用边富集方法，消除四个语言变体的重复代码。"""
+        files = [f for f in self.graph.file_symbols if f.endswith(extensions)]
+        if not files:
             return
         try:
-            from .callgraph import analyze_python_callgraph, resolve_precise_edges
+            from . import callgraph as cg
 
-            modules = analyze_python_callgraph(self.project_root, python_files)
-            precise_edges = resolve_precise_edges(modules)
-            existing_edges = {
-                (e.source, e.target)
-                for edges in self.graph.outgoing.values()
-                for e in edges
-            }
-            added = 0
-            for (
-                caller_file,
-                caller_name,
-                callee_file,
-                callee_line,
-                kind,
-            ) in precise_edges:
-                caller_id = self._find_symbol_id(caller_file, caller_name)
-                callee_id = self._find_symbol_id_by_line(callee_file, callee_line)
-                if (
-                    caller_id
-                    and callee_id
-                    and (caller_id, callee_id) not in existing_edges
-                ):
-                    from . import Edge
-
-                    edge = Edge(
-                        source=caller_id, target=callee_id, weight=0.55, kind="call"
-                    )
-                    self.graph.outgoing.setdefault(caller_id, []).append(edge)
-                    self.graph.incoming.setdefault(callee_id, []).append(edge)
-                    existing_edges.add((caller_id, callee_id))
-                    added += 1
+            analyze_fn = getattr(cg, analyze_fn_name)
+            if needs_ts:
+                modules = analyze_fn(self.project_root, files, self.ts)
+            else:
+                modules = analyze_fn(self.project_root, files)
+            precise_edges = cg.resolve_precise_edges(modules)
+            added = self._add_precise_edges(precise_edges)
             if added:
-                logger.debug(f"Python precise call graph added {added} edges")
+                logger.debug(f"{label} precise call graph added {added} edges")
         except Exception as exc:
-            logger.debug(f"Python call graph enrichment failed: {exc}")
+            logger.debug(f"{label} call graph enrichment failed: {exc}")
+
+    def _enrich_python_call_edges(self) -> None:
+        self._enrich_call_edges("Python", (".py", ".pyi"), "analyze_python_callgraph")
 
     def _enrich_ts_call_edges(self) -> None:
-        ts_files = [
-            f
-            for f in self.graph.file_symbols
-            if f.endswith(".ts") or f.endswith(".tsx")
-        ]
-        if not ts_files:
-            return
-        try:
-            from .callgraph import analyze_ts_callgraph, resolve_precise_edges
-
-            modules = analyze_ts_callgraph(self.project_root, ts_files, self.ts)
-            precise_edges = resolve_precise_edges(modules)
-            added = self._add_precise_edges(precise_edges)
-            if added:
-                logger.debug(f"TypeScript precise call graph added {added} edges")
-        except Exception as exc:
-            logger.debug(f"TypeScript call graph enrichment failed: {exc}")
+        self._enrich_call_edges(
+            "TypeScript", (".ts", ".tsx"), "analyze_ts_callgraph", needs_ts=True
+        )
 
     def _enrich_go_call_edges(self) -> None:
-        go_files = [f for f in self.graph.file_symbols if f.endswith(".go")]
-        if not go_files:
-            return
-        try:
-            from .callgraph import analyze_go_callgraph, resolve_precise_edges
-
-            modules = analyze_go_callgraph(self.project_root, go_files, self.ts)
-            precise_edges = resolve_precise_edges(modules)
-            added = self._add_precise_edges(precise_edges)
-            if added:
-                logger.debug(f"Go precise call graph added {added} edges")
-        except Exception as exc:
-            logger.debug(f"Go call graph enrichment failed: {exc}")
+        self._enrich_call_edges("Go", (".go",), "analyze_go_callgraph", needs_ts=True)
 
     def _enrich_rust_call_edges(self) -> None:
-        rust_files = [f for f in self.graph.file_symbols if f.endswith(".rs")]
-        if not rust_files:
-            return
-        try:
-            from .callgraph import analyze_rust_callgraph, resolve_precise_edges
-
-            modules = analyze_rust_callgraph(self.project_root, rust_files, self.ts)
-            precise_edges = resolve_precise_edges(modules)
-            added = self._add_precise_edges(precise_edges)
-            if added:
-                logger.debug(f"Rust precise call graph added {added} edges")
-        except Exception as exc:
-            logger.debug(f"Rust call graph enrichment failed: {exc}")
+        self._enrich_call_edges(
+            "Rust", (".rs",), "analyze_rust_callgraph", needs_ts=True
+        )
 
     def _add_precise_edges(
         self,
@@ -876,7 +844,13 @@ class RepoMapEngine:
     def _find_symbol_id_by_line(self, file: str, line: int) -> str | None:
         for sym_id in self.graph.file_symbols.get(file, []):
             sym = self.graph.symbols.get(sym_id)
-            if sym and sym.line == line:
+            if sym is None:
+                continue
+            # 符号可能跨多行；检查目标行是否在符号范围内
+            if sym.end_line > 0:
+                if sym.line <= line <= sym.end_line:
+                    return sym_id
+            elif sym.line == line:
                 return sym_id
         return None
 
@@ -1046,8 +1020,6 @@ __all__ = [
     "EXT_TO_LANG",
     "QUERIES",
     "RepoMapEngine",
-    "SKIP_DIR_NAMES",
-    "SKIP_FILE_NAMES",
     "TreeSitterAdapter",
     "logger",
 ]

@@ -28,7 +28,7 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. Install CLI (cross-platform: Linux / macOS / Windows)
+# 2. Install CLI (Linux x64 only)
 npm install -g repomap-bin
 
 # 3. Verify
@@ -41,6 +41,31 @@ repomap doctor --project .
 
 ---
 
+
+### Build from Source (Windows / macOS)
+
+Pre-built binaries are Linux x64 only. Windows and macOS users can build from source:
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/gjczone/repomap.git
+cd repomap
+
+# 2. Install uv (Python package manager)
+# macOS:    brew install uv
+# Windows:  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 3. Install dependencies
+uv sync --all-extras
+
+# 4. Build binary
+uv run --with pyinstaller python -m src.cli build-binary --output dist
+
+# 5. Smoke test
+./dist/repomap doctor --project .
+```
+
+Or run from source without building: `uv run repomap <command> --project <path>`
 ### LSP Setup
 
 Adds compiler-grade precision for symbol lookups. The agent handles this automatically:

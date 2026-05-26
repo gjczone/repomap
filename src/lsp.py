@@ -493,6 +493,7 @@ class StdioLspClient:
         self.process: subprocess.Popen[bytes] | None = None
         self._next_id = 1
         self._messages: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._notifications: list[dict[str, Any]] = []
         self._reader: threading.Thread | None = None
         self._stop_reader = False
 
@@ -554,11 +555,12 @@ class StdioLspClient:
                 break
             if message.get("id") == request_id:
                 return message
-            # 请求期间可能收到 diagnostics 等通知；这里丢弃非目标消息，
-            # 避免同一通知被反复放回队列导致请求超时。
+            # 请求期间可能收到 diagnostics 等通知；缓冲到 _notifications 列表
             if "id" not in message:
-                time.sleep(0.01)
+                self._notifications.append(message)
                 continue
+            # 非目标响应消息放回队列（可能是并发请求的响应）
+            self._messages.put(message)
             time.sleep(0.01)
         # 超时后检查进程是否已退出，给出更精确的诊断
         if self.process is not None:

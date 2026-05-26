@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,11 +36,14 @@ class StateDefinition:
 
 def _read_file(project_root: str, file_path: str) -> str | None:
     try:
-        with open(
-            f"{project_root}/{file_path}", "r", encoding="utf-8", errors="replace"
-        ) as f:
-            return f.read(131072)
-    except (OSError, UnicodeDecodeError):
+        resolved = (Path(project_root) / file_path).resolve()
+        if not str(resolved).startswith(str(Path(project_root).resolve()) + os.sep):
+            return None
+        raw = resolved.read_bytes()
+        if b"\x00" in raw[:8192]:
+            return None
+        return raw.decode("utf-8", errors="replace")[:131072]
+    except OSError:
         return None
 
 

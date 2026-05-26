@@ -693,7 +693,7 @@ class DiagnosticRunner:
                     file=item.get("filename", ""),
                     line=loc.get("row", 0),
                     col=loc.get("column", 0),
-                    severity="error",
+                    severity=item.get("severity", "error"),
                     code=item.get("code", "ruff"),
                     message=item.get("message", ""),
                     suggested_fix=suggested_fix,
@@ -731,7 +731,7 @@ class DiagnosticRunner:
                     skipped=True,
                     skip_reason="no modified Go files",
                 )
-            cmd = ["go", "vet", "./..."]
+            cmd = ["go", "vet"] + target_files
         else:
             cmd = ["go", "vet", "./..."]
 
