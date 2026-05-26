@@ -81,7 +81,7 @@ tests/                     # Test suite
 ├── test_callgraph.py      # Call graph unit tests (45 cases)
 ├── test_type_inference.py # Type inference unit tests (33 cases)
 └── ...                    # Other test files
-dist/repomap               # Local build output (CI builds Linux/macOS/Windows via GitHub Actions)
+dist/repomap               # Local build output (CI builds Linux x64 only via GitHub Actions)
 ```
 
 **Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git).
@@ -213,10 +213,10 @@ repomap overview --project .
 ## Distribution Policies
 
 - **No binaries in git**: `dist/repomap` and `npm/platforms/*/repomap*` are gitignored. Build artifacts stay local.
-- **npm distribution**: 一条命令全平台安装：`npm install -g repomap-bin`。`repomap-bin` 是 wrapper 包（含 `repomap.js` shim），通过 `optionalDependencies` 自动拉取对应平台的二进制包：`@gjczone/repomap-linux-x64`、`@gjczone/repomap-darwin-arm64`、`@gjczone/repomap-windows-x64`。npm 根据 `os`/`cpu` 字段自动只安装匹配的平台包。wrapper 在 CI 中仅从 linux 平台发布一次。所有包版本由 CI 从 `pyproject.toml` 自动同步。
+- **npm distribution**: `npm install -g repomap-bin`（仅 Linux x64）。`repomap-bin` 是 wrapper 包（含 `repomap.js` shim），通过 `optionalDependencies` 拉取 `@gjczone/repomap-linux-x64` 二进制包。Windows/macOS 用户需从源码自行构建（见 README）。wrapper 在 CI 中从 linux 平台发布。所有包版本由 CI 从 `pyproject.toml` 自动同步。
 - **GitHub Releases**: Text-only bilingual (CN+EN) changelogs. No binary attachments. Created via `gh release create` with `--notes`.
 - **Version bump**: When bumping version, update `pyproject.toml`.
-- **CI build**: CI builds the binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.
+- **CI build**: CI builds the Linux x64 binary and runs tests. Auto-wait for CI: poll `gh run list --repo gjczone/repomap --branch main --limit 1` every 60s until `status=completed`; check `conclusion=success` before release.
 
 ## Release Automation Rules
 
