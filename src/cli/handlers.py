@@ -89,6 +89,7 @@ PYINSTALLER_BINDINGS = [
 ]
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
+_SCAN_CACHE_MAX_SIZE = 16
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INVALID_ARGS = 2
@@ -234,13 +235,16 @@ def _scan_engine(
 
     session_engine = _load_session_engine(resolved_project, fingerprint)
     if session_engine is not None:
+        if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
+            _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
         _SCAN_CACHE[cache_key] = (fingerprint, session_engine)
-        print(f"[{CLI_NAME}] Session cache restored from disk", file=sys.stderr)
         return session_engine
 
     engine = RepoMapEngine(resolved_project)
     engine.scan(max_files=max_files, incremental=incremental)
     _save_session_engine(resolved_project, fingerprint, engine)
+    if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
+        _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
     _SCAN_CACHE[cache_key] = (fingerprint, engine)
     return engine
 

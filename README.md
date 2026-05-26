@@ -28,7 +28,7 @@ git clone https://github.com/gjczone/repomap.git /tmp/repomap-install
 cp -r /tmp/repomap-install/skills/repomap ~/.claude/skills/repomap
 rm -rf /tmp/repomap-install
 
-# 2. Install CLI (cross-platform: Linux / macOS / Windows)
+# 2. Install CLI (Linux x64 only)
 npm install -g repomap-bin
 
 # 3. Verify

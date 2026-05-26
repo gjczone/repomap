@@ -455,8 +455,8 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
             "recent_commits": recent_commits[:10],
         }
 
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return None
 
 
 def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
@@ -760,12 +760,8 @@ def main():
             print(f"📜 正在查询 Git 历史: {args.symbol}")
             result = get_symbol_git_history(project_path, args.symbol)
 
-            if not result:
+            if result is None:
                 print("❌ 未找到符号或 Git 信息")
-                return
-
-            if "error" in result:
-                print(f"❌ {result['error']}")
                 return
 
             print(f"\n  Symbol location: {result['file']}:{result['line']}")

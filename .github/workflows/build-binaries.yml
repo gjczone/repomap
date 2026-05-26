@@ -1,106 +1,93 @@
 name: build-binaries
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "skills/**"
-  pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "skills/**"
+   workflow_dispatch:
+   push:
+      branches:
+         - main
+         - master
+      paths-ignore:
+         - "**/*.md"
+         - "docs/**"
+         - "skills/**"
+   pull_request:
+      paths-ignore:
+         - "**/*.md"
+         - "docs/**"
+         - "skills/**"
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux-x64
-            bin-name: repomap
-          - os: macos-latest
-            platform: darwin-arm64
-            bin-name: repomap
-          - os: windows-latest
-            platform: windows-x64
-            bin-name: repomap.exe
+   build:
+      strategy:
+         fail-fast: false
+         matrix:
+            include:
+               - os: ubuntu-latest
+                 platform: linux-x64
+                 bin-name: repomap
 
-    runs-on: ${{ matrix.os }}
+      runs-on: ${{ matrix.os }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      steps:
+         - name: Checkout
+           uses: actions/checkout@v6
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
+         - name: Setup Python
+           uses: actions/setup-python@v6
+           with:
+              python-version: "3.13"
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v8.1.0
+         - name: Setup uv
+           uses: astral-sh/setup-uv@v8.1.0
 
-      - name: Run test suite
-        shell: bash
-        run: |
-          uv run --with pytest,pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-            pytest tests -v
+         - name: Run test suite
+           shell: bash
+           run: |
+              uv run --with pytest,pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
+                pytest tests -v
 
-      - name: Build binary
-        shell: bash
-        run: |
-          uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
-            python -m src.cli build-binary --output dist
+         - name: Build binary
+           shell: bash
+           run: |
+              uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json \
+                python -m src.cli build-binary --output dist
 
-      - name: Smoke test binary on Unix
-        if: runner.os != 'Windows'
-        shell: bash
-        run: ./dist/repomap doctor --project .
+         - name: Smoke test binary
+           shell: bash
+           run: ./dist/repomap doctor --project .
 
-      - name: Smoke test binary on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\dist\repomap.exe doctor --project .
+         - name: Upload binary artifact
+           uses: actions/upload-artifact@v7
+           with:
+              name: repomap-${{ runner.os }}
+              path: dist/repomap*
 
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: repomap-${{ runner.os }}
-          path: dist/repomap*
+         - name: Copy binary to npm platform package
+           shell: bash
+           run: |
+              cp dist/${{ matrix.bin-name }} npm/platforms/${{ matrix.platform }}/${{ matrix.bin-name }}
 
-      - name: Copy binary to npm platform package
-        shell: bash
-        run: |
-          cp dist/${{ matrix.bin-name }} npm/platforms/${{ matrix.platform }}/${{ matrix.bin-name }}
+         - name: Sync npm version from pyproject.toml
+           shell: bash
+           run: |
+              VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+              cd npm/platforms/${{ matrix.platform }}
+              node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
-      - name: Sync npm version from pyproject.toml
-        shell: bash
-        run: |
-          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          cd npm/platforms/${{ matrix.platform }}
-          node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+         - name: Publish platform package to npm
+           if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+           shell: bash
+           run: |
+              cd npm/platforms/${{ matrix.platform }}
+              npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
+              npm publish --access public 2>&1 || echo "npm publish skipped (version may already exist)"
 
-
-      - name: Publish platform package to npm
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          cd npm/platforms/${{ matrix.platform }}
-          npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
-          npm publish --access public 2>&1 || echo "npm publish skipped (version may already exist)"
-
-      - name: Sync and publish wrapper package (linux only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
-        shell: bash
-        run: |
-          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          cd npm/wrapper
-          node -e "const p=require('./package.json');p.version='$VERSION';const deps=p.optionalDependencies||{};for(const k of Object.keys(deps))deps[k]='$VERSION';p.optionalDependencies=deps;require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
-          npm publish 2>&1 || echo "npm publish skipped (version may already exist)"
+         - name: Sync and publish wrapper package (linux only)
+           if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
+           shell: bash
+           run: |
+              VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+              cd npm/wrapper
+              node -e "const p=require('./package.json');p.version='$VERSION';const deps=p.optionalDependencies||{};for(const k of Object.keys(deps))deps[k]='$VERSION';p.optionalDependencies=deps;require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+              npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
+              npm publish 2>&1 || echo "npm publish skipped (version may already exist)"

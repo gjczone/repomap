@@ -17,6 +17,7 @@ Git 操作统一后端 — 优先使用 pygit2（libgit2 绑定），fallback �
 
 from __future__ import annotations
 
+import os
 import logging
 import subprocess
 from pathlib import Path
@@ -31,6 +32,25 @@ try:
     _HAS_PYGIT2 = True
 except ImportError:
     pygit2 = None  # type: ignore[assignment]
+
+
+def _validate_file_path(project_root: str, file_path: str) -> str | None:
+    """验证并规范化文件路径，防止路径遍历和参数注入。
+
+    返回规范化后的相对路径字符串，无效时返回 None。
+    """
+    try:
+        resolved = (Path(project_root) / file_path).resolve()
+        root_resolved = Path(project_root).resolve()
+        if (
+            not str(resolved).startswith(str(root_resolved) + os.sep)
+            and resolved != root_resolved
+        ):
+            logger.warning(f"Path traversal attempt: {file_path}")
+            return None
+        return str(resolved.relative_to(root_resolved))
+    except (ValueError, OSError):
+        return None
 
 
 class SubprocessBackend:
@@ -217,9 +237,12 @@ class SubprocessBackend:
     def blame_line(
         project_root: str, file_path: str, line: int
     ) -> dict[str, str] | None:
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return None
         try:
             r = SubprocessBackend._run_git(
-                ["blame", "-L", f"{line},{line}", "-p", str(file_path)],
+                ["blame", "-L", f"{line},{line}", "-p", safe_path],
                 project_root,
                 timeout=10,
             )
@@ -235,6 +258,9 @@ class SubprocessBackend:
     def log_file_commits(
         project_root: str, file_path: str, limit: int = 20
     ) -> list[dict[str, str]]:
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return []
         try:
             r = SubprocessBackend._run_git(
                 [
@@ -243,7 +269,7 @@ class SubprocessBackend:
                     f"-{limit}",
                     "--format=%H|%an|%ad|%s",
                     "--",
-                    str(file_path),
+                    safe_path,
                 ],
                 project_root,
                 timeout=10,
@@ -268,9 +294,12 @@ class SubprocessBackend:
 
     @staticmethod
     def file_authors(project_root: str, file_path: str) -> list[str]:
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return []
         try:
             r = SubprocessBackend._run_git(
-                ["shortlog", "-sn", "--", str(file_path)],
+                ["shortlog", "-sn", "--", safe_path],
                 project_root,
                 timeout=5,
             )
