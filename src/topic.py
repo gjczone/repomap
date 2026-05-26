@@ -558,11 +558,11 @@ def _file_to_module_path(file_path: str) -> str:
 _co_change_cache: dict[str, dict[tuple[str, str], int]] = {}
 
 
-def get_co_change_score(project_root: str, file_a: str, file_b: str) -> int:
+def get_co_change_score(project_root: str, file_a: str, file_b: str, since_days: int = 30) -> int:
     """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
     cache = _co_change_cache.get(project_root)
     if cache is None:
-        cache = _load_co_change_scores(project_root)
+        cache = _load_co_change_scores(project_root, since_days=since_days)
         _co_change_cache[project_root] = cache
     a, b = sorted([file_a, file_b])
     return cache.get((a, b), 0)
@@ -576,6 +576,7 @@ def get_co_change_neighbors(
     project_root: str,
     file_path: str,
     top_n: int = 5,
+    since_days: int = 30,
 ) -> list[tuple[str, int]]:
     """返回与指定文件共变频率最高的文件列表（降序）。
 
@@ -584,7 +585,7 @@ def get_co_change_neighbors(
     """
     cache = _co_change_cache.get(project_root)
     if cache is None:
-        cache = _load_co_change_scores(project_root)
+        cache = _load_co_change_scores(project_root, since_days=since_days)
         _co_change_cache[project_root] = cache
     neighbors: dict[str, int] = {}
     for (a, b), count in cache.items():
@@ -595,14 +596,14 @@ def get_co_change_neighbors(
     return sorted(neighbors.items(), key=lambda x: -x[1])[:top_n]
 
 
-def _load_co_change_scores(project_root: str) -> dict[tuple[str, str], int]:
+def _load_co_change_scores(project_root: str, since_days: int = 30) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
     from .git_backend import GitBackend
 
     scores: dict[tuple[str, str], int] = defaultdict(int)
     try:
         git = GitBackend(project_root)
-        commit_groups = git.log_commits_grouped(since_days=90)
+        commit_groups = git.log_commits_grouped(since_days=since_days)
     except Exception:
         return dict(scores)
 

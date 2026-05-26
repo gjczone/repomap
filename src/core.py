@@ -141,6 +141,59 @@ SENSITIVE_SUPPORTING_FILE_NAMES = {
 }
 
 
+def _read_file_with_encoding_fallback(raw_bytes: bytes) -> tuple[bytes, str | None]:
+    """Detect encoding from raw bytes and return clean UTF-8 bytes.
+
+    Returns (utf8_bytes, detected_encoding) where detected_encoding is None
+    if the content was already valid UTF-8 without significant replacement chars.
+    """
+    # Quality helper: count U+FFFD replacement chars
+    def _replacement_ratio(text: str) -> float:
+        if not text:
+            return 0.0
+        replacement_count = text.count("\ufffd")
+        char_count = len(text)
+        # Small files: absolute threshold; large files: percentage threshold
+        if char_count < 5000:
+            return 1.0 if replacement_count > 5 else 0.0
+        return replacement_count / char_count
+
+    # 1. Try UTF-8 first
+    try:
+        text = raw_bytes.decode("utf-8")
+        if _replacement_ratio(text) <= 0.05:
+            return raw_bytes, None  # Clean UTF-8, no re-encoding needed
+    except UnicodeDecodeError:
+        pass
+
+    # 2. Try GBK
+    try:
+        text = raw_bytes.decode("gbk", errors="replace")
+        if _replacement_ratio(text) <= 0.05:
+            logger.warning("Detected GBK encoding, converting to UTF-8")
+            return text.encode("utf-8"), "gbk"
+    except (UnicodeDecodeError, LookupError):
+        pass
+
+    # 3. Try GB2312
+    try:
+        text = raw_bytes.decode("gb2312", errors="replace")
+        if _replacement_ratio(text) <= 0.05:
+            logger.warning("Detected GB2312 encoding, converting to UTF-8")
+            return text.encode("utf-8"), "gb2312"
+    except (UnicodeDecodeError, LookupError):
+        pass
+
+    # 4. Try latin-1 (always succeeds as fallback)
+    text = raw_bytes.decode("latin-1", errors="replace")
+    if _replacement_ratio(text) <= 0.05:
+        logger.warning("Detected latin-1 encoding, converting to UTF-8")
+        return text.encode("utf-8"), "latin-1"
+
+    # 5. Last resort: UTF-8 with replacement
+    text = raw_bytes.decode("utf-8", errors="replace")
+    logger.warning("Using UTF-8 with replacement chars as last resort")
+    return text.encode("utf-8"), "utf-8-replace"
 # ═══════════════════════════════════════════════════════════════════════════════
 # 核心引擎（协调层）
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -611,7 +664,10 @@ class RepoMapEngine:
         if not lang or lang not in self.ts.parsers:
             return
 
-        content = path.read_bytes()
+        raw_bytes = path.read_bytes()
+        content, detected_encoding = _read_file_with_encoding_fallback(raw_bytes)
+        if detected_encoding:
+            logger.info(f"Detected {detected_encoding} encoding for {file}")
         tree = self.ts.parse(content, lang)
         if not tree:
             return
@@ -935,6 +991,7 @@ class RepoMapEngine:
         with_heat: bool = False,
         with_co_change: bool = False,
         granularity: str = "auto",
+        co_change_days: int = 30,
     ) -> str:
         return render_overview_report(
             self,
@@ -942,6 +999,7 @@ class RepoMapEngine:
             with_heat=with_heat,
             with_co_change=with_co_change,
             granularity=granularity,
+            co_change_days=co_change_days,
         )
 
     def render_call_chain(self, symbol_name: str, max_depth: int = 3) -> str:

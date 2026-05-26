@@ -244,7 +244,7 @@ def _format_route_table(routes: list) -> str:
     return "\n".join(lines)
 
 
-def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
+def _render_co_change_section(engine: "RepoMapEngine", co_change_days: int = 30) -> list[str]:
     """为 overview 渲染隐式耦合板块（git 共变频率最高的文件对）。"""
     from pathlib import Path
     from .git_backend import GitBackend
@@ -277,7 +277,7 @@ def _render_co_change_section(engine: "RepoMapEngine") -> list[str]:
         file_path = entry["file"]
         # 将分析路径（相对于 project_root）转换为 git 路径（相对于 git root）
         git_path = f"{git_rel_prefix}/{file_path}" if git_rel_prefix else file_path
-        neighbors = get_co_change_neighbors(project_root, git_path, top_n=3)
+        neighbors = get_co_change_neighbors(project_root, git_path, top_n=3, since_days=co_change_days)
         if not neighbors:
             continue
         # 将 git 路径转换回分析路径用于展示
@@ -325,6 +325,7 @@ def render_overview_report(
     with_heat: bool = False,
     with_co_change: bool = False,
     granularity: str = "auto",
+    co_change_days: int = 30,
 ) -> str:
     # 解析粒度
     if granularity == "auto":
@@ -558,7 +559,7 @@ def render_overview_report(
 
     # 隐式耦合：通过 git 共变历史发现的文件关联。默认关闭，避免普通 overview 触发重 git history。
     if with_co_change:
-        co_change_lines = _render_co_change_section(engine)
+        co_change_lines = _render_co_change_section(engine, co_change_days=co_change_days)
         if co_change_lines:
             lines.extend(co_change_lines)
 
@@ -802,9 +803,13 @@ def render_query_report(
         for sym in ranked[:5]:
             if symbols_shown >= max_symbols:
                 break
+            range_str = ""
+            sym_end = sym.get("end_line", sym["line"])
+            if (sym_end - sym["line"]) > 100:
+                range_str = f" (L{sym['line']}-L{sym_end})"
             role_hint = classify_file_role(m.path, engine.graph)
             lines.append(
-                f"| `{sym['name']}` | `{m.path}` | {sym['line']} | {role_hint} |"
+                f"| `{sym['name']}`{range_str} | `{m.path}` | {sym['line']} | {role_hint} |"
             )
             symbols_shown += 1
     lines.append("")
@@ -899,7 +904,14 @@ def _rank_symbols_for_file(
         key=lambda s: (-s.pagerank, s.line),
     )
     return [
-        {"name": s.name, "kind": s.kind, "line": s.line, "pagerank": s.pagerank}
+        {
+            "name": s.name,
+            "kind": s.kind,
+            "line": s.line,
+            "end_line": s.end_line,
+            "pagerank": s.pagerank,
+            "id": s.id,
+        }
         for s in ranked
     ]
 

@@ -1,6 +1,6 @@
 {
   "name": "@gjczone/repomap-windows-x64",
-  "version": "2.4.2",
+  "version": "2.4.6",
   "description": "RepoMap CLI binary for Windows x64 — repository intelligence for AI agents",
   "bin": {
     "repomap": "repomap.exe"
