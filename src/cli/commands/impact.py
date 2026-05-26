@@ -382,5 +382,3 @@ def _affected_severity(file_path: str, engine: RepoMapEngine) -> int:
                 if src_sym and src_sym.file != file_path:
                     total += 1
     return total
-
-
