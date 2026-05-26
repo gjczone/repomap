@@ -36,6 +36,7 @@ build = [
 [dependency-groups]
 dev = [
     "mypy>=1.8.0",
+    "pyright>=1.1.400",
     "pytest>=8.0.0",
     "pyinstaller>=6.0.0",
     "ruff>=0.8.0",
