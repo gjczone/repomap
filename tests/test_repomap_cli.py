@@ -643,18 +643,18 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertTrue(captured[0]["with_lsp"])
         self.assertFalse(captured[1]["with_lsp"])
 
-    def test_python_check_runs_mypy_and_ruff_by_default(self) -> None:
+    def test_python_check_runs_pyright_and_ruff_by_default(self) -> None:
         from src.check import DiagnosticResult, DiagnosticRunner
 
         with tempfile.TemporaryDirectory() as project_root:
             runner = DiagnosticRunner(Path(project_root))
             with patch.object(
                 runner,
-                "_run_mypy",
+                "_run_pyright",
                 return_value=DiagnosticResult(
-                    tool="mypy", command="mypy", exit_code=0, duration_ms=1
+                    tool="pyright", command="pyright", exit_code=0, duration_ms=1
                 ),
-            ) as mypy_mock:
+            ) as pyright_mock:
                 with patch.object(
                     runner,
                     "_run_ruff",
@@ -664,8 +664,8 @@ class RepoMapCliTests(unittest.TestCase):
                 ) as ruff_mock:
                     results = runner.run_all(["python"])
 
-        self.assertEqual([result.tool for result in results], ["mypy", "ruff"])
-        mypy_mock.assert_called_once()
+        self.assertEqual([result.tool for result in results], ["pyright", "ruff"])
+        pyright_mock.assert_called_once()
         ruff_mock.assert_called_once()
 
     def test_invalid_project_path_fails_clearly(self) -> None:
