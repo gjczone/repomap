@@ -4,7 +4,7 @@ description: "MUST invoke this skill for ANY task that touches code — before r
 ---
 # repomap
 
-`repomap` is a CLI binary on `PATH` that builds a codebase graph (tree-sitter AST → symbols → dependencies → PageRank) and answers structural questions faster than grep + raw reads. It does not run or replace tests, linters, or compilers — it tells you *where* to look and *what depends on what*.
+`repomap` is a CLI binary on `PATH` that builds a codebase graph (tree-sitter AST → symbols → dependencies → PageRank) and answers structural questions faster than grep + raw reads. It also runs linters, compilers, and LSP diagnostics through `check` and `verify`. It does not replace project tests — run those separately.
 
 `--project` is a **required** argument for every command (except `build-binary`). Always pass it as an absolute path. Do not rely on the subprocess cwd — it may be the user's home directory.
 
