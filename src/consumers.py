@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -137,7 +137,6 @@ def find_route_consumers(
 
     Returns dict keyed by route identity string "METHOD /path".
     """
-    from .topic import is_test_like_file
 
     consumers: dict[str, list[RouteConsumer]] = {}
 

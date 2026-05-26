@@ -23,7 +23,7 @@ from . import Edge, RepoGraph, Symbol, call_reference_parts
 from .topic import is_test_like_file
 
 if TYPE_CHECKING:
-    from .core import RepoMapEngine
+    pass
 
 logger = logging.getLogger("repomap")
 

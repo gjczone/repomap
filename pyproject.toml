@@ -50,3 +50,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.ruff.lint]
+# `l` is used as a loop variable in list comprehensions for line parsing
+# (e.g. `[l for l in lines if l]`). This is a well-established pattern.
+ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# F841: query_lower is intentionally set for potential future use in search
+"src/search.py" = ["F841"]

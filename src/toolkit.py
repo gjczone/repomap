@@ -42,7 +42,6 @@ from . import (
     json_dump,
     json_dumps,
     json_load,
-    json_loads,
     serialize_edge,
     serialize_symbol,
 )

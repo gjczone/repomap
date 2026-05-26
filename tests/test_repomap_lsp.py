@@ -1,10 +1,6 @@
-import json
-import os
 import stat
 import sys
 import tempfile
-import unittest
-import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
