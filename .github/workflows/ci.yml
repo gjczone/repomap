@@ -22,9 +22,8 @@ jobs:
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@v5
-           with:
-              enable-cache: true
+         - name: Install uv
+           run: pip install uv
 
          - name: Install dependencies
            run: uv sync --all-extras --group dev
@@ -44,9 +43,8 @@ jobs:
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@v5
-           with:
-              enable-cache: true
+         - name: Install uv
+           run: pip install uv
 
          - name: Install dependencies
            run: uv sync --all-extras --group dev
@@ -63,11 +61,10 @@ jobs:
            with:
               persist-credentials: false
 
-         - uses: astral-sh/setup-uv@v5
-           with:
-              enable-cache: true
+         - name: Install uv
+           run: pip install uv
 
-         - name: Install pip-audit
+         - name: Install dependencies
            run: |
               uv sync --all-extras
               uv pip install pip-audit
