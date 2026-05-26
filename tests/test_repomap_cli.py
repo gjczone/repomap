@@ -1019,19 +1019,17 @@ class RepoMapCliTests(unittest.TestCase):
 
             with patch.object(src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]) as co_change_mock:
                 with patch.object(src.ai, "_render_co_change_section", side_effect=fake_co_change_section):
-                    # Co-change is now enabled by default
+                    # Default: co-change is disabled (opt-in)
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                         default_code = main(["overview", "--project", project_root])
                     self.assertEqual(default_code, 0)
-                    self.assertGreater(co_change_mock.call_count, 0)
+                    self.assertEqual(co_change_mock.call_count, 0)
 
-                    call_count_after_default = co_change_mock.call_count
-
-                    # --no-co-change should suppress it
+                    # --with-co-change should enable it
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                        disabled_code = main(["overview", "--project", project_root, "--no-co-change"])
-                    self.assertEqual(disabled_code, 0)
-                    self.assertEqual(co_change_mock.call_count, call_count_after_default)
+                        enabled_code = main(["overview", "--project", project_root, "--with-co-change"])
+                    self.assertEqual(enabled_code, 0)
+                    self.assertGreater(co_change_mock.call_count, 0)
 
     def test_overview_json_returns_machine_readable_summary(self) -> None:
         from src.cli import main
