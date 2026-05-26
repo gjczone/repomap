@@ -80,15 +80,12 @@ jobs:
            run: |
               cd npm/platforms/${{ matrix.platform }}
               npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
-              npm publish --access public 2>&1 | tee /tmp/npm-publish.log
-              EXIT_CODE=${PIPESTATUS[0]}
-              if [ $EXIT_CODE -ne 0 ]; then
-                if grep -qE "E409|already exists|previously published|E403" /tmp/npm-publish.log; then
-                  echo "npm publish skipped: version already published"
-                else
-                  echo "npm publish failed with exit code $EXIT_CODE"
-                  exit $EXIT_CODE
-                fi
+              PACKAGE_NAME=$(node -e "console.log(require('./package.json').name)")
+              PACKAGE_VERSION=$(node -e "console.log(require('./package.json').version)")
+              if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+                echo "npm publish skipped: $PACKAGE_NAME@$PACKAGE_VERSION already exists"
+              else
+                npm publish --access public
               fi
 
          - name: Sync and publish wrapper package (linux only)
@@ -99,13 +96,10 @@ jobs:
               cd npm/wrapper
               node -e "const p=require('./package.json');p.version='$VERSION';const deps=p.optionalDependencies||{};for(const k of Object.keys(deps))deps[k]='$VERSION';p.optionalDependencies=deps;require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
               npm set "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}"
-              npm publish 2>&1 | tee /tmp/npm-publish-wrapper.log
-              EXIT_CODE=${PIPESTATUS[0]}
-              if [ $EXIT_CODE -ne 0 ]; then
-                if grep -q "E409\|already exists\|previously published\|E403.*publish over" /tmp/npm-publish-wrapper.log; then
-                  echo "npm publish: version already exists, skipping"
-                else
-                  echo "npm publish failed with exit code $EXIT_CODE"
-                  exit $EXIT_CODE
-                fi
+              PACKAGE_NAME=$(node -e "console.log(require('./package.json').name)")
+              PACKAGE_VERSION=$(node -e "console.log(require('./package.json').version)")
+              if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+                echo "npm publish skipped: $PACKAGE_NAME@$PACKAGE_VERSION already exists"
+              else
+                npm publish
               fi
