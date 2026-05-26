@@ -179,13 +179,16 @@ class RepoMapEngineTests(unittest.TestCase):
                 "def vendored():\n    return 1\n",
             )
 
-            engine = RepoMapEngine(project_root)
-            engine.scan()
+            # 强制 rglob fallback（模拟 rg 不可用），确保测试确定性地覆盖 skip_dirs 逻辑
+            with patch("subprocess.run", side_effect=FileNotFoundError):
+                engine = RepoMapEngine(project_root)
+                engine.scan()
 
             symbol_files = {symbol.file for symbol in engine.graph.symbols.values()}
             self.assertIn("app.py", symbol_files)
             self.assertNotIn(".venv/lib/python3.11/site-packages/pkg.py", symbol_files)
-            self.assertEqual(engine.scan_stats.filtered_path_files, 1)
+            # .venv 在 rglob fallback 的 skip_dirs 中直接跳过，不再计入 filtered_path_files
+            self.assertEqual(engine.scan_stats.filtered_path_files, 0)
 
     def test_lockfiles_are_skipped_from_symbol_scan(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:
@@ -331,12 +334,12 @@ class RepoMapEngineTests(unittest.TestCase):
 
             with patch.dict(
                 os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False
-            ):
+            ), patch("subprocess.run", side_effect=FileNotFoundError):
                 engine = RepoMapEngine(project_root)
                 engine.scan()
 
             summary = "\n".join(engine._scan_summary_lines())
-            self.assertIn("- Filtered paths: 1", summary)
+            # .venv 在 rglob fallback 的 skip_dirs 中直接跳过，不再计入 Filtered paths
             self.assertIn("- Filtered large files: 1", summary)
 
     def test_cache_save_then_immediate_diff_is_stable(self) -> None:
