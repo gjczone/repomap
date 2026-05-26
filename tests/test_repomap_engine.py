@@ -332,9 +332,10 @@ class RepoMapEngineTests(unittest.TestCase):
                 "def vendored():\n    return 1\n",
             )
 
-            with patch.dict(
-                os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False
-            ), patch("subprocess.run", side_effect=FileNotFoundError):
+            with (
+                patch.dict(os.environ, {"REPOMAP_MAX_FILE_BYTES": "1024"}, clear=False),
+                patch("subprocess.run", side_effect=FileNotFoundError),
+            ):
                 engine = RepoMapEngine(project_root)
                 engine.scan()
 
