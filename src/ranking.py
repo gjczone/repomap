@@ -38,6 +38,7 @@ class GraphAnalyzer:
 
     def __init__(self, graph: RepoGraph) -> None:
         self.graph = graph
+        self._file_analysis_cache: dict[str, dict[str, Any]] | None = None
 
     def calculate_pagerank(self, damping: float = 0.85, max_iter: int = 50,
                           tol: float = 1e-6) -> None:
@@ -255,6 +256,8 @@ class GraphAnalyzer:
 
     def file_analysis(self) -> dict[str, dict[str, Any]]:
         """分析每个文件的复杂度和连接性。"""
+        if self._file_analysis_cache is not None:
+            return self._file_analysis_cache
         analysis: dict[str, dict[str, Any]] = {}
 
         # 初始化文件分析数据
@@ -374,6 +377,7 @@ class GraphAnalyzer:
             if data["is_test_file"]:
                 data["score"] *= 0.55
 
+        self._file_analysis_cache = analysis
         return analysis
 
     def module_summary(self, limit: int = 8) -> list[dict[str, Any]]:

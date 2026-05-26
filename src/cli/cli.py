@@ -44,8 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     overview_parser.add_argument("--json", action="store_true", help="Print raw JSON output.")
     overview_parser.add_argument("--with-heat", action="store_true", default=False,
                                 help="Mark files changed in the last 30 days with [HOT].")
-    overview_parser.add_argument("--no-co-change", action="store_true", default=False,
-                                help="Skip Git co-change coupling section.")
+    overview_parser.add_argument("--with-co-change", action="store_true", default=False,
+                                help="Enable Git co-change coupling analysis (expensive: reads 90d git history).")
     overview_parser.add_argument("--granularity", choices=["full", "medium", "compact", "auto"],
                                 default="auto",
                                 help="Report granularity (default: auto, based on project size).")
@@ -259,7 +259,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "overview":
         return run_overview(args.project, args.max_files, args.max_chars, args.json,
                            with_heat=getattr(args, "with_heat", False),
-                           with_co_change=not getattr(args, "no_co_change", False),
+                           with_co_change=getattr(args, "with_co_change", False),
                            granularity=getattr(args, "granularity", "auto"))
     if command == "call-chain":
         return run_call_chain(
