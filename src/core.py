@@ -247,8 +247,8 @@ class RepoMapEngine:
         self.project_root = Path(project_root).resolve()
         self.ts = TreeSitterAdapter()
         self.graph = RepoGraph()
-        # file -> mtime 增量缓存（只存 mtime，不存 tree 对象以避免内存泄漏）
-        self._cache: dict[str, float] = {}
+        # file -> (mtime, size) 增量缓存（存 mtime+size，不存 tree 对象以避免内存泄漏）
+        self._cache: dict[str, tuple[float, int]] = {}
         self.scan_state = "idle"
         self.max_file_bytes = self._read_max_file_bytes()
         self.scan_stats = ScanStats()
@@ -364,7 +364,10 @@ class RepoMapEngine:
             self._build_edges()
             self._analyzer = GraphAnalyzer(self.graph)
             self._calculate_pagerank()
-            self.scan_state = "scanned"
+            if self.scan_stats.timeout_triggered:
+                self.scan_state = "partial"
+            else:
+                self.scan_state = "scanned"
         except Exception as e:
             logger.error(f"Scan pipeline fatal error: {type(e).__name__}: {e}")
             self.scan_state = "invalid"
@@ -373,7 +376,7 @@ class RepoMapEngine:
             self.scan_stats.scan_duration_ms = int((time.time() - start_time) * 1000)
 
         # 全量扫描后保存增量基线
-        if not self._inc_cache_loaded and self.scan_state == "scanned":
+        if not self._inc_cache_loaded and self.scan_state in ("scanned", "partial"):
             try:
                 from .toolkit import save_incremental_cache
 
@@ -715,11 +718,15 @@ class RepoMapEngine:
             logger.debug(f"Skip oversized file: {file}")
             return
 
-        mtime = path.stat().st_mtime
-        cached_mtime = self._cache.get(file)
-        if cached_mtime is not None and _mtime_matches(cached_mtime, mtime):
-            self.scan_stats.skipped_files += 1
-            return  # 未变更，复用缓存
+        stat_result = path.stat()
+        mtime = stat_result.st_mtime
+        file_size = stat_result.st_size
+        cached = self._cache.get(file)
+        if cached is not None:
+            cached_mtime, cached_size = cached
+            if _mtime_matches(cached_mtime, mtime) and cached_size == file_size:
+                self.scan_stats.skipped_files += 1
+                return
 
         ext = Path(file).suffix.lower()
         lang = EXT_TO_LANG.get(ext)
@@ -782,7 +789,7 @@ class RepoMapEngine:
 
         # 立即释放 tree 对象以避免内存泄漏，只缓存 mtime
         del tree
-        self._cache[file] = mtime
+        self._cache[file] = (mtime, file_size)
         self.scan_stats.processed_files += 1
 
     def _mark_exported_symbols(self, file: str) -> None:

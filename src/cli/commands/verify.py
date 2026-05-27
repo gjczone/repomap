@@ -14,6 +14,7 @@ from ...core import RepoMapEngine
 from ...git_backend import GitBackend
 from ..handlers import (
     CLI_NAME,
+    EXIT_NO_RESULTS,
     _resolve_project,
     _scan_engine,
     _scan_stats_payload,
@@ -653,7 +654,11 @@ def run_verify(
         if changed_files and not as_json:
             _print_missed_files_section(engine, changed_files)
 
-        return 1 if status == "failed" else 0
+        if status == "failed":
+            return 1
+        if status == "warning":
+            return EXIT_NO_RESULTS
+        return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
         return 1
@@ -945,7 +950,14 @@ def run_check(
             lsp_max_files=lsp_max_files,
         )
         print(_format_check_report(result, max_issues))
-        return 0 if result.get("status") in {"passed", "warning", "unknown"} else 1
+        status = result.get("status")
+        if status == "passed":
+            return 0
+        if status == "warning":
+            return 0
+        if status == "unknown":
+            return EXIT_NO_RESULTS
+        return 1
     except Exception as exc:
         print(f"[{CLI_NAME}] check failed: {exc}", file=sys.stderr)
         return 1

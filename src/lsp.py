@@ -523,7 +523,8 @@ class StdioLspClient:
         self._reader.start()
 
     def _read_loop(self) -> None:
-        assert self.process is not None and self.process.stdout is not None
+        if self.process is None or self.process.stdout is None:
+            return
         while not self._stop_reader:
             try:
                 message = _read_lsp_message(self.process.stdout)
@@ -544,6 +545,24 @@ class StdioLspClient:
     def request(
         self, method: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        if self.process is not None and self.process.poll() is not None:
+            exit_code = self.process.poll()
+            stderr_tail = ""
+            try:
+                if self.process.stderr is not None:
+                    remaining = self.process.stderr.read()
+                    if remaining:
+                        stderr_tail = remaining.decode(
+                            "utf-8", errors="replace"
+                        ).strip()[-200:]
+            except Exception:
+                pass
+            detail = f"exit code {exit_code}"
+            if stderr_tail:
+                detail += f", stderr: {stderr_tail}"
+            raise RuntimeError(
+                f"LSP server {self.command[0]!r} already exited before request '{method}' ({detail})"
+            )
         request_id = self._next_id
         self._next_id += 1
         self._send(
@@ -595,7 +614,8 @@ class StdioLspClient:
         raise TimeoutError(f"LSP request timed out: {method}")
 
     def _send(self, payload: dict[str, Any]) -> None:
-        assert self.process is not None and self.process.stdin is not None
+        if self.process is None or self.process.stdin is None:
+            raise RuntimeError("LSP client not initialized: process or stdin is None")
         self.process.stdin.write(_json_rpc_frame(payload))
         self.process.stdin.flush()
 
