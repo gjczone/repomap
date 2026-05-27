@@ -248,39 +248,35 @@ QUERIES: dict[str, dict[str, str]] = {
         """,
     },
     "kotlin": {
-        "function": """
-            (function_declaration name: (simple_identifier) @name) @definition.function
-        """,
-        "class": """
-            (class_declaration name: (type_identifier) @name) @definition.class
-            (object_declaration name: (type_identifier) @name) @definition.object
-            (interface_declaration name: (type_identifier) @name) @definition.interface
-        """,
-        "import": """
-            (import_header (identifier) @name)
-        """,
-        "call": """
-            (call_expression (simple_identifier) @name) @reference.call
-            (call_expression (navigation_expression (simple_identifier) @name)) @reference.call
-        """,
+        "function": (
+            "(function_declaration name: (identifier) @name) @definition.function"
+        ),
+        "class": (
+            "(class_declaration name: (identifier) @name) @definition.class\n"
+            "(object_declaration name: (identifier) @name) @definition.class\n"
+            "(class_declaration name: (identifier) @name) @definition.class"
+        ),
+        "import": "(import (qualified_identifier) @name)",
+        "call": (
+            "(call_expression (identifier) @name) @reference.call\n"
+            "(call_expression (navigation_expression (identifier) @name)) @reference.call"
+        ),
     },
     "swift": {
-        "function": """
-            (function_declaration name: (simple_identifier) @name) @definition.function
-        """,
-        "class": """
-            (class_declaration name: (type_identifier) @name) @definition.class
-            (struct_declaration name: (type_identifier) @name) @definition.struct
-            (enum_declaration name: (type_identifier) @name) @definition.enum
-            (protocol_declaration name: (type_identifier) @name) @definition.protocol
-        """,
-        "import": """
-            (import_declaration (identifier) @name)
-        """,
-        "call": """
-            (call_expression (simple_identifier) @name) @reference.call
-            (call_expression (navigation_expression (simple_identifier) @name)) @reference.call
-        """,
+        "function": (
+            "(function_declaration name: (simple_identifier) @name) @definition.function"
+        ),
+        "class": (
+            "(class_declaration name: (type_identifier) @name) @definition.class\n"
+            "(class_declaration name: (type_identifier) @name) @definition.struct\n"
+            "(class_declaration name: (type_identifier) @name) @definition.enum\n"
+            "(protocol_declaration name: (type_identifier) @name) @definition.protocol"
+        ),
+        "import": "(import_declaration (identifier) @name)",
+        "call": (
+            "(call_expression (simple_identifier) @name) @reference.call\n"
+            "(call_expression (navigation_expression (simple_identifier) @name)) @reference.call"
+        ),
     },
     "cpp": {
         "function": """
