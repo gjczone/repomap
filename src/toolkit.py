@@ -285,9 +285,11 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
     files: dict[str, dict] = {}
     for file_path in engine.graph.file_symbols:
         full = engine.project_root / file_path
-        mtime = full.stat().st_mtime if full.exists() else 0.0
+        full_stat = full.stat()
+        mtime = full_stat.st_mtime
         files[file_path] = {
             "mtime": mtime,
+            "size": full_stat.st_size,
             "symbols_json": [
                 serialize_symbol(engine.graph.symbols[sid])
                 for sid in engine.graph.file_symbols[file_path]
@@ -379,6 +381,7 @@ def load_incremental_cache(project_path: str) -> IncrementalCache | None:
         for fp, entry_data in data.get("files", {}).items():
             files[fp] = FileCacheEntry(
                 mtime=entry_data.get("mtime", 0.0),
+                size=entry_data.get("size", 0),
                 symbols_json=entry_data.get("symbols_json", []),
                 imports=entry_data.get("imports", []),
                 import_bindings_json=entry_data.get("import_bindings_json", []),
@@ -409,6 +412,7 @@ def _inc_cache_to_dict(cache: IncrementalCache) -> dict:
         "files": {
             fp: {
                 "mtime": entry.mtime,
+                "size": entry.size,
                 "symbols_json": entry.symbols_json,
                 "imports": entry.imports,
                 "import_bindings_json": entry.import_bindings_json,

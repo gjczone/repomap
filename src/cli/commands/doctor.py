@@ -126,19 +126,39 @@ def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> i
     adapter = TreeSitterAdapter()
     parsers = sorted(adapter.parsers)
     pyinstaller_spec = importlib_util.find_spec("PyInstaller")
-    if parsers:
-        print(f"tree-sitter parsers: {', '.join(parsers)}")
-    else:
+
+    # 收集诊断信息
+    result: dict = {
+        "parsers": parsers,
+        "tsx_available": "tsx" in adapter.parsers,
+        "tree_sitter_origin": _module_origin("tree_sitter"),
+        "lsp_client": "available",
+        "pyinstaller": pyinstaller_spec is not None,
+    }
+
+    if not parsers:
+        if as_json:
+            from ..handlers import json_envelope
+
+            result["error"] = "tree-sitter bindings are missing"
+            print(json_envelope("doctor", project_root, result, status="error"))
+            return 1
         print("tree-sitter bindings are missing", file=sys.stderr)
         return 1
     if "tsx" not in adapter.parsers:
+        if as_json:
+            from ..handlers import json_envelope
+
+            result["error"] = "TSX parser unavailable"
+            print(json_envelope("doctor", project_root, result, status="error"))
+            return 1
         print("TSX parser: unavailable", file=sys.stderr)
         return 1
+
     repomap_cli_origin = _module_origin("repomap_cli")
     if repomap_cli_origin != "not found":
-        print(f"repomap_cli: {repomap_cli_origin} (dev only)")
-    print(f"tree_sitter: {_module_origin('tree_sitter')}")
-    print("LSP client: available")
+        result["repomap_cli_origin"] = repomap_cli_origin
+    result["repomap_version"] = _module_origin("repomap_cli")
 
     if show_lsp:
         from ...lsp import detect_lsp_servers
@@ -147,16 +167,47 @@ def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> i
         detections = detect_lsp_servers(project_root)
         available = [d for d in detections if d.status == "available"]
         missing = [d for d in detections if d.status != "available"]
+        result["lsp_servers"] = [
+            {"language": d.language, "server": d.server_name, "source": d.source}
+            for d in available
+        ]
+        result["lsp_missing"] = [
+            {
+                "language": d.language,
+                "server": d.server_name,
+                "install": LSP_INSTALL_STRATEGIES.get(d.language, {}).get(
+                    "cmd", "manual"
+                ),
+            }
+            for d in missing
+        ]
+    else:
+        result["lsp_hint"] = "run `repomap doctor --lsp` to check"
+
+    if as_json:
+        from ..handlers import json_envelope
+
+        print(json_envelope("doctor", project_root, result))
+        return 0
+
+    # 文本输出（原有逻辑）
+    if parsers:
+        print(f"tree-sitter parsers: {', '.join(parsers)}")
+    if repomap_cli_origin != "not found":
+        print(f"repomap_cli: {repomap_cli_origin} (dev only)")
+    print(f"tree_sitter: {_module_origin('tree_sitter')}")
+    print("LSP client: available")
+
+    if show_lsp:
+        available = result.get("lsp_servers", [])
+        missing = result.get("lsp_missing", [])
         print(f"\nLSP servers (project: {project_root}):")
         for d in available:
-            print(f"  {d.language}: {d.server_name} ({d.source})")
+            print(f"  {d['language']}: {d['server']} ({d['source']})")
         if missing:
             print(f"\nMissing ({len(missing)}):")
             for d in missing:
-                strategy = LSP_INSTALL_STRATEGIES.get(d.language, {})
-                print(
-                    f"  {d.language}: {d.server_name} — install: {strategy.get('cmd', 'manual')}"
-                )
+                print(f"  {d['language']}: {d['server']} — install: {d['install']}")
         else:
             print("\nAll LSP servers available.")
         print("\nTip: run `repomap lsp setup --dry-run` to preview auto-install.")

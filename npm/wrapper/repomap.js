@@ -31,6 +31,12 @@ if (!binPath) {
 
 const child = spawn(binPath, process.argv.slice(2), { stdio: 'inherit' });
 
+// Handle spawn failure (binary not found, no execute permission, etc.)
+child.on('error', (err) => {
+   console.error('repomap: failed to start binary:', err.message);
+   process.exit(1);
+});
+
 // Forward signals to child process so Ctrl+C works
 process.on('SIGINT', () => { child.kill('SIGINT'); });
 process.on('SIGTERM', () => { child.kill('SIGTERM'); });

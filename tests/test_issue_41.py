@@ -36,13 +36,13 @@ class TestContentLengthLimit(unittest.TestCase):
     """L3: Content-Length must have a maximum."""
 
     def test_read_lsp_message_rejects_huge_length(self):
-        from src.lsp import _MAX_CONTENT_LENGTH, _read_lsp_message
+        from src.lsp import _MAX_CONTENT_LENGTH, _MESSAGE_SKIPPED, _read_lsp_message
 
         huge_length = _MAX_CONTENT_LENGTH + 1
         header = f"Content-Length: {huge_length}\r\n\r\n"
-        stream = io.BytesIO(header.encode("ascii") + b"x" * 10)
+        stream = io.BytesIO(header.encode("ascii") + b"x" * huge_length)
         result = _read_lsp_message(stream)
-        self.assertIsNone(result)
+        self.assertIs(result, _MESSAGE_SKIPPED)
 
     def test_read_lsp_message_accepts_normal_length(self):
         from src.lsp import _read_lsp_message

@@ -779,6 +779,11 @@ def detect_file_clusters(
     if len(files) < 3:
         return {f: 0 for f in files}
 
+    # Build reverse index: symbol name → set of file paths
+    name_to_files: dict[str, set[str]] = {}
+    for sym in graph.symbols.values():
+        name_to_files.setdefault(sym.name, set()).add(sym.file)
+
     # Build undirected adjacency with edge weights
     neighbors: dict[str, dict[str, float]] = {f: {} for f in files}
     for f in files:
@@ -787,11 +792,12 @@ def detect_file_clusters(
             if imported in neighbors:
                 neighbors[f][imported] = neighbors[f].get(imported, 0) + 1.0
                 neighbors[imported][f] = neighbors[imported].get(f, 0) + 1.0
-        # Call edges
+        # Call edges — resolve function names to file paths
         for called, *_ in graph.file_calls.get(f, []):
-            if called in neighbors:
-                neighbors[f][called] = neighbors[f].get(called, 0) + 0.5
-                neighbors[called][f] = neighbors[called].get(f, 0) + 0.5
+            for target_file in name_to_files.get(called, set()):
+                if target_file in neighbors and target_file != f:
+                    neighbors[f][target_file] = neighbors[f].get(target_file, 0) + 0.5
+                    neighbors[target_file][f] = neighbors[target_file].get(f, 0) + 0.5
 
     # Initialize labels by directory structure for meaningful cluster seeds
     from pathlib import PurePosixPath

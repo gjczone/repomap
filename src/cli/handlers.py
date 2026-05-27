@@ -75,11 +75,17 @@ def json_envelope(command: str, project: str, result: dict, status: str = "ok") 
     """统一的 JSON 输出信封格式，所有 --json 输出必须使用此格式。"""
     from .. import json_dumps
 
+    # 统一 project 为绝对路径
+    try:
+        project_abs = str(Path(project).expanduser().resolve())
+    except (ValueError, OSError):
+        project_abs = str(project)
+
     return json_dumps(
         {
             "schema_version": "1.0",
             "command": command,
-            "project": str(project),
+            "project": project_abs,
             "status": status,
             "result": result,
         },
@@ -347,6 +353,9 @@ def _restore_engine_from_session_payload(
 
     for source_id, rows in payload.get("outgoing", {}).items():
         for row in rows:
+            # 验证边端点存在于符号表中，防止缓存部分损坏时创建悬空边
+            if row["source"] not in graph.symbols or row["target"] not in graph.symbols:
+                continue
             edge = Edge(
                 source=row["source"],
                 target=row["target"],
@@ -412,6 +421,18 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     cache_path = get_session_cache_path(project_root)
     if not cache_path.exists():
         return None
+    # 防止大项目 session JSON 过大导致 OOM（100MB 阈值）
+    try:
+        file_size = cache_path.stat().st_size
+        if file_size > 100 * 1024 * 1024:
+            logger.warning(
+                "Session cache too large (%d MB), skipping: %s",
+                file_size // (1024 * 1024),
+                cache_path,
+            )
+            return None
+    except OSError:
+        pass
     try:
         payload = json_loads(cache_path.read_text(encoding="utf-8"))
     except Exception:
