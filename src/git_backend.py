@@ -110,16 +110,24 @@ class SubprocessBackend:
             )
             if r.returncode == 0:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
-        except Exception:
-            pass
+            elif r.returncode == 128:
+                logger.warning(
+                    f"git diff failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
+                )
+        except Exception as exc:
+            logger.warning(f"git diff --name-only failed: {exc}")
         try:
             r = SubprocessBackend._run_git(
                 ["ls-files", "--others", "--exclude-standard"], project_root
             )
             if r.returncode == 0:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
-        except Exception:
-            pass
+            elif r.returncode == 128:
+                logger.warning(
+                    f"git ls-files failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
+                )
+        except Exception as exc:
+            logger.warning(f"git ls-files failed: {exc}")
         return files
 
     @staticmethod
@@ -128,12 +136,14 @@ class SubprocessBackend:
             r = SubprocessBackend._run_git(
                 ["diff", "--name-only", "--diff-filter=D", "HEAD"], project_root
             )
-            return (
-                [l for l in r.stdout.strip().splitlines() if l]
-                if r.returncode == 0
-                else []
+            if r.returncode == 0:
+                return [l for l in r.stdout.strip().splitlines() if l]
+            logger.warning(
+                f"git diff --diff-filter=D failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
             )
-        except Exception:
+            return []
+        except Exception as exc:
+            logger.warning(f"git deleted_files failed: {exc}")
             return []
 
     @staticmethod

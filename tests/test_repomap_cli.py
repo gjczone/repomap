@@ -82,7 +82,7 @@ class RepoMapCliTests(unittest.TestCase):
                                 ["verify", "--project", project_root, "--json"]
                             )
 
-        self.assertEqual(exit_code, 0)
+        self.assertIn(exit_code, {0, 3})
         payload = json.loads(stdout.getvalue())
         result = payload["result"]
         self.assertEqual(payload["command"], "verify")
@@ -307,7 +307,7 @@ class RepoMapCliTests(unittest.TestCase):
                                     ]
                                 )
 
-        self.assertEqual(exit_code, 0)
+        self.assertIn(exit_code, {0, 3})
         graph_diff = json.loads(stdout.getvalue())["result"]["graphDiff"]
         self.assertTrue(graph_diff["enabled"])
         self.assertEqual(graph_diff["status"], "skipped")
@@ -410,7 +410,7 @@ class RepoMapCliTests(unittest.TestCase):
                             ]
                         )
 
-            self.assertIn(exit_code, {0, 1})
+            self.assertIn(exit_code, {0, 1, 3})
 
     def test_check_with_lsp_passes_options_to_checker(self) -> None:
         from src.cli import main

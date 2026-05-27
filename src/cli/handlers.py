@@ -376,13 +376,17 @@ def _restore_engine_from_session_payload(
     engine._analyzer = type(engine._analyzer)(engine.graph)
     # 恢复路由数据
     engine.routes = [HttpRoute(**r) for r in payload.get("routes", [])]
-    # "idle" 表示扫描从未完成，丢弃；"scanned" 和 "invalid" 的数据已完整反序列化，可用
+    # "idle" 表示扫描从未完成，丢弃；"scanned"/"partial"/"invalid" 的数据已完整反序列化，可用
     if engine.scan_state == "idle":
         logger.debug("Discarding session engine with idle scan_state")
         return None
-    if engine.scan_state != "scanned":
+    if engine.scan_state not in ("scanned", "partial"):
         logger.warning(
             f"Restoring session engine with non-standard scan_state='{engine.scan_state}'"
+        )
+    elif engine.scan_state == "partial":
+        logger.info(
+            "Restoring session engine with partial scan_state (scan was interrupted by timeout)"
         )
     return engine
 
@@ -405,7 +409,7 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
 def _save_session_engine(
     project_root: str, fingerprint: str, engine: RepoMapEngine
 ) -> None:
-    if engine.scan_state != "scanned":
+    if engine.scan_state not in ("scanned", "partial"):
         return
     cache_path = get_session_cache_path(project_root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -470,8 +474,8 @@ def _select_symbol_match(
                 same_file = [m for m in matches if m.file == lsp_def.file]
                 if same_file:
                     return same_file[0], None, "lsp"
-        except Exception:
-            pass  # LSP failed, fall through to tier 2
+        except Exception as exc:
+            logger.warning(f"LSP symbol resolution failed for '{symbol}': {exc}")
 
     # Tier 2: Exact name match (tree-sitter precision)
     if not matches:

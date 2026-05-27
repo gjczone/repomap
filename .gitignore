@@ -9,3 +9,4 @@ npm/platforms/*/repomap
 npm/platforms/*/repomap.exe
 docs/
 .qoder/
+.worktrees/
