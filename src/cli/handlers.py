@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .. import json_dump, json_loads
+from .. import json_dump, json_dumps, json_loads
 from .. import (
     Edge,
     HttpRoute,
@@ -709,3 +709,100 @@ def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
     if symbol is None:
         return {"name": "?", "file": "?", "line": 0}
     return {"name": symbol.name, "file": symbol.file, "line": symbol.line}
+
+
+IMPACT_SESSION_FILENAME = "session.json"
+IMPACT_SESSION_SCHEMA_VERSION = "1.0"
+_IMPACT_SESSION_MAX_AFFECTED = 50
+_IMPACT_SESSION_MAX_TARGETS = 200
+
+
+def _project_local_session_path(project_root: str | Path) -> Path:
+    """项目本地 session 文件路径（位于 <project>/.repomap/session.json）。"""
+    return Path(project_root) / ".repomap" / IMPACT_SESSION_FILENAME
+
+
+def _validate_session_paths(project_root: str | Path, *path_lists: list[str]) -> None:
+    """校验所有路径都在项目根内，防止 path traversal。
+
+    每个 path_lists 元素都是字符串路径列表（项目相对路径）。
+    任意路径逃出项目根都抛出 ValueError。
+    """
+    resolved_root = Path(project_root).resolve()
+    for paths in path_lists:
+        for rel in paths:
+            if not isinstance(rel, str) or not rel:
+                raise ValueError(f"invalid session path: {rel!r}")
+            abs_path = (Path(project_root) / rel).resolve()
+            try:
+                abs_path.relative_to(resolved_root)
+            except ValueError as exc:
+                raise ValueError(f"session path escapes project root: {rel!r}") from exc
+
+
+def save_impact_session(
+    project_root: str | Path,
+    target_files: list[str],
+    affected_files: list[str],
+    key_symbols: list[dict[str, Any]],
+    suggested_tests: list[str],
+) -> Path:
+    """将 impact 运行结果序列化到 <project>/.repomap/session.json。
+
+    任何调用方都不应吞掉此函数的异常——写入失败说明磁盘/权限有问题，
+    应该让调用方看到并处理。返回写入的路径供日志使用。
+    """
+    _validate_session_paths(project_root, target_files, affected_files, suggested_tests)
+    # key_symbols 中每个 dict 的 "file" 字段也要校验
+    sym_files = [s.get("file", "") for s in key_symbols if isinstance(s, dict)]
+    _validate_session_paths(project_root, sym_files)
+
+    from datetime import datetime, timezone
+
+    payload = {
+        "schema_version": IMPACT_SESSION_SCHEMA_VERSION,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "project": str(Path(project_root).resolve()),
+        "impact": {
+            "target_files": list(target_files)[:_IMPACT_SESSION_MAX_TARGETS],
+            "affected_files": list(affected_files)[:_IMPACT_SESSION_MAX_AFFECTED],
+            "key_symbols": list(key_symbols)[:50],
+            "suggested_tests": list(suggested_tests)[:20],
+        },
+    }
+    session_path = _project_local_session_path(project_root)
+    session_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = session_path.with_suffix(session_path.suffix + ".tmp")
+    tmp_path.write_text(
+        json_dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    tmp_path.replace(session_path)
+    return session_path
+
+
+def load_impact_session(project_root: str | Path) -> dict[str, Any] | None:
+    """读取并校验 <project>/.repomap/session.json。
+
+    返回 None 的情况：文件不存在、读取失败、schema_version 不匹配、
+    结构字段缺失。调用方对 None 应视为 "无 session"，不影响自身主流程。
+    """
+    session_path = _project_local_session_path(project_root)
+    if not session_path.exists():
+        return None
+    try:
+        raw = session_path.read_text(encoding="utf-8", errors="replace")
+        payload = json_loads(raw)
+    except (OSError, ValueError) as exc:
+        logger.debug("Failed to read impact session: %s", exc)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema_version") != IMPACT_SESSION_SCHEMA_VERSION:
+        return None
+    impact = payload.get("impact")
+    if not isinstance(impact, dict):
+        return None
+    for key in ("target_files", "affected_files", "key_symbols", "suggested_tests"):
+        if not isinstance(impact.get(key), list):
+            return None
+    return payload
