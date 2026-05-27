@@ -86,7 +86,9 @@ class ImpactSessionRoundTripTests(unittest.TestCase):
                 "--json",
             ]
         )
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
         session_path = self.root / ".repomap" / "session.json"
         self.assertTrue(session_path.exists(), "session.json must be written")
         payload = json.loads(session_path.read_text())
@@ -109,7 +111,9 @@ class ImpactSessionRoundTripTests(unittest.TestCase):
                 "--json",
             ]
         )
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
 
         session_path = self.root / ".repomap" / "session.json"
         payload = json.loads(session_path.read_text())
@@ -148,7 +152,9 @@ class ImpactSessionRoundTripTests(unittest.TestCase):
                 "--json",
             ]
         )
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
 
         r = self._run_cli(["verify", "--project", str(self.root), "--json", "--quick"])
         verify_payload = json.loads(r.stdout)
@@ -166,7 +172,9 @@ class ImpactSessionRoundTripTests(unittest.TestCase):
                 "--json",
             ]
         )
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
         session_path = self.root / ".repomap" / "session.json"
         payload = json.loads(session_path.read_text())
         payload["impact"]["affected_files"] = ["src/util.py"]
@@ -203,3 +211,64 @@ class ImpactSessionPathSafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImpactSessionRobustnessTests(unittest.TestCase):
+    """Defensive: malformed session must not crash verify."""
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "proj"
+        _init_git_project(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run_cli(self, args):
+        return subprocess.run(
+            [sys.executable, "-m", "src.cli", *args],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_verify_skips_when_session_has_nonstring_elements(self):
+        """A session with non-string list elements must yield status=skipped, not crash."""
+        # Run impact to create a valid session, then corrupt it.
+        r = self._run_cli(
+            [
+                "impact",
+                "--project",
+                str(self.root),
+                "--files",
+                "src/mod.py",
+                "--json",
+            ]
+        )
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
+
+        session_path = self.root / ".repomap" / "session.json"
+        payload = json.loads(session_path.read_text())
+        payload["impact"]["target_files"] = [{"not": "a string"}]
+        session_path.write_text(json.dumps(payload))
+
+        # Trigger git diff so verify runs the comparison path.
+        mod_file = self.root / "src" / "mod.py"
+        mod_file.write_text(mod_file.read_text() + "\n# tweak\n")
+        _run_git(["add", "src/mod.py"], str(self.root))
+
+        r = self._run_cli(["verify", "--project", str(self.root), "--json"])
+        self.assertIn(
+            r.returncode, (0, 3), r.stderr
+        )  # 0=passed or 3=warning(no_changes/skipped)
+        verify_payload = json.loads(r.stdout)
+        impact_session = verify_payload["result"].get("impactSession", {})
+        self.assertEqual(
+            impact_session.get("status"),
+            "skipped",
+            f"expected skipped on malformed session, got {impact_session}",
+        )

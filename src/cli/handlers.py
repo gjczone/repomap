@@ -715,6 +715,7 @@ IMPACT_SESSION_FILENAME = "session.json"
 IMPACT_SESSION_SCHEMA_VERSION = "1.0"
 _IMPACT_SESSION_MAX_AFFECTED = 50
 _IMPACT_SESSION_MAX_TARGETS = 200
+_IMPACT_SESSION_MAX_BYTES = 1024 * 1024
 
 
 def _project_local_session_path(project_root: str | Path) -> Path:
@@ -772,11 +773,27 @@ def save_impact_session(
     }
     session_path = _project_local_session_path(project_root)
     session_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = session_path.with_suffix(session_path.suffix + ".tmp")
-    tmp_path.write_text(
-        json_dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    tmp_path.replace(session_path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(session_path.parent),
+            prefix="session.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(json_dumps(payload, ensure_ascii=False, indent=2))
+            tmp_path = Path(handle.name)
+        tmp_path.replace(session_path)
+    except Exception:
+        if tmp_path is not None:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
+        raise
     return session_path
 
 
@@ -790,6 +807,18 @@ def load_impact_session(project_root: str | Path) -> dict[str, Any] | None:
     if not session_path.exists():
         return None
     try:
+        size = session_path.stat().st_size
+    except OSError as exc:
+        logger.debug("Failed to stat impact session: %s", exc)
+        return None
+    if size > _IMPACT_SESSION_MAX_BYTES:
+        logger.debug(
+            "Impact session file too large (%d bytes, max %d), skipping",
+            size,
+            _IMPACT_SESSION_MAX_BYTES,
+        )
+        return None
+    try:
         raw = session_path.read_text(encoding="utf-8", errors="replace")
         payload = json_loads(raw)
     except (OSError, ValueError) as exc:
@@ -797,12 +826,22 @@ def load_impact_session(project_root: str | Path) -> dict[str, Any] | None:
         return None
     if not isinstance(payload, dict):
         return None
-    if payload.get("schema_version") != IMPACT_SESSION_SCHEMA_VERSION:
+    got_version = payload.get("schema_version")
+    if got_version != IMPACT_SESSION_SCHEMA_VERSION:
+        logger.debug(
+            "Impact session schema mismatch: expected %s, got %r",
+            IMPACT_SESSION_SCHEMA_VERSION,
+            got_version,
+        )
         return None
     impact = payload.get("impact")
     if not isinstance(impact, dict):
         return None
     for key in ("target_files", "affected_files", "key_symbols", "suggested_tests"):
-        if not isinstance(impact.get(key), list):
+        val = impact.get(key)
+        if not isinstance(val, list):
+            return None
+        if key != "key_symbols" and not all(isinstance(x, str) for x in val):
+            logger.debug("Impact session %s contains non-string element", key)
             return None
     return payload

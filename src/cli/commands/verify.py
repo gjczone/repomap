@@ -478,7 +478,9 @@ def _overall_verify_status(
     return "passed"
 
 
-def _verify_impact_session_payload(project_root, changed_files):
+def _verify_impact_session_payload(
+    project_root: str | Path, changed_files: list[str]
+) -> dict[str, Any]:
     """对比 impact session 与 git diff，返回比对结果字典。
 
     返回结构：
@@ -488,32 +490,53 @@ def _verify_impact_session_payload(project_root, changed_files):
       coveredFiles: list[str]    — git diff 中且 impact 预期覆盖的文件
       sessionAgeSeconds: int | None
       reason: str | None         — 仅在 skipped 时给出原因
+
+    任何内部异常（包括 session 文件被篡改导致的 set/list 构造失败）都降级为
+    status=skipped，绝不让补充性校验拖垮 verify 主流程。
     """
     from datetime import datetime, timezone
 
-    session = load_impact_session(project_root)
-    if session is None:
+    def _skipped(reason: str) -> dict[str, Any]:
         return {
             "status": "skipped",
             "missedFiles": [],
             "unexpectedFiles": [],
             "coveredFiles": [],
             "sessionAgeSeconds": None,
-            "reason": "no .repomap/session.json or unreadable/outdated schema",
+            "reason": reason,
         }
 
-    age_seconds = None
+    try:
+        session = load_impact_session(project_root)
+    except Exception as exc:
+        return _skipped(f"impact session load failed: {exc}")
+    if session is None:
+        return _skipped("no .repomap/session.json or unreadable/outdated schema")
+
+    age_seconds: int | None = None
     created_at = session.get("created_at")
     if isinstance(created_at, str):
         try:
-            created_dt = datetime.fromisoformat(created_at)
-            age_seconds = int((datetime.now(timezone.utc) - created_dt).total_seconds())
+            normalized = created_at
+            if normalized.endswith("Z"):
+                normalized = normalized[:-1] + "+00:00"
+            created_dt = datetime.fromisoformat(normalized)
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            age_seconds = max(
+                0,
+                int((datetime.now(timezone.utc) - created_dt).total_seconds()),
+            )
         except (ValueError, TypeError):
             age_seconds = None
 
-    impact = session.get("impact", {})
-    target_files = set(impact.get("target_files", []))
-    affected_files = set(impact.get("affected_files", []))
+    try:
+        impact = session.get("impact") or {}
+        target_files = set(impact.get("target_files", []))
+        affected_files = set(impact.get("affected_files", []))
+    except TypeError as exc:
+        return _skipped(f"impact session element type invalid: {exc}")
+
     expected = target_files | affected_files
     changed_set = set(changed_files)
 

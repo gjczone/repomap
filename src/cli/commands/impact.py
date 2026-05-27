@@ -276,13 +276,14 @@ def run_impact(
 
         # 将 impact 结果序列化到 <project>/.repomap/session.json，
         # 供后续 verify 命令与 git diff 对比使用。写入失败不影响本次 impact 输出。
-        session_target_files = list(target_files)
-        session_affected_files = [f for f, _why, _conf in affected_list]
-        session_key_symbols = _impact_key_symbols(
-            engine, target_files, limit_per_file=4
-        )
-        session_suggested_tests = [t.test_file for t in tests]
+        session_warning: str | None = None
         try:
+            session_target_files = list(target_files)
+            session_affected_files = [f for f, _why, _conf in affected_list]
+            session_key_symbols = _impact_key_symbols(
+                engine, target_files, limit_per_file=4
+            )
+            session_suggested_tests = [t.test_file for t in tests]
             save_impact_session(
                 project_root=engine.project_root,
                 target_files=session_target_files,
@@ -291,8 +292,9 @@ def run_impact(
                 suggested_tests=session_suggested_tests,
             )
         except Exception as exc:
+            session_warning = f"failed to persist impact session: {exc}"
             print(
-                f"[{CLI_NAME}] warning: failed to persist impact session: {exc}",
+                f"[{CLI_NAME}] warning: {session_warning}",
                 file=sys.stderr,
             )
 
@@ -331,6 +333,8 @@ def run_impact(
                     "typeImpacts": type_impacts,
                 },
             }
+            if session_warning:
+                payload["result"]["sessionWarning"] = session_warning
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 

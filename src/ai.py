@@ -1279,9 +1279,14 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         unexpected = impact_session.get("unexpectedFiles", [])
         covered = impact_session.get("coveredFiles", [])
         if imp_status == "ok":
-            lines.append(
-                "- All impact-expected affected files are present in the git diff."
-            )
+            if covered:
+                lines.append(
+                    "- All impact-expected affected files are present in the git diff."
+                )
+            else:
+                lines.append(
+                    "- Impact predicted no affected files (only targets); coverage check is vacuous."
+                )
         elif imp_status == "missed":
             lines.append(
                 "- The following impact-expected files are NOT in the git diff (may need review):"
