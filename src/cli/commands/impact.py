@@ -14,6 +14,7 @@ from ..handlers import (
     _scan_stats_payload,
     _sym_name,
     _assess_risk,
+    save_impact_session,
 )
 from ...topic import (
     TestMatch,
@@ -272,6 +273,31 @@ def run_impact(
             ),
         )
         affected_list = affected_list[:max_affected_files]
+
+        # 将 impact 结果序列化到 <project>/.repomap/session.json，
+        # 供后续 verify 命令与 git diff 对比使用。写入失败不影响本次 impact 输出。
+        session_warning: str | None = None
+        try:
+            session_target_files = list(target_files)
+            session_affected_files = [f for f, _why, _conf in affected_list]
+            session_key_symbols = _impact_key_symbols(
+                engine, target_files, limit_per_file=4
+            )
+            session_suggested_tests = [t.test_file for t in tests]
+            save_impact_session(
+                project_root=engine.project_root,
+                target_files=session_target_files,
+                affected_files=session_affected_files,
+                key_symbols=session_key_symbols,
+                suggested_tests=session_suggested_tests,
+            )
+        except Exception as exc:
+            session_warning = f"failed to persist impact session: {exc}"
+            print(
+                f"[{CLI_NAME}] warning: {session_warning}",
+                file=sys.stderr,
+            )
+
         key_symbols = _impact_key_symbols(engine, target_files) if with_symbols else []
         read_next = _impact_read_next(target_files, affected_list, tests)
         lsp_hint = (
@@ -307,6 +333,10 @@ def run_impact(
                     "typeImpacts": type_impacts,
                 },
             }
+            if session_warning:
+                result_block = payload["result"]
+                if isinstance(result_block, dict):
+                    result_block["sessionWarning"] = session_warning
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 

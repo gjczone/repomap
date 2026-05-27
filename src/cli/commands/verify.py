@@ -21,6 +21,7 @@ from ..handlers import (
     _scan_stats_payload,
     _sym_name,
     _assess_risk,
+    load_impact_session,
     _normalize_project_relative_paths,
 )
 from ...ranking import GraphAnalyzer
@@ -453,6 +454,7 @@ def _overall_verify_status(
     check_payload: dict[str, Any],
     lsp_payload: dict[str, Any],
     graph_diff_payload: dict[str, Any],
+    impact_session_payload: dict[str, Any] | None = None,
 ) -> str:
     if check_payload.get("status") == "failed" or lsp_payload.get("status") == "failed":
         return "failed"
@@ -467,7 +469,100 @@ def _overall_verify_status(
     # unknown 表示没有诊断工具运行，不能视为 passed；缺失 status 同样视为 warning
     if check_status in (None, "unknown"):
         return "warning"
+    # impact session 漏改：不影响其他 warning/failed 判定，但把 passed 降为 warning
+    if (
+        impact_session_payload is not None
+        and impact_session_payload.get("status") == "missed"
+    ):
+        return "warning"
     return "passed"
+
+
+def _verify_impact_session_payload(
+    project_root: str | Path, changed_files: list[str]
+) -> dict[str, Any]:
+    """对比 impact session 与 git diff，返回比对结果字典。
+
+    返回结构：
+      status: ok | missed | no_changes | skipped
+      missedFiles: list[str]     — impact 预期但未在 git diff 出现的 affected 文件
+      unexpectedFiles: list[str] — git diff 中但 impact 未预期的文件
+      coveredFiles: list[str]    — git diff 中且 impact 预期覆盖的文件
+      sessionAgeSeconds: int | None
+      reason: str | None         — 仅在 skipped 时给出原因
+
+    任何内部异常（包括 session 文件被篡改导致的 set/list 构造失败）都降级为
+    status=skipped，绝不让补充性校验拖垮 verify 主流程。
+    """
+    from datetime import datetime, timezone
+
+    def _skipped(reason: str) -> dict[str, Any]:
+        return {
+            "status": "skipped",
+            "missedFiles": [],
+            "unexpectedFiles": [],
+            "coveredFiles": [],
+            "sessionAgeSeconds": None,
+            "reason": reason,
+        }
+
+    try:
+        session = load_impact_session(project_root)
+    except Exception as exc:
+        return _skipped(f"impact session load failed: {exc}")
+    if session is None:
+        return _skipped("no .repomap/session.json or unreadable/outdated schema")
+
+    age_seconds: int | None = None
+    created_at = session.get("created_at")
+    if isinstance(created_at, str):
+        try:
+            normalized = created_at
+            if normalized.endswith("Z"):
+                normalized = normalized[:-1] + "+00:00"
+            created_dt = datetime.fromisoformat(normalized)
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            age_seconds = max(
+                0,
+                int((datetime.now(timezone.utc) - created_dt).total_seconds()),
+            )
+        except (ValueError, TypeError):
+            age_seconds = None
+
+    try:
+        impact = session.get("impact") or {}
+        target_files = set(impact.get("target_files", []))
+        affected_files = set(impact.get("affected_files", []))
+    except TypeError as exc:
+        return _skipped(f"impact session element type invalid: {exc}")
+
+    expected = target_files | affected_files
+    changed_set = set(changed_files)
+
+    if not changed_set:
+        return {
+            "status": "no_changes",
+            "missedFiles": [],
+            "unexpectedFiles": [],
+            "coveredFiles": [],
+            "sessionAgeSeconds": age_seconds,
+            "reason": "git diff is empty",
+        }
+
+    missed = sorted(affected_files - changed_set)
+    covered = sorted(affected_files & changed_set)
+    unexpected = sorted(changed_set - expected)
+
+    status = "missed" if missed else "ok"
+    return {
+        "status": status,
+        "missedFiles": missed,
+        "unexpectedFiles": unexpected,
+        "coveredFiles": covered,
+        "sessionAgeSeconds": age_seconds,
+        "reason": None,
+    }
 
 
 def _print_missed_files_section(
@@ -584,6 +679,9 @@ def run_verify(
             with_diff,
             incoming_map=engine.graph.incoming if with_diff else None,
         )
+        impact_session_payload = _verify_impact_session_payload(
+            project_root, changed_files
+        )
         status = _overall_verify_status(
             changed_files,
             evidence["riskLevel"],
@@ -591,6 +689,7 @@ def run_verify(
             check_payload,
             lsp_payload,
             graph_diff_payload,
+            impact_session_payload=impact_session_payload,
         )
         untested = find_untested_symbols(engine.graph) if not quick else []
 
@@ -631,6 +730,7 @@ def run_verify(
                 "lsp": lsp_payload,
                 "graphDiff": graph_diff_payload,
                 "contractRisks": contract_risks,
+                "impactSession": impact_session_payload,
             },
         }
         if as_json:
