@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-import logging
 import math
 import queue
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -184,7 +182,7 @@ class TestP1_5_ModifiedFilesGitFailure(unittest.TestCase):
 
         from src.check import GitHelper
 
-        with patch("src.check.logger") as mock_logger:
+        with patch("src.check.logger"):
             result = GitHelper.get_modified_files(Path("/tmp/nonexistent_repo"))
             self.assertEqual(result, [])
 
