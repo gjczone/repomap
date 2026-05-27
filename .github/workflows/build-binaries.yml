@@ -6,10 +6,12 @@ on:
       branches:
          - main
          - master
-      paths-ignore:
-         - "**/*.md"
-         - "docs/**"
-         - "skills/**"
+      paths:
+         - "src/**"
+         - "pyproject.toml"
+         - "npm/**"
+         - ".github/workflows/build-binaries.yml"
+         - "uv.lock"
    pull_request:
       paths-ignore:
          - "**/*.md"
