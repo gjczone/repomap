@@ -192,6 +192,9 @@ def _impact_type_level(
     return results
 
 
+_IMPACT_MAX_DEPTH = 3
+
+
 def run_impact(
     project: str,
     max_files: int,
@@ -202,6 +205,12 @@ def run_impact(
     depth: int = 1,
     incremental: bool = False,
 ) -> int:
+    if depth > _IMPACT_MAX_DEPTH:
+        print(
+            f"[{CLI_NAME}] --depth {depth} exceeds max {_IMPACT_MAX_DEPTH}, clamping to {_IMPACT_MAX_DEPTH}",
+            file=sys.stderr,
+        )
+        depth = _IMPACT_MAX_DEPTH
     try:
         engine = _scan_engine(project, max_files, incremental=incremental)
 

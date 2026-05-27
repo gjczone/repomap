@@ -123,19 +123,19 @@ class P0_5_ReadMaxFileBytesMinimum(unittest.TestCase):
     """P0-5: _read_max_file_bytes 最小返回值应为 1，不允许 0。"""
 
     def test_zero_env_var_returns_minimum_one(self) -> None:
-        from src.cli.handlers import _read_max_file_bytes
+        from src.core import RepoMapEngine
 
         with patch.dict(os.environ, {"REPOMAP_MAX_FILE_BYTES": "0"}):
-            result = _read_max_file_bytes()
+            result = RepoMapEngine._read_max_file_bytes()
             self.assertGreaterEqual(
                 result, 1, "REPOMAP_MAX_FILE_BYTES=0 时应返回至少 1，防止跳过所有文件"
             )
 
     def test_negative_env_var_returns_minimum_one(self) -> None:
-        from src.cli.handlers import _read_max_file_bytes
+        from src.core import RepoMapEngine
 
         with patch.dict(os.environ, {"REPOMAP_MAX_FILE_BYTES": "-100"}):
-            result = _read_max_file_bytes()
+            result = RepoMapEngine._read_max_file_bytes()
             self.assertGreaterEqual(result, 1)
 
 

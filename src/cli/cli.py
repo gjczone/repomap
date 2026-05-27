@@ -13,6 +13,7 @@ from .. import (
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
     DEFAULT_OVERVIEW_MAX_CHARS,
     DEFAULT_QUERY_SYMBOL_MAX_CHARS,
+    DEFAULT_VERIFY_MAX_CHARS,
 )
 
 
@@ -191,6 +192,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
+    )
+    verify_parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=DEFAULT_VERIFY_MAX_CHARS,
+        help="Maximum text output size for verify report.",
     )
     verify_parser.add_argument(
         "--types",
@@ -661,6 +668,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             with_diff=args.with_diff,
             quick=args.quick,
             incremental=not getattr(args, "no_incremental", False),
+            max_chars=args.max_chars,
         )
     if command == "file-detail":
         return run_file_detail(

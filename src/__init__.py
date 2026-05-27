@@ -49,13 +49,24 @@ except ImportError:
 
 CACHE_DIR = Path.home() / ".cache" / "repomap"
 
-# 缓存语义变更时需要升级，避免 CLI/Binary 复用旧结果误导阅读顺序和调用链。
 SESSION_CACHE_VERSION = 7
+
+
+def get_repomap_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("repomap")
+    except Exception:
+        return "0.0.0-dev"
+
+
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
 DEFAULT_QUERY_SYMBOL_MAX_CHARS = 4000
 DEFAULT_CALL_CHAIN_MAX_CHARS = 4000
 DEFAULT_FILE_DETAIL_MAX_CHARS = 6000
 DEFAULT_FILE_DETAIL_MAX_SYMBOLS = 12
+DEFAULT_VERIFY_MAX_CHARS = 16000
 DEFAULT_OVERVIEW_JSON_HOTSPOTS = 8
 DEFAULT_OVERVIEW_JSON_READING_ORDER = 6
 DEFAULT_OVERVIEW_JSON_MODULES = 6

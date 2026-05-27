@@ -277,8 +277,8 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
         head = git.rev_parse_head()
         if head:
             git_head = head
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"git rev-parse HEAD failed during incremental cache save: {exc}")
 
     files: dict[str, dict] = {}
     for file_path in engine.graph.file_symbols:

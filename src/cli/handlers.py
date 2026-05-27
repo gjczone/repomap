@@ -22,6 +22,7 @@ from .. import (
     serialize_edge,
     serialize_symbol,
     SESSION_CACHE_VERSION,
+    get_repomap_version,
 )
 from ..core import RepoMapEngine
 from ..gitignore import get_gitignore
@@ -129,15 +130,6 @@ def _path_matches_prefix(file_path: str, prefix: str) -> bool:
     return file_path == prefix or file_path.startswith(prefix.rstrip("/") + "/")
 
 
-def _read_max_file_bytes() -> int:
-    raw = os.getenv("REPOMAP_MAX_FILE_BYTES", str(512 * 1024))
-    try:
-        value = int(raw)
-    except ValueError:
-        return 512 * 1024
-    return max(1, value)
-
-
 def _iter_source_files(project_root: Path) -> list[str]:
     gitignore = get_gitignore(project_root)
     files: list[str] = []
@@ -165,7 +157,7 @@ def _iter_source_files(project_root: Path) -> list[str]:
 
 def _scan_fingerprint(project_root: str, max_files: int) -> str:
     root = Path(project_root)
-    max_file_bytes = _read_max_file_bytes()
+    max_file_bytes = RepoMapEngine._read_max_file_bytes()
     scan_large_files = os.getenv("REPOMAP_SCAN_LARGE_FILES", "0")
     digest = hashlib.sha256()
     digest.update(project_root.encode("utf-8"))
@@ -198,7 +190,7 @@ def _scan_engine(
     cache_key = (
         resolved_project,
         max_files,
-        _read_max_file_bytes(),
+        RepoMapEngine._read_max_file_bytes(),
         os.getenv("REPOMAP_SCAN_LARGE_FILES", "0"),
         incremental,
     )
@@ -239,6 +231,7 @@ def _engine_to_session_payload(
     }
     return {
         "version": SESSION_CACHE_VERSION,
+        "repomap_version": get_repomap_version(),
         "project_root": project_root,
         "fingerprint": fingerprint,
         "scan_state": engine.scan_state,
@@ -302,6 +295,13 @@ def _restore_engine_from_session_payload(
     payload: dict[str, Any],
 ) -> RepoMapEngine | None:
     if payload.get("version") != SESSION_CACHE_VERSION:
+        return None
+    cached_version = payload.get("repomap_version")
+    current_version = get_repomap_version()
+    if cached_version and cached_version != current_version:
+        logger.warning(
+            f"Session cache repomap_version mismatch: cached={cached_version}, current={current_version}. Discarding cache."
+        )
         return None
     project_root = payload.get("project_root")
     if not project_root:
