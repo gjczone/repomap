@@ -91,7 +91,7 @@ class SymbolSearchIndex:
                 self._bm25 = BM25Okapi(self._documents)
                 self._built = True
             except Exception as exc:
-                logger.debug(f"BM25 index build failed: {exc}")
+                logger.warning(f"BM25 index build failed: {exc}")
 
     def search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
         """

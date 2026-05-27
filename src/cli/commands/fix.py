@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-import glob
+import logging
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 from ..handlers import (
     CLI_NAME,
     _resolve_project,
 )
 from .verify import run_verify, run_check
+
+logger = logging.getLogger("repomap")
 
 
 def run_fix(project: str, dry_run: bool = False) -> int:
@@ -36,12 +40,26 @@ def run_fix(project: str, dry_run: bool = False) -> int:
 
         # Try eslint
         try:
-            patterns = ["*.js", "*.ts", "*.jsx", "*.tsx"]
             eslint_files: list[str] = []
-            for pat in patterns:
-                eslint_files.extend(
-                    glob.glob(str(project_root) + "/**/" + pat, recursive=True)
-                )
+            valid_exts = {".js", ".ts", ".jsx", ".tsx"}
+            for dirpath, _dirnames, filenames in os.walk(str(project_root)):
+                # 跳过大型目录
+                if any(
+                    skip in dirpath
+                    for skip in ("node_modules", ".git", "dist", "build")
+                ):
+                    continue
+                for fname in filenames:
+                    if (
+                        Path(fname).suffix.lower() in valid_exts
+                        and len(eslint_files) < 500
+                    ):
+                        eslint_files.append(os.path.join(dirpath, fname))
+                if len(eslint_files) >= 500:
+                    logger.warning(
+                        "ESLint: reached 500 file limit, some files may not be checked"
+                    )
+                    break
             if eslint_files:
                 result = subprocess.run(
                     ["eslint", "--fix", "--", *eslint_files],
@@ -141,8 +159,8 @@ def run_ready(project: str) -> int:
         except FileNotFoundError:
             print("  ruff not available, skipping format check.")
             format_ok = None
-        except Exception:
-            print("  ruff error, skipping format check.")
+        except Exception as exc:
+            logger.warning("ruff format check failed: %s", exc)
             format_ok = None
 
         # Summary

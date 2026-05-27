@@ -290,7 +290,7 @@ class SubprocessBackend:
             commit_hash = output.split()[0][:8] if output else "unknown"
             return {"commit": commit_hash}
         except Exception as exc:
-            logger.debug(f"git blame failed for {file_path}:{line}: {exc}")
+            logger.warning(f"git blame failed for {file_path}:{line}: {exc}")
             return None
 
     @staticmethod
@@ -329,7 +329,7 @@ class SubprocessBackend:
                             )
             return commits
         except Exception as exc:
-            logger.debug(f"log_file_commits failed for {file_path}: {exc}")
+            logger.warning(f"log_file_commits failed for {file_path}: {exc}")
             return []
 
     @staticmethod
@@ -351,7 +351,7 @@ class SubprocessBackend:
                         authors.append(parts[1])
             return authors
         except Exception as exc:
-            logger.debug(f"file_authors failed for {file_path}: {exc}")
+            logger.warning(f"file_authors failed for {file_path}: {exc}")
             return []
 
 
@@ -692,7 +692,7 @@ class Pygit2Backend:
                         break
             return commits
         except Exception as exc:
-            logger.debug(f"log_file_commits failed for {file_path}: {exc}")
+            logger.warning(f"log_file_commits failed for {file_path}: {exc}")
             return []
 
     @staticmethod
@@ -735,7 +735,7 @@ class Pygit2Backend:
             )
             return [a[0] for a in sorted_authors]
         except Exception as exc:
-            logger.debug(f"file_authors failed for {file_path}: {exc}")
+            logger.warning(f"file_authors failed for {file_path}: {exc}")
             return []
 
 

@@ -427,7 +427,7 @@ class RepoMapEngine:
                     return None
             return cache
         except Exception as e:
-            logger.debug(f"Incremental cache load failed: {e}")
+            logger.warning(f"Incremental cache load failed: {e}")
             return None
 
     def _git_changed_files(self) -> tuple[list[str], list[str]]:

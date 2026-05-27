@@ -44,16 +44,17 @@ def run_diff(project: str, as_json: bool) -> int:
     lines.append(
         f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n"
     )
-    lines.append(f"- Added symbols: {result['summary']['added']}")
-    lines.append(f"- Removed symbols: {result['summary']['removed']}")
-    lines.append(f"- Modified symbols: {result['summary']['modified']}")
-    lines.append(f"- Added calls: {result['summary']['edges_added']}")
-    lines.append(f"- Removed calls: {result['summary']['edges_removed']}\n")
-    if result["added_symbols"]:
+    summary = result.get("summary", {})
+    lines.append(f"- Added symbols: {summary.get('added', 0)}")
+    lines.append(f"- Removed symbols: {summary.get('removed', 0)}")
+    lines.append(f"- Modified symbols: {summary.get('modified', 0)}")
+    lines.append(f"- Added calls: {summary.get('edges_added', 0)}")
+    lines.append(f"- Removed calls: {summary.get('edges_removed', 0)}\n")
+    if result.get("added_symbols"):
         lines.append("**Added symbols** (Top 10):")
         for item in result["added_symbols"][:10]:
             lines.append(f"  - `{item['name']}` ({item['file']}:{item['line']})")
-    if result["call_chain_changes"]["new_calls"]:
+    if result.get("call_chain_changes", {}).get("new_calls"):
         lines.append("\n**Added calls** (Top 10):")
         for change in result["call_chain_changes"]["new_calls"][:10]:
             src_name = (

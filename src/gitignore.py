@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections import OrderedDict
 from pathlib import Path
 
 import pathspec
+
+logger = logging.getLogger("repomap")
 
 # 模块级缓存：project_root → GitignoreParser（LRU 淘汰，最多 128 个条目）
 _cache: OrderedDict[str, "GitignoreParser"] = OrderedDict()
@@ -113,6 +116,7 @@ class GitignoreParser:
         try:
             entries = list(os.scandir(root_path))
         except PermissionError:
+            logger.debug("Permission denied scanning directory: %s", root_path)
             return
 
         dirs = []
