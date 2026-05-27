@@ -350,10 +350,18 @@ def is_test_like_file(file_path: str) -> bool:
     return (
         name.startswith("test_")
         or name.endswith("_test.py")
+        or name.endswith("_test.go")
+        or name.endswith("_test.rs")
         or name.endswith(".spec.ts")
         or name.endswith(".test.ts")
         or name.endswith(".test.tsx")
         or name.endswith(".spec.tsx")
+        or name.endswith(".test.js")
+        or name.endswith(".spec.js")
+        or name.endswith(".test.jsx")
+        or name.endswith(".spec.jsx")
+        or name.endswith(".test.mjs")
+        or name.endswith(".spec.mjs")
     )
 
 

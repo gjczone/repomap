@@ -159,6 +159,8 @@ def _extract_java_return_type(def_node: Any) -> str:
             "floating_point_type",
             "boolean_type",
             "generic_type",
+            "array_type",
+            "scoped_type_identifier",
         ):
             return _node_text(child).strip()
     return ""
@@ -231,6 +233,11 @@ def _extract_c_sharp_return_type(def_node: Any) -> str:
             "double_keyword",
             "object_keyword",
             "var_keyword",
+            "array_type",
+            "nullable_type",
+            "generic_type",
+            "qualified_name",
+            "tuple_type",
         ):
             return _node_text(child).strip()
     return ""
@@ -260,6 +267,9 @@ def _extract_cpp_return_type(def_node: Any) -> str:
             "pointer_type",
             "reference_type",
             "qualified_identifier",
+            "template_type",
+            "decltype",
+            "trailing_return_type",
         ):
             return _node_text(child).strip()
     return ""
@@ -366,9 +376,9 @@ def extract_types_for_file(
     enriched = [0]
 
     def _walk(node: Any, depth: int = 0) -> None:
-        if depth > 30:
+        if depth > 100:
             logger.debug(
-                "Type inference recursion depth limit reached at depth 30 "
+                "Type inference recursion depth limit reached at depth 100 "
                 "for node type %r in language %s",
                 node.type,
                 lang,
@@ -377,15 +387,21 @@ def extract_types_for_file(
         if node.type in func_types:
             node_start_line = node.start_point[0] + 1
             sym = symbol_line_map.get(node_start_line)
-            if sym and not sym.return_type and not sym.params:
-                rt = extract_rt(node)
-                params = extract_params(node)
-                if rt:
-                    sym.return_type = rt
-                    enriched[0] += 1
-                if params:
-                    sym.params = params
-                    enriched[0] += 1
+            if sym:
+                has_return = bool(sym.return_type)
+                has_params = bool(sym.params)
+                # 只要有一个字段未填充就尝试提取，不要求两个都为空
+                if not has_return or not has_params:
+                    if not has_return:
+                        rt = extract_rt(node)
+                        if rt:
+                            sym.return_type = rt
+                            enriched[0] += 1
+                    if not has_params:
+                        params = extract_params(node)
+                        if params:
+                            sym.params = params
+                            enriched[0] += 1
         for child in node.children:
             _walk(child, depth + 1)
 

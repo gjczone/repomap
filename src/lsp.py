@@ -15,6 +15,8 @@ from . import json_dumps, json_loads
 
 logger = logging.getLogger("repomap.lsp")
 
+_MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max LSP message body
+
 
 @dataclass(frozen=True)
 class LspServerSpec:
@@ -483,6 +485,13 @@ def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
         return None
     if length <= 0:
         return None
+    if length > _MAX_CONTENT_LENGTH:
+        logger.warning(
+            "LSP message Content-Length %d exceeds maximum %d, discarding",
+            length,
+            _MAX_CONTENT_LENGTH,
+        )
+        return None
     body = b""
     while len(body) < length:
         chunk = stream.read(length - len(body))
@@ -499,9 +508,11 @@ class StdioLspClient:
         self.timeout = timeout
         self.process: subprocess.Popen[bytes] | None = None
         self._next_id = 1
+        self._id_lock = threading.Lock()
         self._messages: queue.Queue[dict[str, Any]] = queue.Queue()
         self._notifications: list[dict[str, Any]] = []
         self._reader: threading.Thread | None = None
+        self._stderr_reader: threading.Thread | None = None
         self._stop_reader = False
 
     def __enter__(self) -> "StdioLspClient":
@@ -512,6 +523,7 @@ class StdioLspClient:
         self.close()
 
     def start(self) -> None:
+        self._stop_reader = False
         self.process = subprocess.Popen(
             self.command,
             cwd=self.workspace_root,
@@ -521,6 +533,8 @@ class StdioLspClient:
         )
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
+        self._stderr_reader = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_reader.start()
 
     def _read_loop(self) -> None:
         if self.process is None or self.process.stdout is None:
@@ -536,6 +550,18 @@ class StdioLspClient:
             if message is None:
                 return
             self._messages.put(message)
+
+    def _drain_stderr(self) -> None:
+        """Continuously drain stderr to prevent pipe buffer deadlock."""
+        if self.process is None or self.process.stderr is None:
+            return
+        while not self._stop_reader:
+            try:
+                chunk = self.process.stderr.read(4096)
+                if not chunk:
+                    break
+            except Exception:
+                break
 
     def send_notification(
         self, method: str, params: dict[str, Any] | None = None
@@ -565,8 +591,9 @@ class StdioLspClient:
             raise RuntimeError(
                 f"LSP server {self.command[0]!r} already exited before request '{method}' ({detail})"
             )
-        request_id = self._next_id
-        self._next_id += 1
+        with self._id_lock:
+            request_id = self._next_id
+            self._next_id += 1
         self._send(
             {
                 "jsonrpc": "2.0",
@@ -589,6 +616,11 @@ class StdioLspClient:
                     len(self._notifications) < 500
                 ):  # 防止异常 LSP 服务器导致内存无限增长
                     self._notifications.append(message)
+                else:
+                    logger.warning(
+                        "_notifications list at capacity (%d), new notifications will be dropped",
+                        len(self._notifications),
+                    )
                 continue
             # 非目标响应：LSP 单请求模式下不应出现，丢弃并记录
             logger.warning(
@@ -710,6 +742,21 @@ class StdioLspClient:
     ) -> list[dict[str, Any]]:
         expected_uris = {_path_to_uri(path) for path in file_paths}
         diagnostics: list[dict[str, Any]] = []
+        # 先检查 _notifications 列表中在 request() 期间缓存的诊断
+        remaining_notifications: list[dict[str, Any]] = []
+        for msg in self._notifications:
+            if msg.get("method") != "textDocument/publishDiagnostics":
+                remaining_notifications.append(msg)
+                continue
+            params = msg.get("params", {})
+            uri = params.get("uri", "")
+            if uri in expected_uris:
+                diagnostics.append(params)
+                expected_uris.discard(uri)
+            else:
+                remaining_notifications.append(msg)
+        self._notifications = remaining_notifications
+
         deadline = time.time() + self.timeout
         while time.time() < deadline and expected_uris:
             try:
@@ -729,7 +776,6 @@ class StdioLspClient:
         if self.process is None:
             return
         process = self.process
-        self._stop_reader = True
         try:
             if process.poll() is None:
                 try:
@@ -743,9 +789,18 @@ class StdioLspClient:
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=2)
+                    try:
+                        process.kill()
+                    except OSError:
+                        logger.debug(
+                            "LSP process kill failed (already dead)", exc_info=True
+                        )
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        logger.debug("LSP process did not terminate after kill")
         finally:
+            self._stop_reader = True
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is None:
                     continue
@@ -755,6 +810,8 @@ class StdioLspClient:
                     pass
             if self._reader is not None and self._reader.is_alive():
                 self._reader.join(timeout=3)
+            if self._stderr_reader is not None and self._stderr_reader.is_alive():
+                self._stderr_reader.join(timeout=3)
             self.process = None
 
 
@@ -781,9 +838,9 @@ def _diagnostic_from_lsp(
         rel_file = file_path.resolve().relative_to(project_root).as_posix()
     except ValueError:
         rel_file = file_path.as_posix()
-    range_row = item.get("range", {})
-    start = range_row.get("start", {})
-    end = range_row.get("end", {})
+    range_row = item.get("range") or {}
+    start = (range_row.get("start") or {}) if isinstance(range_row, dict) else {}
+    end = (range_row.get("end") or {}) if isinstance(range_row, dict) else {}
     code = item.get("code", "")
     return LspDiagnostic(
         file=rel_file,

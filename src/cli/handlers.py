@@ -398,6 +398,9 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     try:
         payload = json_loads(cache_path.read_text(encoding="utf-8"))
     except Exception:
+        logger.warning(
+            "Failed to load session cache from %s", cache_path, exc_info=True
+        )
         return None
     if payload.get("project_root") != project_root:
         return None
@@ -428,6 +431,7 @@ def _save_session_engine(
             tmp_path = Path(handle.name)
         tmp_path.replace(cache_path)
     except Exception:
+        logger.warning("Failed to save session cache", exc_info=True)
         try:
             if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink()

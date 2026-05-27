@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -29,5 +29,12 @@ if (!binPath) {
    process.exit(1);
 }
 
-const result = spawnSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
-process.exit(result.status !== null ? result.status : 1);
+const child = spawn(binPath, process.argv.slice(2), { stdio: 'inherit' });
+
+// Forward signals to child process so Ctrl+C works
+process.on('SIGINT', () => { child.kill('SIGINT'); });
+process.on('SIGTERM', () => { child.kill('SIGTERM'); });
+
+child.on('close', (code) => {
+   process.exit(code !== null ? code : 1);
+});

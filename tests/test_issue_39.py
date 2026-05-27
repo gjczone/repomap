@@ -27,10 +27,15 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
         client = StdioLspClient.__new__(StdioLspClient)
         client.process = MagicMock()
         client.process.poll.return_value = None
+        client.process.stderr = None
+        client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
         client._stop_reader = False
         client._reader = None
+        client._stderr_reader = None
+        client._send = MagicMock()
+        client._id_lock = __import__("threading").Lock()
         client.timeout = 1.0
         client._next_id = 1
 
@@ -51,10 +56,15 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
         client = StdioLspClient.__new__(StdioLspClient)
         client.process = MagicMock()
         client.process.poll.return_value = None
+        client.process.stderr = None
+        client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
         client._stop_reader = False
         client._reader = None
+        client._stderr_reader = None
+        client._send = MagicMock()
+        client._id_lock = __import__("threading").Lock()
         client.timeout = 0.5
         client._next_id = 2
 
@@ -85,17 +95,24 @@ class TestP1_2_LspCloseShutdownFailure(unittest.TestCase):
     def test_shutdown_failure_logs_warning(self) -> None:
         from src.lsp import StdioLspClient
 
+        import threading
+
         client = StdioLspClient.__new__(StdioLspClient)
         client.process = MagicMock()
         client.process.poll.return_value = None
+        client.process.stderr = None
+        client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
         client._stop_reader = False
         client._reader = None
+        client._stderr_reader = None
+        client._id_lock = threading.Lock()
+        client._send = MagicMock()
         client.timeout = 1.0
 
         # 让 request("shutdown") 抛出异常
-        def failing_request(method, params, request_id=None):
+        def failing_request(method, params=None, request_id=None):
             if method == "shutdown":
                 raise OSError("connection lost")
             return {}
