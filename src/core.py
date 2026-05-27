@@ -382,7 +382,7 @@ class RepoMapEngine:
 
                 save_incremental_cache(str(self.project_root), self)
             except Exception as e:
-                logger.debug(f"Failed to save incremental cache: {e}")
+                logger.warning(f"Failed to save incremental cache: {e}")
 
         sym_count = len(self.graph.symbols)
         edge_count = sum(len(v) for v in self.graph.outgoing.values())
@@ -427,7 +427,7 @@ class RepoMapEngine:
                     return None
             return cache
         except Exception as e:
-            logger.debug(f"Incremental cache load failed: {e}")
+            logger.warning(f"Incremental cache load failed: {e}")
             return None
 
     def _git_changed_files(self) -> tuple[list[str], list[str]]:
@@ -543,6 +543,7 @@ class RepoMapEngine:
                 if line and Path(line).suffix.lower() in EXT_TO_LANG
             )
         except Exception:
+            logger.warning("rg --files failed for source listing, falling back to os.walk")
             # fallback：一次遍历过滤扩展名，跳过已知大型目录
             valid_exts = set(EXT_TO_LANG)
             skip_dirs = {
@@ -618,6 +619,7 @@ class RepoMapEngine:
                 line for line in result.stdout.strip().split("\n") if line
             )
         except Exception:
+            logger.warning("rg --files failed for supporting files, falling back to rglob")
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
@@ -831,7 +833,7 @@ class RepoMapEngine:
             if added:
                 logger.debug(f"{label} precise call graph added {added} edges")
         except Exception as exc:
-            logger.debug(f"{label} call graph enrichment failed: {exc}")
+            logger.warning(f"{label} call graph enrichment failed: {exc}")
 
     def _enrich_python_call_edges(self) -> None:
         self._enrich_call_edges("Python", (".py", ".pyi"), "analyze_python_callgraph")

@@ -46,11 +46,11 @@ def _read_file(project_root: str, file_path: str) -> str | None:
             return None
         raw = resolved.read_bytes()
         if b"\x00" in raw[:8192]:
-            logger.debug(f"Skipping binary file: {file_path}")
+            logger.warning(f"Skipping binary file: {file_path}")
             return None
         return raw.decode("utf-8", errors="replace")[:131072]
     except OSError as exc:
-        logger.debug(f"Failed to read {file_path}: {exc}")
+        logger.warning(f"Failed to read {file_path}: {exc}")
         return None
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -10,6 +11,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from . import HttpRoute
     from .core import RepoMapEngine
+
+logger = logging.getLogger("repomap")
 
 
 @dataclass
@@ -150,6 +153,7 @@ def find_route_consumers(
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read(65536)  # 64KB max
         except (OSError, UnicodeDecodeError):
+            logger.debug("Failed to read %s for route consumer detection", file_path, exc_info=True)
             continue
 
         lines = content.split("\n")
