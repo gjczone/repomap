@@ -334,7 +334,9 @@ def run_impact(
                 },
             }
             if session_warning:
-                payload["result"]["sessionWarning"] = session_warning
+                result_block = payload["result"]
+                if isinstance(result_block, dict):
+                    result_block["sessionWarning"] = session_warning
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
