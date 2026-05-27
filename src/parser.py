@@ -412,6 +412,7 @@ class TreeSitterAdapter:
         # lang -> query_type -> compiled Query
         self._queries: dict[str, dict[str, Any]] = {}
         self._query_error_logged = False  # 首次查询失败用 warning，后续用 debug
+        self._fallback_langs: set[str] = set()  # 使用回退解析器的语言
         self._init_parsers()
 
     # ── 初始化 ─────────────────────────────────────────────────────────────────
@@ -467,7 +468,11 @@ class TreeSitterAdapter:
             except Exception:
                 if "javascript" in self.parsers:
                     self.parsers["typescript"] = self.parsers["javascript"]
-                    logger.debug("Parser loaded: typescript (fallback to javascript)")
+                    self._fallback_langs.add("typescript")
+                    logger.warning(
+                        "TypeScript parser unavailable, falling back to JavaScript parser. "
+                        "TS-specific syntax (types, interfaces, enums) will not be extracted."
+                    )
 
         # 预编译 queries —— 只对已加载的语言
         self._precompile_queries()
