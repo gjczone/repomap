@@ -736,4 +736,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 from ..core import RepoMapEngine  # noqa: E402, F401
 from .handlers import _resolve_project  # noqa: E402, F401
 from .handlers import _scan_engine  # noqa: E402, F401
-from .handlers import _SCAN_CACHE  # noqa: E402, F401
+from .handlers import clear_scan_cache  # noqa: E402, F401

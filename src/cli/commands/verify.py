@@ -458,7 +458,8 @@ def _overall_verify_status(
     check_status = check_payload.get("status")
     if check_status == "warning":
         return "warning"
-    if check_status == "unknown" and lsp_payload.get("status") != "passed":
+    # unknown 表示没有诊断工具运行，不能视为 passed
+    if check_status == "unknown":
         return "warning"
     return "passed"
 

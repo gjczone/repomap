@@ -237,10 +237,6 @@ class DiagnosticRunner:
 
         return results
 
-    def _is_safe_path(self, file_path: str) -> bool:
-        """检查文件路径是否安全（防止路径遍历和命令注入）"""
-        return self._normalize_safe_path(file_path) is not None
-
     def _should_check_file(self, file_path: str) -> bool:
         """检查文件是否在增量检查列表中"""
         normalized = self._normalize_safe_path(file_path)

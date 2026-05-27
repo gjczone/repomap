@@ -55,6 +55,15 @@ PYINSTALLER_BINDINGS = [
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
 _SCAN_CACHE_MAX_SIZE = 16
+
+
+def clear_scan_cache() -> int:
+    """清理内存中的扫描缓存。返回被清理的条目数。"""
+    count = len(_SCAN_CACHE)
+    _SCAN_CACHE.clear()
+    return count
+
+
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INVALID_ARGS = 2
@@ -197,6 +206,11 @@ def _scan_engine(
     cached = _SCAN_CACHE.get(cache_key)
     if cached and cached[0] == fingerprint:
         return cached[1]
+    if cached:
+        # 指纹不匹配：源文件已变更，需要重新扫描
+        logger.debug(
+            f"Scan cache fingerprint mismatch for {resolved_project}, re-scanning"
+        )
 
     session_engine = _load_session_engine(resolved_project, fingerprint)
     if session_engine is not None:

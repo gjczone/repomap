@@ -16,22 +16,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from . import find_child_by_type as _find_child_by_type
+from . import find_children_by_type as _find_children_by_type
+
 logger = logging.getLogger("repomap.type_inference")
 
 
 def _node_text(node: Any) -> str:
     return node.text.decode("utf-8") if getattr(node, "text", None) else ""
-
-
-def _find_child_by_type(node: Any, child_type: str) -> Any | None:
-    for child in node.children:
-        if child.type == child_type:
-            return child
-    return None
-
-
-def _find_children_by_type(node: Any, child_type: str) -> list[Any]:
-    return [child for child in node.children if child.type == child_type]
 
 
 def _extract_python_return_type(def_node: Any) -> str:

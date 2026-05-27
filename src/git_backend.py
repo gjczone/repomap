@@ -193,6 +193,13 @@ class SubprocessBackend:
                 ],
                 project_root,
             )
+            # 校验 returncode：git 命令失败时返回空列表，与"无变更文件"区分
+            if r.returncode != 0:
+                logger.debug(
+                    f"git log --name-only failed (rc={r.returncode}): "
+                    f"{r.stderr.strip()[:100]}"
+                )
+                return []
             return [l for l in r.stdout.strip().splitlines() if l]
         except Exception:
             return []
@@ -583,11 +590,15 @@ class Pygit2Backend:
     def blame_line(
         project_root: str, file_path: str, line: int
     ) -> dict[str, str] | None:
+        # 路径验证：与 SubprocessBackend 保持一致的安全检查
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return None
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return None
         try:
-            blame = repo.blame(file_path)
+            blame = repo.blame(safe_path)
             for hunk in blame:
                 start = hunk.final_start_line_number
                 end = start + hunk.lines_in_hunk - 1
@@ -601,6 +612,10 @@ class Pygit2Backend:
     def log_file_commits(
         project_root: str, file_path: str, limit: int = 20
     ) -> list[dict[str, str]]:
+        # 路径验证：与 SubprocessBackend 保持一致的安全检查
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return []
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
@@ -613,7 +628,7 @@ class Pygit2Backend:
                 if not commit.parents:
                     diff = commit.tree.diff_to_tree(swap=True)
                     for d in diff.deltas:
-                        if d.new_file.path == file_path or d.old_file.path == file_path:
+                        if d.new_file.path == safe_path or d.old_file.path == safe_path:
                             commits.append(
                                 {
                                     "hash": str(commit.id)[:8],
@@ -628,8 +643,8 @@ class Pygit2Backend:
                         diff = repo.diff(parent.tree, commit.tree)
                         for d in diff.deltas:
                             if (
-                                d.new_file.path == file_path
-                                or d.old_file.path == file_path
+                                d.new_file.path == safe_path
+                                or d.old_file.path == safe_path
                             ):
                                 commits.append(
                                     {
@@ -654,6 +669,10 @@ class Pygit2Backend:
     def file_authors(
         project_root: str, file_path: str, since_days: int = 365
     ) -> list[str]:
+        # 路径验证：与 SubprocessBackend 保持一致的安全检查
+        safe_path = _validate_file_path(project_root, file_path)
+        if safe_path is None:
+            return []
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
@@ -675,7 +694,7 @@ class Pygit2Backend:
                 else:
                     diff = repo.diff(commit.parents[0].tree, commit.tree)
                 for d in diff.deltas:
-                    if d.new_file.path == file_path or d.old_file.path == file_path:
+                    if d.new_file.path == safe_path or d.old_file.path == safe_path:
                         touched = True
                         break
                 if touched:

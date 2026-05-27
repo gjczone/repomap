@@ -19,7 +19,15 @@ from collections import deque
 from pathlib import PurePosixPath
 from typing import Any, TYPE_CHECKING
 
-from . import Edge, RepoGraph, Symbol, call_reference_parts
+from . import (
+    BOILERPLATE_NAMES,
+    LOW_SIGNAL_KINDS,
+    Edge,
+    RepoGraph,
+    Symbol,
+    call_reference_parts,
+    signal_weight_for_symbol,
+)
 from .topic import is_test_like_file
 
 if TYPE_CHECKING:
@@ -33,14 +41,9 @@ class GraphAnalyzer:
     图分析器：执行 PageRank 和各种图查询。
     """
 
-    LOW_SIGNAL_KINDS = {
-        "element",
-        "selector",
-        "class_selector",
-        "id_selector",
-        "json_key",
-    }
-    BOILERPLATE_NAMES = {"__init__", "__main__"}
+    # 引用 __init__.py 中的统一定义，保持与 topic.py 同步
+    LOW_SIGNAL_KINDS = LOW_SIGNAL_KINDS
+    BOILERPLATE_NAMES = BOILERPLATE_NAMES
 
     def __init__(self, graph: RepoGraph) -> None:
         self.graph = graph
@@ -192,14 +195,8 @@ class GraphAnalyzer:
         )
 
     def _signal_weight(self, symbol: Symbol) -> float:
-        weight = 1.0
-        if symbol.kind in self.LOW_SIGNAL_KINDS:
-            return 0.002
-        if symbol.name in self.BOILERPLATE_NAMES:
-            weight *= 0.35
-        elif symbol.name.startswith("_") and symbol.visibility == "private":
-            weight *= 0.85
-        return weight
+        # 委托给 __init__.py 中的统一实现，与 topic.py 保持一致
+        return signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
 
     def _summary_symbol_score(self, symbol: Symbol) -> float:
         incoming_calls = self._edge_count(symbol.id, "incoming", {"call"})

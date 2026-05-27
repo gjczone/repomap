@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import RepoGraph
 
+from . import LOW_SIGNAL_KINDS, signal_weight_for_symbol
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 数据结构
@@ -561,10 +563,10 @@ _co_change_cache: OrderedDict[tuple[str, int], dict[tuple[str, str], int]] = (
 _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
 
 
-def get_co_change_score(
-    project_root: str, file_a: str, file_b: str, since_days: int = 30
-) -> int:
-    """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
+def _get_or_load_co_change_cache(
+    project_root: str, since_days: int
+) -> dict[tuple[str, str], int]:
+    """获取或加载共变更缓存（消除 get_co_change_score 和 get_co_change_neighbors 的重复逻辑）。"""
     cache_key = (project_root, since_days)
     cache = _co_change_cache.get(cache_key)
     if cache is not None:
@@ -574,6 +576,14 @@ def get_co_change_score(
             _co_change_cache.popitem(last=False)
         cache = _load_co_change_scores(project_root, since_days=since_days)
         _co_change_cache[cache_key] = cache
+    return cache
+
+
+def get_co_change_score(
+    project_root: str, file_a: str, file_b: str, since_days: int = 30
+) -> int:
+    """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
+    cache = _get_or_load_co_change_cache(project_root, since_days)
     a, b = sorted([file_a, file_b])
     return cache.get((a, b), 0)
 
@@ -589,15 +599,7 @@ def get_co_change_neighbors(
     用途：识别隐式耦合——两个文件在 git 历史中频繁一起修改，
     即使代码上没有显式依赖，也可能存在隐含关联。
     """
-    cache_key = (project_root, since_days)
-    cache = _co_change_cache.get(cache_key)
-    if cache is not None:
-        _co_change_cache.move_to_end(cache_key)
-    else:
-        if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
-            _co_change_cache.popitem(last=False)
-        cache = _load_co_change_scores(project_root, since_days=since_days)
-        _co_change_cache[cache_key] = cache
+    cache = _get_or_load_co_change_cache(project_root, since_days)
     neighbors: dict[str, int] = {}
     for (a, b), count in cache.items():
         if a == file_path:
@@ -634,11 +636,11 @@ def _load_co_change_scores(
 # 测试盲区检测
 # ═══════════════════════════════════════════════════════════════════════════════
 
-LOW_SIGNAL_KINDS = {"element", "selector", "class_selector", "id_selector", "json_key"}
+# LOW_SIGNAL_KINDS 已从 __init__.py 统一导入，不再重复定义
 
 
 def _signal_weight_for_symbol(sym: Any) -> float:
-    """独立版符号信号权重，不依赖 GraphAnalyzer 实例。"""
+    """独立版符号信号权重，委托给 __init__.py 中的统一实现。"""
     kind = getattr(sym, "kind", "") if hasattr(sym, "kind") else sym.get("kind", "")
     name = getattr(sym, "name", "") if hasattr(sym, "name") else sym.get("name", "")
     visibility = (
@@ -646,13 +648,7 @@ def _signal_weight_for_symbol(sym: Any) -> float:
         if hasattr(sym, "visibility")
         else sym.get("visibility", "")
     )
-    if kind in LOW_SIGNAL_KINDS:
-        return 0.002
-    if name in {"__init__", "__main__"}:
-        return 0.35
-    if name.startswith("_") and visibility == "private":
-        return 0.85
-    return 1.0
+    return signal_weight_for_symbol(kind, name, visibility)
 
 
 def find_untested_symbols(

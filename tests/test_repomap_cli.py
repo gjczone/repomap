@@ -215,7 +215,8 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(status, "warning")
 
-    def test_verify_unknown_check_passes_when_lsp_is_clean(self) -> None:
+    def test_verify_unknown_check_always_warns(self) -> None:
+        """P1-2: unknown 表示没有诊断工具运行，不能视为 passed，即使 LSP 通过。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
@@ -227,7 +228,7 @@ class RepoMapCliTests(unittest.TestCase):
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
 
-        self.assertEqual(status, "passed")
+        self.assertEqual(status, "warning")
 
     def test_verify_unknown_check_warns_without_lsp_evidence(self) -> None:
         from src.cli.commands.verify import _overall_verify_status
@@ -1622,7 +1623,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1713,7 +1714,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1731,7 +1732,7 @@ class RepoMapCliTests(unittest.TestCase):
                 )
                 session_cache.write_text(json.dumps(payload), encoding="utf-8")
 
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
@@ -1754,7 +1755,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1765,7 +1766,7 @@ class RepoMapCliTests(unittest.TestCase):
             ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
@@ -1806,7 +1807,7 @@ class RepoMapCliTests(unittest.TestCase):
                 "src/App.tsx",
                 "export function App() {\n  return <div>app</div>;\n}\n",
             )
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1814,7 +1815,7 @@ class RepoMapCliTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 code1 = main(["overview", "--project", project_root])
 
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 code2 = main(["overview", "--project", project_root, "--json"])
@@ -1839,7 +1840,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1867,7 +1868,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1875,7 +1876,7 @@ class RepoMapCliTests(unittest.TestCase):
             ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 write_file(
                     project_root,
                     "main.py",
