@@ -53,9 +53,7 @@ class TestP1_5_LogNameOnlyReturncode(unittest.TestCase):
         fake_result.stdout = "fatal: not a git repository"
         fake_result.stderr = "fatal: not a git repository"
 
-        with patch.object(
-            SubprocessBackend, "_run_git", return_value=fake_result
-        ):
+        with patch.object(SubprocessBackend, "_run_git", return_value=fake_result):
             result = SubprocessBackend.log_name_only("/fake/project")
             self.assertEqual(result, [])
 
@@ -67,9 +65,7 @@ class TestP1_5_LogNameOnlyReturncode(unittest.TestCase):
         fake_result.returncode = 0
         fake_result.stdout = "src/core.py\nsrc/check.py\n"
 
-        with patch.object(
-            SubprocessBackend, "_run_git", return_value=fake_result
-        ):
+        with patch.object(SubprocessBackend, "_run_git", return_value=fake_result):
             result = SubprocessBackend.log_name_only("/fake/project")
             self.assertEqual(result, ["src/core.py", "src/check.py"])
 
@@ -81,25 +77,19 @@ class TestP1_7_Pygit2BackendPathValidation(unittest.TestCase):
         """路径遍历攻击应被拦截。"""
         from src.git_backend import Pygit2Backend
 
-        result = Pygit2Backend.blame_line(
-            "/tmp/project", "../../etc/passwd", 1
-        )
+        result = Pygit2Backend.blame_line("/tmp/project", "../../etc/passwd", 1)
         self.assertIsNone(result)
 
     def test_log_file_commits_rejects_path_traversal(self) -> None:
         from src.git_backend import Pygit2Backend
 
-        result = Pygit2Backend.log_file_commits(
-            "/tmp/project", "../../etc/passwd"
-        )
+        result = Pygit2Backend.log_file_commits("/tmp/project", "../../etc/passwd")
         self.assertEqual(result, [])
 
     def test_file_authors_rejects_path_traversal(self) -> None:
         from src.git_backend import Pygit2Backend
 
-        result = Pygit2Backend.file_authors(
-            "/tmp/project", "../../etc/passwd"
-        )
+        result = Pygit2Backend.file_authors("/tmp/project", "../../etc/passwd")
         self.assertEqual(result, [])
 
 
@@ -134,7 +124,9 @@ class TestP1_9_SignalWeightUnified(unittest.TestCase):
 
         self.assertEqual(signal_weight_for_symbol("element", "x", "private"), 0.002)
         self.assertEqual(signal_weight_for_symbol("class", "__init__", "public"), 0.35)
-        self.assertEqual(signal_weight_for_symbol("function", "_helper", "private"), 0.85)
+        self.assertEqual(
+            signal_weight_for_symbol("function", "_helper", "private"), 0.85
+        )
         self.assertEqual(signal_weight_for_symbol("class", "MyClass", "exported"), 1.0)
 
     def test_topic_delegates_to_shared(self) -> None:
