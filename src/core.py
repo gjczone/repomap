@@ -574,6 +574,7 @@ class RepoMapEngine:
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
                 if p.is_file()
+                and not p.is_symlink()
                 and p.suffix.lower() in valid_exts
                 and not any(d in p.parts for d in skip_dirs)
             )
@@ -633,7 +634,7 @@ class RepoMapEngine:
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
-                if p.is_file()
+                if p.is_file() and not p.is_symlink()
             )
         root_context_files = [
             name
@@ -753,8 +754,8 @@ class RepoMapEngine:
         if not tree:
             return
 
-        # 先收集所有数据到本地变量，最后一次性原子提交到图中
-        # 避免异常时图处于不完整状态（有符号无边连接）
+        # 先收集所有数据到本地变量，再一次性写入图
+        # 收集阶段异常不会影响图状态，写入阶段（dict/set 操作）不会抛异常
         new_symbols = self.ts.extract_symbols(tree, lang, file, content)
 
         if lang in (
@@ -784,7 +785,7 @@ class RepoMapEngine:
         new_calls = self.ts.extract_calls(tree, lang)
         new_routes = self.ts.extract_http_routes(tree, lang, file)
 
-        # 原子提交：所有数据收集完成后一次性写入图
+        # 所有数据已收集完成，一次性写入图
         self.graph.file_symbols.setdefault(file, [])
         for sym in new_symbols:
             self.graph.symbols[sym.id] = sym

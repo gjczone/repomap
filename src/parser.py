@@ -1198,7 +1198,7 @@ class TreeSitterAdapter:
             if child.type == "identifier":
                 self._add_import_binding(
                     bindings,
-                    child.text.decode("utf-8"),
+                    child.text.decode("utf-8", errors="replace"),
                     "default",
                     module,
                     line,
@@ -1239,7 +1239,7 @@ class TreeSitterAdapter:
         if name_node.type == "identifier":
             self._add_import_binding(
                 bindings,
-                name_node.text.decode("utf-8"),
+                name_node.text.decode("utf-8", errors="replace"),
                 "default",
                 module,
                 line,
@@ -1250,7 +1250,7 @@ class TreeSitterAdapter:
             return
         for child in name_node.children:
             if child.type in {"shorthand_property_identifier_pattern", "identifier"}:
-                name = child.text.decode("utf-8")
+                name = child.text.decode("utf-8", errors="replace")
                 self._add_import_binding(bindings, name, name, module, line, "named")
             elif child.type == "pair_pattern":
                 source_name = self._identifier_text(child.child_by_field_name("key"))
@@ -1328,7 +1328,7 @@ class TreeSitterAdapter:
             if value_node.type == "object":
                 for child in value_node.children:
                     if child.type == "shorthand_property_identifier":
-                        name = child.text.decode("utf-8")
+                        name = child.text.decode("utf-8", errors="replace")
                         add_binding(name, name, None, line, "local")
                     elif child.type == "pair":
                         exported_name = self._identifier_text(
@@ -1375,7 +1375,10 @@ class TreeSitterAdapter:
         arguments_node = node.child_by_field_name("arguments")
         if function_node is None or function_node.type != "identifier":
             return None
-        if function_node.text.decode("utf-8") != "require" or arguments_node is None:
+        if (
+            function_node.text.decode("utf-8", errors="replace") != "require"
+            or arguments_node is None
+        ):
             return None
         for child in arguments_node.children:
             if child.type == "string":
@@ -1389,9 +1392,9 @@ class TreeSitterAdapter:
             return None
         if (
             object_node.type == "identifier"
-            and object_node.text.decode("utf-8") == "exports"
+            and object_node.text.decode("utf-8", errors="replace") == "exports"
         ):
-            return property_node.text.decode("utf-8")
+            return property_node.text.decode("utf-8", errors="replace")
         if object_node.type == "member_expression":
             inner_object = object_node.child_by_field_name("object")
             inner_property = object_node.child_by_field_name("property")
@@ -1399,16 +1402,16 @@ class TreeSitterAdapter:
                 inner_object is not None
                 and inner_property is not None
                 and inner_object.type == "identifier"
-                and inner_object.text.decode("utf-8") == "module"
+                and inner_object.text.decode("utf-8", errors="replace") == "module"
                 and inner_property.type == "property_identifier"
-                and inner_property.text.decode("utf-8") == "exports"
+                and inner_property.text.decode("utf-8", errors="replace") == "exports"
             ):
-                return property_node.text.decode("utf-8")
+                return property_node.text.decode("utf-8", errors="replace")
         if (
             object_node.type == "identifier"
             and property_node.type == "property_identifier"
-            and object_node.text.decode("utf-8") == "module"
-            and property_node.text.decode("utf-8") == "exports"
+            and object_node.text.decode("utf-8", errors="replace") == "module"
+            and property_node.text.decode("utf-8", errors="replace") == "exports"
         ):
             return "default"
         return None
@@ -1449,7 +1452,7 @@ class TreeSitterAdapter:
                     continue
                 name_node = child.child_by_field_name("name")
                 if name_node is not None and name_node.type == "identifier":
-                    names.append(name_node.text.decode("utf-8"))
+                    names.append(name_node.text.decode("utf-8", errors="replace"))
             return names
         primary_name = self._declaration_primary_name(declaration)
         return [primary_name] if primary_name else []
@@ -1458,17 +1461,17 @@ class TreeSitterAdapter:
         for field_name in ("name",):
             target = declaration.child_by_field_name(field_name)
             if target is not None:
-                return target.text.decode("utf-8")
+                return target.text.decode("utf-8", errors="replace")
         for child in declaration.children:
             if child.type in {"identifier", "type_identifier"}:
-                return child.text.decode("utf-8")
+                return child.text.decode("utf-8", errors="replace")
         return None
 
     def _expression_binding_name(self, node: Any | None) -> str | None:
         if node is None:
             return None
         if node.type in {"identifier", "property_identifier", "type_identifier"}:
-            return node.text.decode("utf-8")
+            return node.text.decode("utf-8", errors="replace")
         if node.type in {
             "function_declaration",
             "class_declaration",
@@ -1503,7 +1506,7 @@ class TreeSitterAdapter:
 
     def _last_identifier(self, node: Any) -> str | None:
         identifiers = [
-            child.text.decode("utf-8")
+            child.text.decode("utf-8", errors="replace")
             for child in node.children
             if child.type in {"identifier", "property_identifier", "type_identifier"}
         ]
@@ -1519,7 +1522,7 @@ class TreeSitterAdapter:
             "shorthand_property_identifier",
             "shorthand_property_identifier_pattern",
         }:
-            return node.text.decode("utf-8")
+            return node.text.decode("utf-8", errors="replace")
         return None
 
     def _walk_tree(self, root: Any, max_nodes: int = 500_000) -> list[Any]:
@@ -1828,7 +1831,11 @@ class TreeSitterAdapter:
 
     @staticmethod
     def _text(node: Any) -> str:
-        return node.text.decode("utf-8") if getattr(node, "text", None) else ""
+        return (
+            node.text.decode("utf-8", errors="replace")
+            if getattr(node, "text", None)
+            else ""
+        )
 
     def _docstring(self, node: Any, lang: str) -> str:
         if not node:

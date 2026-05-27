@@ -192,6 +192,7 @@ class ImportResolver:
 
         # 导入解析缓存：(source_file, imp) -> target_files，避免同一模块被反复解析
         self._resolve_cache: dict[tuple[str, str], list[str]] = {}
+        self._resolve_cache_max = 20000
 
         self._load_import_configs()
         self._load_package_json_exports()
@@ -429,6 +430,12 @@ class ImportResolver:
                 )
             )
 
+    def _cache_set(self, key: tuple[str, str], value: list[str]) -> None:
+        """写入解析缓存，超过上限时清空旧条目防止内存泄漏。"""
+        if len(self._resolve_cache) >= self._resolve_cache_max:
+            self._resolve_cache.clear()
+        self._resolve_cache[key] = value
+
     def resolve_import_targets(self, source_file: str, imp: str) -> list[str]:
         """解析 import 路径到目标文件列表。"""
         # 非相对路径走缓存，避免同一模块被不同文件重复解析
@@ -443,7 +450,7 @@ class ImportResolver:
             if target:
                 result = self._resolve_package_export_target(".", target)
                 if result:
-                    self._resolve_cache[cache_key] = result
+                    self._cache_set(cache_key, result)
                     return result
 
         if imp.startswith("."):
@@ -457,7 +464,7 @@ class ImportResolver:
                     java_path = PurePosixPath(*java_modules)
                     java_matches = self._candidate_files_for_base_path(java_path)
                     if java_matches:
-                        self._resolve_cache[cache_key] = java_matches
+                        self._cache_set(cache_key, java_matches)
                         return java_matches
 
             # 尝试 bundler alias 解析
@@ -524,7 +531,7 @@ class ImportResolver:
 
         # 缓存非相对路径的解析结果（相对路径取决于源文件位置，不宜缓存）
         if not imp.startswith("."):
-            self._resolve_cache[cache_key] = result
+            self._cache_set(cache_key, result)
         if not result:
             # 所有解析策略均未命中，记录 debug 日志以便排查依赖图不完整的原因
             logger.debug(
