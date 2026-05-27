@@ -1375,7 +1375,10 @@ class TreeSitterAdapter:
         arguments_node = node.child_by_field_name("arguments")
         if function_node is None or function_node.type != "identifier":
             return None
-        if function_node.text.decode("utf-8", errors="replace") != "require" or arguments_node is None:
+        if (
+            function_node.text.decode("utf-8", errors="replace") != "require"
+            or arguments_node is None
+        ):
             return None
         for child in arguments_node.children:
             if child.type == "string":
@@ -1828,7 +1831,11 @@ class TreeSitterAdapter:
 
     @staticmethod
     def _text(node: Any) -> str:
-        return node.text.decode("utf-8", errors="replace") if getattr(node, "text", None) else ""
+        return (
+            node.text.decode("utf-8", errors="replace")
+            if getattr(node, "text", None)
+            else ""
+        )
 
     def _docstring(self, node: Any, lang: str) -> str:
         if not node:

@@ -634,8 +634,7 @@ class RepoMapEngine:
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
-                if p.is_file()
-                and not p.is_symlink()
+                if p.is_file() and not p.is_symlink()
             )
         root_context_files = [
             name
