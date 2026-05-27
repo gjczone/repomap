@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 # P1-1: lsp.py StdioLspClient.request() 超时后非目标响应被放回队列
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP1_1_LspResponsePollution(unittest.TestCase):
     """P1-1: 不匹配的 LSP 响应不应放回队列，避免后续请求误消费。"""
 
@@ -44,8 +45,7 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
         self.assertEqual(response.get("id"), 1)
         self.assertEqual(response.get("result"), "correct")
         # 验证 stale 响应已被消费且未被放回（队列中不应有它）
-        self.assertTrue(client._messages.empty(),
-                        "stale 响应不应被放回队列")
+        self.assertTrue(client._messages.empty(), "stale 响应不应被放回队列")
 
     def test_stale_response_discarded_with_warning(self) -> None:
         from src.lsp import StdioLspClient
@@ -68,8 +68,10 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
 
         self.assertEqual(response.get("id"), 2)
         self.assertTrue(
-            any("unmatched" in msg.lower() or "unexpected" in msg.lower() or "99" in msg
-                for msg in log_ctx.output),
+            any(
+                "unmatched" in msg.lower() or "unexpected" in msg.lower() or "99" in msg
+                for msg in log_ctx.output
+            ),
             f"应记录 unmatched 响应的 warning，实际日志: {log_ctx.output}",
         )
 
@@ -77,6 +79,7 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════════════════════
 # P1-2: lsp.py StdioLspClient.close() shutdown 失败静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP1_2_LspCloseShutdownFailure(unittest.TestCase):
     """P1-2: close() 中 shutdown 失败应记录日志，而非静默吞错。"""
@@ -115,6 +118,7 @@ class TestP1_2_LspCloseShutdownFailure(unittest.TestCase):
 # P1-3: parser.py 嵌套检测失败静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP1_3_ParserNestingDetectionFailure(unittest.TestCase):
     """P1-3: 嵌套深度检测失败应记录日志。"""
 
@@ -136,6 +140,7 @@ class TestP1_3_ParserNestingDetectionFailure(unittest.TestCase):
 # P1-4: check.py _has_js_files rg 失败静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP1_4_HasJsFilesRgFailure(unittest.TestCase):
     """P1-4: _has_js_files 中 rg 失败应记录 warning。"""
 
@@ -155,8 +160,10 @@ class TestP1_4_HasJsFilesRgFailure(unittest.TestCase):
                     self.assertFalse(result)
 
             self.assertTrue(
-                any("rg" in msg.lower() or "ripgrep" in msg.lower()
-                    for msg in log_ctx.output),
+                any(
+                    "rg" in msg.lower() or "ripgrep" in msg.lower()
+                    for msg in log_ctx.output
+                ),
                 f"rg 失败应记录 WARNING，实际日志: {log_ctx.output}",
             )
 
@@ -164,6 +171,7 @@ class TestP1_4_HasJsFilesRgFailure(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════════════════════
 # P1-5: check.py modified_files_in_project 失败静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP1_5_ModifiedFilesGitFailure(unittest.TestCase):
     """P1-5: modified_files_in_project git 失败应记录 warning。"""
@@ -185,6 +193,7 @@ class TestP1_5_ModifiedFilesGitFailure(unittest.TestCase):
 # P2-6: ranking.py PageRank NaN/负值/Inf 传播
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP2_6_PageRankInvalidWeights(unittest.TestCase):
     """P2-6: PageRank 计算应过滤 NaN、Inf 和负值权重。"""
 
@@ -196,8 +205,9 @@ class TestP2_6_PageRankInvalidWeights(unittest.TestCase):
         s1 = Symbol(id="s1", name="sym1", kind="function", file="a.py", line=1)
         s2 = Symbol(id="s2", name="sym2", kind="function", file="a.py", line=2)
         graph.symbols = {"s1": s1, "s2": s2}
-        graph.outgoing["s1"] = [Edge(source="s1", target="s2", weight=float("nan"),
-                                      kind="call")]
+        graph.outgoing["s1"] = [
+            Edge(source="s1", target="s2", weight=float("nan"), kind="call")
+        ]
         graph.outgoing["s2"] = []
 
         analyzer = GraphAnalyzer(graph)
@@ -215,8 +225,9 @@ class TestP2_6_PageRankInvalidWeights(unittest.TestCase):
         s1 = Symbol(id="s1", name="sym1", kind="function", file="a.py", line=1)
         s2 = Symbol(id="s2", name="sym2", kind="function", file="a.py", line=2)
         graph.symbols = {"s1": s1, "s2": s2}
-        graph.outgoing["s1"] = [Edge(source="s1", target="s2", weight=-5.0,
-                                      kind="call")]
+        graph.outgoing["s1"] = [
+            Edge(source="s1", target="s2", weight=-5.0, kind="call")
+        ]
         graph.outgoing["s2"] = []
 
         analyzer = GraphAnalyzer(graph)
@@ -230,6 +241,7 @@ class TestP2_6_PageRankInvalidWeights(unittest.TestCase):
 # P2-7: ai.py _truncate_output 在换行边界截断
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
     """P2-7: _truncate_output 应在换行边界截断，不在任意字符位置截断。"""
 
@@ -240,8 +252,7 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
         max_chars = 15  # "line 1\nline 2\n" is 13 chars
         result = _truncate_output(text, max_chars)
 
-        self.assertIn("truncated", result.lower(),
-                      f"截断输出应有截断提示: {result!r}")
+        self.assertIn("truncated", result.lower(), f"截断输出应有截断提示: {result!r}")
 
     def test_truncate_respects_max_chars(self) -> None:
         from src.ai import _truncate_output
@@ -255,10 +266,13 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
         # 截断点应在换行处
         lines = result.split("\n")
         # 核心内容部分（截断提示之前）不应超过 max_chars
-        trunc_msg_index = next(i for i, line in enumerate(lines) if "truncated" in line.lower())
+        trunc_msg_index = next(
+            i for i, line in enumerate(lines) if "truncated" in line.lower()
+        )
         core = "\n".join(lines[:trunc_msg_index])
-        self.assertLessEqual(len(core), max_chars,
-                             f"核心内容 {len(core)} 字符不应超过 {max_chars}")
+        self.assertLessEqual(
+            len(core), max_chars, f"核心内容 {len(core)} 字符不应超过 {max_chars}"
+        )
 
     def test_no_newline_fallback(self) -> None:
         from src.ai import _truncate_output
@@ -274,6 +288,7 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
 # P2-7 + P2-15: _truncate_output 截断提示包含大小和比例
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP2_15_TruncateMessageSize(unittest.TestCase):
     """P2-15: 截断提示应告知原始大小和截断比例。"""
 
@@ -285,16 +300,21 @@ class TestP2_15_TruncateMessageSize(unittest.TestCase):
 
         self.assertIn("truncated", result.lower())
         # 应包含原始大小或截断比例信息
-        has_size_info = ("5000" in result or "5" in result or
-                         "%" in result or "/" in result or
-                         "chars" in result.lower() or "bytes" in result.lower())
-        self.assertTrue(has_size_info,
-                        f"截断提示应包含大小信息: {result!r}")
+        has_size_info = (
+            "5000" in result
+            or "5" in result
+            or "%" in result
+            or "/" in result
+            or "chars" in result.lower()
+            or "bytes" in result.lower()
+        )
+        self.assertTrue(has_size_info, f"截断提示应包含大小信息: {result!r}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # P2-10: core.py 增量缓存保存失败日志级别
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP2_10_CacheSaveLogLevel(unittest.TestCase):
     """P2-10: 缓存保存失败应使用 warning 而非 debug。"""
@@ -306,10 +326,11 @@ class TestP2_10_CacheSaveLogLevel(unittest.TestCase):
 
         source = inspect.getsource(core.RepoMapEngine.scan)
         # scan() 中的异常处理应包含 logger.warning（不是 logger.debug）
-        self.assertIn("logger.warning", source,
-                      "scan() 中缓存保存失败应使用 logger.warning")
+        self.assertIn(
+            "logger.warning", source, "scan() 中缓存保存失败应使用 logger.warning"
+        )
         self.assertNotIn(
-            "logger.debug(f\"Failed to save",
+            'logger.debug(f"Failed to save',
             source,
             "不应再使用 logger.debug 记录缓存保存失败",
         )
@@ -318,6 +339,7 @@ class TestP2_10_CacheSaveLogLevel(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════════════════════
 # P2-11: core.py call graph enrichment 失败日志级别
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP2_11_CallGraphEnrichmentLogLevel(unittest.TestCase):
     """P2-11: call graph enrichment 失败应使用 warning 而非 debug。"""
@@ -329,10 +351,11 @@ class TestP2_11_CallGraphEnrichmentLogLevel(unittest.TestCase):
 
         source = inspect.getsource(RepoMapEngine._enrich_call_edges)
         # 异常处理应使用 logger.warning
-        self.assertIn("logger.warning", source,
-                      "_enrich_call_edges 异常处理应使用 logger.warning")
+        self.assertIn(
+            "logger.warning", source, "_enrich_call_edges 异常处理应使用 logger.warning"
+        )
         self.assertNotIn(
-            "logger.debug(f\"{label} call graph enrichment",
+            'logger.debug(f"{label} call graph enrichment',
             source,
             "不应再使用 logger.debug 记录 call graph enrichment 失败",
         )
@@ -341,6 +364,7 @@ class TestP2_11_CallGraphEnrichmentLogLevel(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════════════════════
 # P2-14: check.py ESLint 跳过时 exit_code 不为 0
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP2_14_EslintSkipExitCode(unittest.TestCase):
     """P2-14: 跳过 ESLint 时 exit_code 应为非零值以区分"通过"。"""
@@ -358,13 +382,17 @@ class TestP2_14_EslintSkipExitCode(unittest.TestCase):
         )
 
         self.assertTrue(result.skipped)
-        self.assertNotEqual(result.exit_code, 0,
-                            "跳过 ESLint 时 exit_code 不应为 0，否则 LLM 误认为检查通过")
+        self.assertNotEqual(
+            result.exit_code,
+            0,
+            "跳过 ESLint 时 exit_code 不应为 0，否则 LLM 误认为检查通过",
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # P2-16: git_backend.py Pygit2Backend 静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP2_16_Pygit2BackendSilentExceptions(unittest.TestCase):
     """P2-16: Pygit2Backend 的 except Exception 不应完全静默。"""
@@ -422,6 +450,7 @@ class TestP2_16_Pygit2BackendSilentExceptions(unittest.TestCase):
 # P2-12: topic.py _load_co_change_scores 失败静默吞错
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP2_12_CoChangeScoresSilentFailure(unittest.TestCase):
     """P2-12: _load_co_change_scores git 失败应记录日志。"""
 
@@ -432,13 +461,17 @@ class TestP2_12_CoChangeScoresSilentFailure(unittest.TestCase):
         self.assertEqual(result, {})
         # 修复后 topic.py 会有 logger，此时可以检查日志
         import src.topic
+
         if hasattr(src.topic, "logger"):
             with self.assertLogs("repomap", level="WARNING") as log_ctx:
                 _load_co_change_scores("/tmp/nonexistent_repo_xyz")
             self.assertTrue(
-                any("co-change" in msg.lower() or "co_change" in msg.lower() or
-                    "git" in msg.lower()
-                    for msg in log_ctx.output),
+                any(
+                    "co-change" in msg.lower()
+                    or "co_change" in msg.lower()
+                    or "git" in msg.lower()
+                    for msg in log_ctx.output
+                ),
                 f"git 失败应记录日志: {log_ctx.output}",
             )
 
