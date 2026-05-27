@@ -88,7 +88,8 @@ class SubprocessBackend:
                 ["rev-parse", "HEAD"], project_root, timeout=5
             )
             return r.stdout.strip() if r.returncode == 0 else None
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git rev-parse HEAD failed: {exc}")
             return None
 
     @staticmethod
@@ -98,7 +99,8 @@ class SubprocessBackend:
                 ["rev-parse", "--show-toplevel"], project_root, timeout=5
             )
             return r.stdout.strip() if r.returncode == 0 else None
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git rev-parse --show-toplevel failed: {exc}")
             return None
 
     @staticmethod
@@ -160,7 +162,8 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git diff --name-only failed: {exc}")
             return []
 
     @staticmethod
@@ -174,7 +177,8 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git diff --cached --name-only failed: {exc}")
             return []
 
     @staticmethod
@@ -186,7 +190,8 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git status --porcelain failed: {exc}")
             return []
 
     @staticmethod
@@ -211,7 +216,8 @@ class SubprocessBackend:
                 )
                 return []
             return [l for l in r.stdout.strip().splitlines() if l]
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git log --name-only failed: {exc}")
             return []
 
     @staticmethod
@@ -226,7 +232,8 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git diff --name-only --since failed: {exc}")
             return []
 
     @staticmethod
@@ -260,7 +267,8 @@ class SubprocessBackend:
             if current:
                 groups.append(current)
             return groups
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"git log --name-only (grouped) failed: {exc}")
             return []
 
     @staticmethod
@@ -281,7 +289,8 @@ class SubprocessBackend:
             output = r.stdout
             commit_hash = output.split()[0][:8] if output else "unknown"
             return {"commit": commit_hash}
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"git blame failed for {file_path}:{line}: {exc}")
             return None
 
     @staticmethod

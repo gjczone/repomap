@@ -69,6 +69,9 @@ def _render_selected_call_chain(engine: RepoMapEngine, symbol: Any, depth: int) 
     return "\n".join(lines)
 
 
+_CALL_CHAIN_MAX_DEPTH = 10
+
+
 def run_call_chain(
     project: str,
     max_files: int,
@@ -79,6 +82,12 @@ def run_call_chain(
     max_chars: int,
     as_json: bool,
 ) -> int:
+    if depth > _CALL_CHAIN_MAX_DEPTH:
+        print(
+            f"[{CLI_NAME}] --depth {depth} exceeds max {_CALL_CHAIN_MAX_DEPTH}, clamping to {_CALL_CHAIN_MAX_DEPTH}",
+            file=sys.stderr,
+        )
+        depth = _CALL_CHAIN_MAX_DEPTH
     try:
         engine = _scan_engine(project, max_files)
         selected, error, tier = _select_symbol_match(

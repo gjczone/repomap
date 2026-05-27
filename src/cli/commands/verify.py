@@ -532,6 +532,7 @@ def run_verify(
     with_diff: bool,
     quick: bool = False,
     incremental: bool = False,
+    max_chars: int = 16000,
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -630,7 +631,7 @@ def run_verify(
         if as_json:
             print(json_dumps(payload, ensure_ascii=False, indent=2))
         else:
-            print(render_verify_report(payload))
+            print(render_verify_report(payload, max_chars=max_chars))
 
         # 如果没有 git 变更，给出下一步建议
         if not changed_files:
