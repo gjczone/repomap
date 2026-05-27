@@ -1,6 +1,6 @@
 # RepoMap — Codebase Awareness for Coding Agents
 
-> Tree-sitter project maps, 18-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
+> Tree-sitter project maps, 17-language LSP, pre/post-edit impact analysis — for Claude Code, Cursor, Codex, OpenCode.
 >
 > Inspired by [aider](https://github.com/Aider-AI/aider)'s repo map. Built by [@gjczone](https://github.com/gjczone) with deepseek-v4-pro and glm-5.1.
 
