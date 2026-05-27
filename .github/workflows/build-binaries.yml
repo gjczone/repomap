@@ -13,10 +13,16 @@ on:
          - ".github/workflows/build-binaries.yml"
          - "uv.lock"
    pull_request:
-      paths-ignore:
-         - "**/*.md"
-         - "docs/**"
-         - "skills/**"
+      paths:
+         - "src/**"
+         - "pyproject.toml"
+         - "npm/**"
+         - ".github/workflows/build-binaries.yml"
+         - "uv.lock"
+
+concurrency:
+   group: ${{ github.workflow }}-${{ github.ref }}
+   cancel-in-progress: true
 
 jobs:
    build:
@@ -40,19 +46,20 @@ jobs:
               python-version: "3.13"
 
          - name: Install uv
-           run: pip install uv
+           uses: astral-sh/setup-uv@v5
+           with:
+              enable-cache: true
+
+         - name: Install dependencies
+           run: uv sync --all-extras --group dev
 
          - name: Run test suite
            shell: bash
-           run: |
-              uv run --with pytest,pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp,tree-sitter-c,tree-sitter-c-sharp \
-                pytest tests -v
+           run: uv run pytest tests -v
 
          - name: Build binary
            shell: bash
-           run: |
-              uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp,tree-sitter-c,tree-sitter-c-sharp \
-                python -m src.cli build-binary --output dist
+           run: uv run python -m src.cli build-binary --output dist
 
          - name: Smoke test binary
            shell: bash

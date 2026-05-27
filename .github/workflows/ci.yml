@@ -68,8 +68,8 @@ jobs:
          - name: Install dependencies
            run: uv sync --all-extras --group dev
 
-         - name: Run mypy
-           run: uv run mypy src/ --ignore-missing-imports --no-error-summary || echo "mypy found issues — informational only for now"
+         - name: Run mypy (informational)
+           run: uv run mypy src/ --ignore-missing-imports --no-error-summary
 
    security:
       needs: lint
@@ -84,9 +84,10 @@ jobs:
            run: pip install uv
 
          - name: Install dependencies
-           run: |
-              uv sync --all-extras
-              uv pip install pip-audit
+           run: uv sync --all-extras
+
+         - name: Install pip-audit
+           run: uv pip install pip-audit
 
          - name: Audit Python dependencies
            run: uv run pip-audit
