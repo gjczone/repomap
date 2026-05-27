@@ -148,6 +148,7 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
 def analyze_python_callgraph(
     project_root: Path,
     python_files: list[str],
+    source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
     modules: dict[str, ModuleInfo] = {}
 
@@ -156,7 +157,10 @@ def analyze_python_callgraph(
         if not full_path.exists():
             continue
         try:
-            source = full_path.read_bytes()
+            if source_map and rel_path in source_map:
+                source = source_map[rel_path]
+            else:
+                source = full_path.read_bytes()
         except OSError:
             logger.debug(
                 "Failed to read %s for call graph analysis", rel_path, exc_info=True
@@ -277,6 +281,7 @@ def analyze_ts_callgraph(
     project_root: Path,
     ts_files: list[str],
     ts_adapter: Any,
+    source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
     modules: dict[str, ModuleInfo] = {}
     for rel_path in ts_files:
@@ -284,7 +289,10 @@ def analyze_ts_callgraph(
         if not full_path.exists():
             continue
         try:
-            source = full_path.read_bytes()
+            if source_map and rel_path in source_map:
+                source = source_map[rel_path]
+            else:
+                source = full_path.read_bytes()
         except OSError:
             logger.debug(
                 "Failed to read %s for call graph analysis", rel_path, exc_info=True
@@ -416,6 +424,7 @@ def analyze_go_callgraph(
     project_root: Path,
     go_files: list[str],
     ts_adapter: Any,
+    source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
     modules: dict[str, ModuleInfo] = {}
     for rel_path in go_files:
@@ -423,7 +432,10 @@ def analyze_go_callgraph(
         if not full_path.exists():
             continue
         try:
-            source = full_path.read_bytes()
+            if source_map and rel_path in source_map:
+                source = source_map[rel_path]
+            else:
+                source = full_path.read_bytes()
         except OSError:
             logger.debug(
                 "Failed to read %s for call graph analysis", rel_path, exc_info=True
@@ -538,6 +550,7 @@ def analyze_rust_callgraph(
     project_root: Path,
     rust_files: list[str],
     ts_adapter: Any,
+    source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
     modules: dict[str, ModuleInfo] = {}
     for rel_path in rust_files:
@@ -545,7 +558,10 @@ def analyze_rust_callgraph(
         if not full_path.exists():
             continue
         try:
-            source = full_path.read_bytes()
+            if source_map and rel_path in source_map:
+                source = source_map[rel_path]
+            else:
+                source = full_path.read_bytes()
         except OSError:
             logger.debug(
                 "Failed to read %s for call graph analysis", rel_path, exc_info=True

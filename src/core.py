@@ -297,6 +297,7 @@ class RepoMapEngine:
 
         self.graph = RepoGraph()
         self._cache = {}
+        self._source_bytes: dict[str, bytes] = {}
         self.scan_stats = ScanStats()
         self.routes = []
         self._search_index = None  # invalidate search index on re-scan
@@ -798,6 +799,9 @@ class RepoMapEngine:
         if new_routes:
             self.routes.extend(new_routes)
 
+        # 缓存源文件字节，供调用图分析复用，避免二次读取
+        self._source_bytes[file] = content
+
         # 立即释放 tree 对象以避免内存泄漏，只缓存 mtime
         del tree
         self._cache[file] = (mtime, file_size)
@@ -833,10 +837,13 @@ class RepoMapEngine:
             from . import callgraph as cg
 
             analyze_fn = getattr(cg, analyze_fn_name)
+            source_map = getattr(self, "_source_bytes", None) or {}
             if needs_ts:
-                modules = analyze_fn(self.project_root, files, self.ts)
+                modules = analyze_fn(
+                    self.project_root, files, self.ts, source_map=source_map
+                )
             else:
-                modules = analyze_fn(self.project_root, files)
+                modules = analyze_fn(self.project_root, files, source_map=source_map)
             precise_edges = cg.resolve_precise_edges(modules)
             added = self._add_precise_edges(precise_edges)
             if added:
@@ -926,6 +933,7 @@ class RepoMapEngine:
         self._enrich_ts_call_edges()
         self._enrich_go_call_edges()
         self._enrich_rust_call_edges()
+        self._source_bytes.clear()  # 调用图完成后释放源文件缓存
 
     # ── PageRank ───────────────────────────────────────────────────────────────
 

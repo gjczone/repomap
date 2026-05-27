@@ -821,6 +821,12 @@ class TreeSitterAdapter:
             name = explicit_name or self._contextual_anonymous_name(node)
 
             symbol_id = f"{file}::{name}::{line}"
+            # 碰撞消歧义：同一行多个匿名函数时，追加序号避免ID覆盖
+            if symbol_id in anonymous_symbols:
+                count = 2
+                while f"{symbol_id}#{count}" in anonymous_symbols:
+                    count += 1
+                symbol_id = f"{symbol_id}#{count}"
             anonymous_symbols[symbol_id] = Symbol(
                 id=symbol_id,
                 name=name,
