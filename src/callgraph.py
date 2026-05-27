@@ -23,21 +23,12 @@ from pathlib import Path
 from typing import Any
 
 from .parser import TreeSitterAdapter
+from . import find_child_by_type as _find_child_by_type
+from . import find_children_by_type as _find_children_by_type
 
 logger = logging.getLogger("repomap.callgraph")
 
 _node_text = TreeSitterAdapter._text
-
-
-def _find_child_by_type(node: Any, child_type: str) -> Any | None:
-    for child in node.children:
-        if child.type == child_type:
-            return child
-    return None
-
-
-def _find_children_by_type(node: Any, child_type: str) -> list[Any]:
-    return [child for child in node.children if child.type == child_type]
 
 
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:

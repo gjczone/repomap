@@ -29,15 +29,6 @@ logger = logging.getLogger("repomap")
 MAX_EXPORT_RESOLVE_DEPTH = 3
 CALLABLE_KINDS = {"function", "method", "anonymous_function"}
 
-# Bundler config file names
-BUNDLER_CONFIGS = {
-    "vite": ["vite.config.js", "vite.config.ts", "vite.config.mjs"],
-    "webpack": ["webpack.config.js", "webpack.config.ts"],
-    "rollup": ["rollup.config.js", "rollup.config.mjs"],
-    "esbuild": [],  # esbuild usually configured in package.json or build scripts
-    "turbopack": [],  # Next.js 13+, uses next.config.js
-}
-
 
 class PackageJsonExports:
     """解析 package.json exports 字段，支持条件导出和子路径模式。"""
@@ -467,6 +458,12 @@ class ImportResolver:
         # 缓存非相对路径的解析结果（相对路径取决于源文件位置，不宜缓存）
         if not imp.startswith("."):
             self._resolve_cache[cache_key] = result
+        if not result:
+            # 所有解析策略均未命中，记录 debug 日志以便排查依赖图不完整的原因
+            logger.debug(
+                f"Import unresolved: '{imp}' from {source_file} "
+                f"(all strategies exhausted)"
+            )
         return result
 
     def _package_export_subpath(self, package_name: str, imp: str) -> str | None:

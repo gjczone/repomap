@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import RepoGraph
 
+from . import LOW_SIGNAL_KINDS, signal_weight_for_symbol
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 数据结构
@@ -634,11 +636,11 @@ def _load_co_change_scores(
 # 测试盲区检测
 # ═══════════════════════════════════════════════════════════════════════════════
 
-LOW_SIGNAL_KINDS = {"element", "selector", "class_selector", "id_selector", "json_key"}
+# LOW_SIGNAL_KINDS 已从 __init__.py 统一导入，不再重复定义
 
 
 def _signal_weight_for_symbol(sym: Any) -> float:
-    """独立版符号信号权重，不依赖 GraphAnalyzer 实例。"""
+    """独立版符号信号权重，委托给 __init__.py 中的统一实现。"""
     kind = getattr(sym, "kind", "") if hasattr(sym, "kind") else sym.get("kind", "")
     name = getattr(sym, "name", "") if hasattr(sym, "name") else sym.get("name", "")
     visibility = (
@@ -646,13 +648,7 @@ def _signal_weight_for_symbol(sym: Any) -> float:
         if hasattr(sym, "visibility")
         else sym.get("visibility", "")
     )
-    if kind in LOW_SIGNAL_KINDS:
-        return 0.002
-    if name in {"__init__", "__main__"}:
-        return 0.35
-    if name.startswith("_") and visibility == "private":
-        return 0.85
-    return 1.0
+    return signal_weight_for_symbol(kind, name, visibility)
 
 
 def find_untested_symbols(

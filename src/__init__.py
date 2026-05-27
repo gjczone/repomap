@@ -63,6 +63,50 @@ DEFAULT_OVERVIEW_JSON_SUMMARY_FILES = 4
 DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE = 3
 DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
 
+# 低信号符号类型——这些类型在 PageRank/权重计算中降权处理
+# 统一定义在此处，ranking.py 和 topic.py 共享同一来源，防止不同步
+LOW_SIGNAL_KINDS = frozenset(
+    {"element", "selector", "class_selector", "id_selector", "json_key"}
+)
+BOILERPLATE_NAMES = frozenset({"__init__", "__main__"})
+
+
+def signal_weight_for_symbol(kind: str, name: str, visibility: str) -> float:
+    """计算符号的信号权重（统一实现，ranking.py 和 topic.py 共享）。
+
+    Args:
+        kind: 符号类型（如 "function", "class", "element" 等）
+        name: 符号名称
+        visibility: 可见性（"exported", "public", "private"）
+
+    Returns:
+        权重系数：0.002（低信号）/ 0.35（样板代码）/ 0.85（私有）/ 1.0（默认）
+    """
+    if kind in LOW_SIGNAL_KINDS:
+        return 0.002
+    if name in BOILERPLATE_NAMES:
+        return 0.35
+    if name.startswith("_") and visibility == "private":
+        return 0.85
+    return 1.0
+
+
+def find_child_by_type(node: Any, child_type: str) -> Any | None:
+    """在 tree-sitter AST 节点中按子节点类型查找第一个匹配项。
+
+    统一实现，供 parser.py / type_inference.py / callgraph.py 共享，
+    消除三处重复定义。
+    """
+    for child in node.children:
+        if child.type == child_type:
+            return child
+    return None
+
+
+def find_children_by_type(node: Any, child_type: str) -> list[Any]:
+    """在 tree-sitter AST 节点中按子节点类型查找所有匹配项。"""
+    return [child for child in node.children if child.type == child_type]
+
 
 def get_project_cache_dir(project_path: str) -> Path:
     """获取项目的缓存目录（基于规范化后的项目路径哈希隔离）。"""

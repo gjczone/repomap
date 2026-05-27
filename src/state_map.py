@@ -6,11 +6,14 @@ Rust (enum), and Go (typed constants).
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 import os
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger("repomap.state_map")
 
 if TYPE_CHECKING:
     from .core import RepoMapEngine
@@ -35,15 +38,19 @@ class StateDefinition:
 
 
 def _read_file(project_root: str, file_path: str) -> str | None:
+    """读取文件内容。返回 None 时通过 debug 日志区分原因（安全拦截/二进制/IO异常）。"""
     try:
         resolved = (Path(project_root) / file_path).resolve()
         if not str(resolved).startswith(str(Path(project_root).resolve()) + os.sep):
+            logger.debug(f"Path traversal blocked: {file_path}")
             return None
         raw = resolved.read_bytes()
         if b"\x00" in raw[:8192]:
+            logger.debug(f"Skipping binary file: {file_path}")
             return None
         return raw.decode("utf-8", errors="replace")[:131072]
-    except OSError:
+    except OSError as exc:
+        logger.debug(f"Failed to read {file_path}: {exc}")
         return None
 
 

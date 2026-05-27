@@ -215,7 +215,8 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(status, "warning")
 
-    def test_verify_unknown_check_passes_when_lsp_is_clean(self) -> None:
+    def test_verify_unknown_check_always_warns(self) -> None:
+        """P1-2: unknown 表示没有诊断工具运行，不能视为 passed，即使 LSP 通过。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
@@ -227,7 +228,7 @@ class RepoMapCliTests(unittest.TestCase):
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
 
-        self.assertEqual(status, "passed")
+        self.assertEqual(status, "warning")
 
     def test_verify_unknown_check_warns_without_lsp_evidence(self) -> None:
         from src.cli.commands.verify import _overall_verify_status

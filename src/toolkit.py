@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -45,6 +46,8 @@ from . import (
     serialize_edge,
     serialize_symbol,
 )
+
+logger = logging.getLogger("repomap.toolkit")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -210,7 +213,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
             return None
         return SymbolCache(**data)
     except ValueError:
-        # Cache file corrupted
+        # Cache file corrupted — JSON 解析失败
         print(
             f"[repomap] Cache file corrupted ({cache_file}), clearing and re-scanning",
             file=sys.stderr,
@@ -220,7 +223,19 @@ def load_cache(project_path: str) -> SymbolCache | None:
         except OSError:
             pass
         return None
-    except Exception:
+    except (TypeError, KeyError):
+        # Schema 字段不匹配（版本升级后字段变更），清理后重建
+        logger.warning(
+            f"Cache schema mismatch ({cache_file}), clearing and re-scanning"
+        )
+        try:
+            os.unlink(cache_file)
+        except OSError:
+            pass
+        return None
+    except OSError as exc:
+        # I/O 问题（权限不足、磁盘满等），记录 warning 而非静默吞掉
+        logger.warning(f"Failed to read cache file {cache_file}: {exc}")
         return None
 
 
@@ -235,7 +250,13 @@ def load_last_snapshot(project_path: str) -> SymbolCache | None:
         with open(last_file, "r", encoding="utf-8") as f:
             data = json_load(f)
         return SymbolCache(**data)
-    except Exception:
+    except (ValueError, TypeError, KeyError):
+        # 快照文件损坏或 schema 不匹配，记录后返回 None
+        logger.debug(f"Last snapshot corrupted or incompatible ({last_file})")
+        return None
+    except OSError as exc:
+        # I/O 异常（权限、磁盘等），不应静默
+        logger.warning(f"Failed to read snapshot file {last_file}: {exc}")
         return None
 
 
@@ -369,7 +390,13 @@ def load_incremental_cache(project_path: str) -> IncrementalCache | None:
             files=files,
             scan_stats_json=data.get("scan_stats_json", {}),
         )
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, TypeError):
+        # 缓存损坏或 schema 不匹配
+        logger.debug(f"Incremental cache corrupted or incompatible ({cache_path})")
+        return None
+    except OSError as exc:
+        # I/O 异常（权限、磁盘等）
+        logger.warning(f"Failed to read incremental cache {cache_path}: {exc}")
         return None
 
 
@@ -455,7 +482,8 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
             "recent_commits": recent_commits[:10],
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"get_symbol_git_history failed for {symbol_name}: {exc}")
         return None
 
 
@@ -497,7 +525,8 @@ def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
 
         return sorted(hot_symbols, key=symbol_count, reverse=True)[:10]
 
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"get_hot_symbols failed: {exc}")
         return []
 
 
