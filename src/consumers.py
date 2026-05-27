@@ -146,7 +146,7 @@ def find_route_consumers(
     project_root = str(engine.project_root)
     for file_path in sorted(engine.graph.file_symbols.keys()):
         ext = PurePosixPath(file_path).suffix.lower()
-        lang = ext_to_lang.get(ext)
+        lang = ext_to_lang.get(ext)  # type: ignore[assignment]
         if not lang:
             continue
 

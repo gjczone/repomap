@@ -606,7 +606,8 @@ class DiagnosticRunner:
         self, output: str
     ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 pyright --outputjson"""
-        errors, warnings = [], []
+        errors: list[DiagnosticIssue] = []
+        warnings: list[DiagnosticIssue] = []
         try:
             data = json_loads(output) if output.strip() else {}
         except Exception:

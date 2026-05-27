@@ -654,7 +654,7 @@ class Pygit2Backend:
         if repo is None:
             return []
         try:
-            commits = []
+            commits: list[dict[str, str]] = []
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for commit in walker:
                 if len(commits) >= limit:

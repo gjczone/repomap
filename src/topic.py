@@ -715,5 +715,5 @@ def find_untested_symbols(
             }
         )
 
-    untested.sort(key=lambda x: -x["risk_score"])
+    untested.sort(key=lambda x: -float(x["risk_score"]))
     return untested[:max_results]

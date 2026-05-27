@@ -134,7 +134,7 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
             return node.id
         if isinstance(node, ast.Attribute):
             parts: list[str] = []
-            current = node
+            current: ast.expr = node
             while isinstance(current, ast.Attribute):
                 parts.append(current.attr)
                 current = current.value

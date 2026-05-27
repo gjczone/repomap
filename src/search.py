@@ -110,12 +110,13 @@ class SymbolSearchIndex:
         if not tokens:
             return []
 
+        assert self._bm25 is not None  # _built=True 保证 _bm25 已初始化
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(
             enumerate(scores),
             key=lambda x: -x[1],
         )
-        results = []
+        results: list[tuple[str, float]] = []
         for idx, score in ranked:
             if score > 0 and len(results) < top_k:
                 results.append((self._symbol_ids[idx], float(score)))

@@ -133,6 +133,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 | Binary E2E | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v` |
 | Full | `uv run python -m unittest discover -s tests -v && uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q` |
 | Smoke | `repomap doctor --project . && repomap overview --project . && repomap verify --project . --quick` |
+| Typecheck | `uv run mypy src/ --ignore-missing-imports --no-error-summary` |
 
 ## README Maintenance
 
@@ -169,6 +170,7 @@ The public README files serve different audiences than this document:
 - Use TDD for bug fixes and behavior changes: write or identify the smallest failing test first, then make the minimal code change.
 - Run the focused test before the full suite; when behavior contracts change, update affected assertions, fixtures, mocks, and snapshots.
 - Regression tests: for every P0/P1 bug fixed, add or update a test that would have caught it before the fix.
+- mypy typecheck is **blocking** in CI (`uv run mypy src/ --ignore-missing-imports --no-error-summary`). PRs that introduce new mypy errors will fail CI. Run mypy locally before committing changes to `src/`.
 
 ## API / CLI Rules
 

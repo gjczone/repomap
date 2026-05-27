@@ -305,7 +305,9 @@ def run_file_detail(
                 "file": normalized_file_path,
                 "symbol_count": len(symbols),
                 "symbols": sorted(
-                    symbols, key=lambda x: x.get("pagerank", 0), reverse=True
+                    symbols,
+                    key=lambda x: float(x.get("pagerank", 0)),  # type: ignore[arg-type]
+                    reverse=True,
                 )[:max_symbols],
                 "imports": engine.graph.file_imports.get(normalized_file_path, []),
                 "calls": [
@@ -327,7 +329,7 @@ def run_file_detail(
             print(json_dumps(payload, ensure_ascii=False, indent=2))
             return 0
 
-        lsp_tree = None
+        lsp_tree: list[Any] | None = None  # type: ignore[no-redef]
         if with_lsp:
             from ...lsp import collect_lsp_symbol_tree
 
