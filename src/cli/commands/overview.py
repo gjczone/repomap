@@ -31,7 +31,7 @@ def run_scan(project: str, max_files: int, as_json: bool = False) -> int:
             print(
                 json_envelope(
                     "scan",
-                    project,
+                    str(engine.project_root),
                     {
                         "project_root": str(engine.project_root),
                         "files": engine.scan_stats.processed_files,

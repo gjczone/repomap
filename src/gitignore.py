@@ -121,7 +121,7 @@ class GitignoreParser:
 
         dirs = []
         for entry in entries:
-            if entry.is_dir():
+            if entry.is_dir(follow_symlinks=False):
                 dirs.append(entry)
             elif entry.name == ".gitignore" and entry.is_file():
                 self._load_gitignore(Path(entry.path), rel_path)

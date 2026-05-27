@@ -431,9 +431,12 @@ class ImportResolver:
             )
 
     def _cache_set(self, key: tuple[str, str], value: list[str]) -> None:
-        """写入解析缓存，超过上限时清空旧条目防止内存泄漏。"""
+        """写入解析缓存，超过上限时 LRU 淘汰 25% 防止内存泄漏。"""
         if len(self._resolve_cache) >= self._resolve_cache_max:
-            self._resolve_cache.clear()
+            # 淘汰最老的 25% 条目（dict 按插入顺序迭代，前面是最老的）
+            evict_count = self._resolve_cache_max // 4
+            for old_key in list(self._resolve_cache)[:evict_count]:
+                del self._resolve_cache[old_key]
         self._resolve_cache[key] = value
 
     def resolve_import_targets(self, source_file: str, imp: str) -> list[str]:

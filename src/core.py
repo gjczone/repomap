@@ -361,10 +361,24 @@ class RepoMapEngine:
                             f"{f}: {type(e).__name__}: {str(e)[:50]}"
                         )
                     logger.warning(f"Failed to process file {f}: {e}")
-
-            self._build_edges()
-            self._analyzer = GraphAnalyzer(self.graph)
-            self._calculate_pagerank()
+            # 边构建和 PageRank 也受超时保护
+            elapsed = time.time() - start_time
+            if elapsed > max_scan_time:
+                self.scan_stats.timeout_triggered = True
+                logger.warning(
+                    f"Scan timeout before edge building: {elapsed:.1f}s, limit {max_scan_time}s"
+                )
+            else:
+                self._build_edges()
+                self._analyzer = GraphAnalyzer(self.graph)
+                elapsed = time.time() - start_time
+                if elapsed > max_scan_time:
+                    self.scan_stats.timeout_triggered = True
+                    logger.warning(
+                        f"Scan timeout before PageRank: {elapsed:.1f}s, limit {max_scan_time}s"
+                    )
+                else:
+                    self._calculate_pagerank()
             if self.scan_stats.timeout_triggered:
                 self.scan_state = "partial"
             else:
@@ -523,7 +537,7 @@ class RepoMapEngine:
                 logger.warning(f"Skipping malformed route entry: {exc}")
 
         # 更新 mtime 缓存
-        self._cache[file_path] = entry.mtime
+        self._cache[file_path] = (entry.mtime, entry.size)
         self.scan_stats.processed_files += 1
         self.scan_stats.skipped_files += 1
         return True

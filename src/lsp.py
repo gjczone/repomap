@@ -467,12 +467,18 @@ def _json_rpc_frame(payload: dict[str, Any]) -> bytes:
     return b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
 
 
-def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
+# 哨兵对象：区分流 EOF 和消息丢弃
+_STREAM_EOF = object()  # 流正常关闭
+_MESSAGE_SKIPPED = object()  # 消息被丢弃但流仍健康
+
+
+def _read_lsp_message(stream: Any) -> Any:
+    """Read a single LSP message from the stream. Returns dict, _STREAM_EOF, or _MESSAGE_SKIPPED."""
     headers: dict[str, str] = {}
     while True:
         line = stream.readline()
         if not line:
-            return None
+            return _STREAM_EOF
         if line in (b"\r\n", b"\n"):
             break
         text = line.decode("ascii", errors="replace").strip()
@@ -482,21 +488,28 @@ def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
     try:
         length = int(headers.get("content-length", "0"))
     except (ValueError, TypeError):
-        return None
+        return _STREAM_EOF
     if length <= 0:
-        return None
+        return _STREAM_EOF
     if length > _MAX_CONTENT_LENGTH:
         logger.warning(
             "LSP message Content-Length %d exceeds maximum %d, discarding",
             length,
             _MAX_CONTENT_LENGTH,
         )
-        return None
+        # 消费 body 字节，防止级联失败
+        remaining = length
+        while remaining > 0:
+            chunk = stream.read(min(remaining, 65536))
+            if not chunk:
+                return _STREAM_EOF
+            remaining -= len(chunk)
+        return _MESSAGE_SKIPPED
     body = b""
     while len(body) < length:
         chunk = stream.read(length - len(body))
         if not chunk:
-            return None
+            return _STREAM_EOF
         body += chunk
     return json_loads(body.decode("utf-8"))
 
@@ -515,6 +528,7 @@ class StdioLspClient:
         self._stderr_reader: threading.Thread | None = None
         self._stop_reader = False
         self.server_capabilities: dict[str, Any] = {}
+        self._opened_files: set[str] = set()  # 已成功 did_open 的文件路径
 
     def __enter__(self) -> "StdioLspClient":
         self.start()
@@ -548,8 +562,12 @@ class StdioLspClient:
                     "LSP message read error: %s (reader thread continues)", exc
                 )
                 continue
+            if message is _STREAM_EOF:
+                return  # 流关闭，正常退出
+            if message is _MESSAGE_SKIPPED:
+                continue  # 消息丢弃，继续读
             if message is None:
-                return
+                return  # 保持兼容（理论上不应到达）
             self._messages.put(message)
 
     def _drain_stderr(self) -> None:
@@ -605,6 +623,9 @@ class StdioLspClient:
         )
         deadline = time.time() + self.timeout
         while time.time() < deadline:
+            # 进程崩溃时立即退出，避免等满整个超时窗口
+            if self.process is not None and self.process.poll() is not None:
+                break
             try:
                 message = self._messages.get(timeout=max(0.05, deadline - time.time()))
             except queue.Empty:
@@ -706,6 +727,7 @@ class StdioLspClient:
                 }
             },
         )
+        self._opened_files.add(str(file_path.resolve()))
 
     def _position_params(
         self, file_path: Path, line: int, character: int
@@ -716,6 +738,8 @@ class StdioLspClient:
         }
 
     def definition(self, file_path: Path, line: int, character: int) -> Any:
+        if str(file_path.resolve()) not in self._opened_files:
+            return None
         response = self.request(
             "textDocument/definition", self._position_params(file_path, line, character)
         )
@@ -724,6 +748,8 @@ class StdioLspClient:
         return response.get("result")
 
     def references(self, file_path: Path, line: int, character: int) -> Any:
+        if str(file_path.resolve()) not in self._opened_files:
+            return None
         params = self._position_params(file_path, line, character)
         params["context"] = {"includeDeclaration": True}
         response = self.request("textDocument/references", params)
@@ -732,6 +758,8 @@ class StdioLspClient:
         return response.get("result")
 
     def hover(self, file_path: Path, line: int, character: int) -> Any:
+        if str(file_path.resolve()) not in self._opened_files:
+            return None
         response = self.request(
             "textDocument/hover", self._position_params(file_path, line, character)
         )

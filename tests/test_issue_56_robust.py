@@ -200,6 +200,7 @@ class TestB11LspDidOpenLimit(unittest.TestCase):
             small_file.write_text(content, encoding="utf-8")
 
             client = object.__new__(StdioLspClient)
+            client._opened_files = set()  # 初始化新增的追踪集合
             call_count = 0
 
             def mock_send(*_args: object, **_kwargs: object) -> None:

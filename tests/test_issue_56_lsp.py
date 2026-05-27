@@ -10,6 +10,7 @@ from src.lsp import (
     LspDiagnostic,
     StdioLspClient,
     _MAX_CONTENT_LENGTH,
+    _MESSAGE_SKIPPED,
     _diagnostic_from_lsp,
     _read_lsp_message,
 )
@@ -48,9 +49,10 @@ class TestMaxContentLength(unittest.TestCase):
     def test_rejects_oversized_message(self) -> None:
         oversized_length = _MAX_CONTENT_LENGTH + 1
         header = f"Content-Length: {oversized_length}\r\n\r\n".encode("ascii")
-        stream = io.BytesIO(header + b"x" * 100)  # body doesn't matter
+        # Provide enough body bytes so the drain loop can consume them all
+        stream = io.BytesIO(header + b"x" * oversized_length)
         result = _read_lsp_message(stream)
-        self.assertIsNone(result)
+        self.assertIs(result, _MESSAGE_SKIPPED)
 
     def test_accepts_message_at_max_length(self) -> None:
         # A message exactly at the limit should be accepted
