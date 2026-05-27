@@ -1,12 +1,13 @@
 __pycache__/
 *.py[cod]
 .venv/
-dist/.pyinstaller/
-dist/repomap
-dist/repomap.exe
+.mypy_cache/
+.ruff_cache/
+dist/*
 .pytest_cache/
 npm/platforms/*/repomap
 npm/platforms/*/repomap.exe
 docs/
 .qoder/
 .worktrees/
+.claude/
