@@ -13,8 +13,8 @@ try:
         option = 0
         if kwargs.get("indent") is not None:
             option |= _orjson.OPT_INDENT_2
-        if kwargs.get("ensure_ascii") is False:
-            option |= _orjson.OPT_NON_STR_KEYS
+        # orjson 默认就是 UTF-8 输出，ensure_ascii=False 无需额外选项
+        # 注意：不要设置 OPT_NON_STR_KEYS，它会允许非字符串 key，产生非法 JSON
         if not option:
             return _orjson.dumps(obj).decode("utf-8")
         return _orjson.dumps(obj, option=option).decode("utf-8")

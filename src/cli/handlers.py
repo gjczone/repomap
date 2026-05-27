@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sys
 import tempfile
@@ -28,6 +29,7 @@ from ..parser import EXT_TO_LANG
 from ..topic import is_test_like_file
 
 CLI_NAME = "repomap"
+logger = logging.getLogger(__name__)
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
 PYINSTALLER_BINDINGS = [
@@ -124,7 +126,7 @@ def _read_max_file_bytes() -> int:
         value = int(raw)
     except ValueError:
         return 512 * 1024
-    return max(0, value)
+    return max(1, value)
 
 
 def _iter_source_files(project_root: Path) -> list[str]:
@@ -360,7 +362,15 @@ def _restore_engine_from_session_payload(
     engine._analyzer = type(engine._analyzer)(engine.graph)
     # 恢复路由数据
     engine.routes = [HttpRoute(**r) for r in payload.get("routes", [])]
-    return engine if engine.scan_state == "scanned" else None
+    # "idle" 表示扫描从未完成，丢弃；"scanned" 和 "invalid" 的数据已完整反序列化，可用
+    if engine.scan_state == "idle":
+        logger.debug("Discarding session engine with idle scan_state")
+        return None
+    if engine.scan_state != "scanned":
+        logger.warning(
+            f"Restoring session engine with non-standard scan_state='{engine.scan_state}'"
+        )
+    return engine
 
 
 def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine | None:
@@ -656,5 +666,7 @@ def _sym_name(engine: RepoMapEngine, sid: str) -> str:
 
 
 def _format_symbol_ref(engine: RepoMapEngine, sid: str) -> dict[str, Any]:
-    symbol = engine.graph.symbols[sid]
+    symbol = engine.graph.symbols.get(sid)
+    if symbol is None:
+        return {"name": "?", "file": "?", "line": 0}
     return {"name": symbol.name, "file": symbol.file, "line": symbol.line}

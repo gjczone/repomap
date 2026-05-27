@@ -44,7 +44,7 @@ def run_fix(project: str, dry_run: bool = False) -> int:
                 )
             if eslint_files:
                 result = subprocess.run(
-                    ["eslint", "--fix", *eslint_files],
+                    ["eslint", "--fix", "--", *eslint_files],
                     capture_output=True,
                     text=True,
                     timeout=60,

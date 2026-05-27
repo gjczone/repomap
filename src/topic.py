@@ -555,7 +555,9 @@ def _file_to_module_path(file_path: str) -> str:
 # Git 共变更热度
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_co_change_cache: OrderedDict[str, dict[tuple[str, str], int]] = OrderedDict()
+_co_change_cache: OrderedDict[tuple[str, int], dict[tuple[str, str], int]] = (
+    OrderedDict()
+)
 _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
 
 
@@ -563,14 +565,15 @@ def get_co_change_score(
     project_root: str, file_a: str, file_b: str, since_days: int = 30
 ) -> int:
     """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
-    cache = _co_change_cache.get(project_root)
+    cache_key = (project_root, since_days)
+    cache = _co_change_cache.get(cache_key)
     if cache is not None:
-        _co_change_cache.move_to_end(project_root)
+        _co_change_cache.move_to_end(cache_key)
     else:
         if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
             _co_change_cache.popitem(last=False)
         cache = _load_co_change_scores(project_root, since_days=since_days)
-        _co_change_cache[project_root] = cache
+        _co_change_cache[cache_key] = cache
     a, b = sorted([file_a, file_b])
     return cache.get((a, b), 0)
 
@@ -586,14 +589,15 @@ def get_co_change_neighbors(
     用途：识别隐式耦合——两个文件在 git 历史中频繁一起修改，
     即使代码上没有显式依赖，也可能存在隐含关联。
     """
-    cache = _co_change_cache.get(project_root)
+    cache_key = (project_root, since_days)
+    cache = _co_change_cache.get(cache_key)
     if cache is not None:
-        _co_change_cache.move_to_end(project_root)
+        _co_change_cache.move_to_end(cache_key)
     else:
         if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
             _co_change_cache.popitem(last=False)
         cache = _load_co_change_scores(project_root, since_days=since_days)
-        _co_change_cache[project_root] = cache
+        _co_change_cache[cache_key] = cache
     neighbors: dict[str, int] = {}
     for (a, b), count in cache.items():
         if a == file_path:
