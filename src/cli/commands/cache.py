@@ -44,26 +44,31 @@ def run_diff(project: str, as_json: bool) -> int:
     lines.append(
         f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n"
     )
-    lines.append(f"- Added symbols: {result['summary']['added']}")
-    lines.append(f"- Removed symbols: {result['summary']['removed']}")
-    lines.append(f"- Modified symbols: {result['summary']['modified']}")
-    lines.append(f"- Added calls: {result['summary']['edges_added']}")
-    lines.append(f"- Removed calls: {result['summary']['edges_removed']}\n")
-    if result["added_symbols"]:
+    summary = result.get("summary", {})
+    lines.append(f"- Added symbols: {summary.get('added', 0)}")
+    lines.append(f"- Removed symbols: {summary.get('removed', 0)}")
+    lines.append(f"- Modified symbols: {summary.get('modified', 0)}")
+    lines.append(f"- Added calls: {summary.get('edges_added', 0)}")
+    lines.append(f"- Removed calls: {summary.get('edges_removed', 0)}\n")
+    added_symbols = result.get("added_symbols", [])
+    if added_symbols:
         lines.append("**Added symbols** (Top 10):")
-        for item in result["added_symbols"][:10]:
-            lines.append(f"  - `{item['name']}` ({item['file']}:{item['line']})")
-    if result["call_chain_changes"]["new_calls"]:
+        for item in added_symbols[:10]:
+            lines.append(
+                f"  - `{item.get('name', '?')}` "
+                f"({item.get('file', '?')}:{item.get('line', '?')})"
+            )
+    call_chain_changes = result.get("call_chain_changes", {})
+    new_calls = call_chain_changes.get("new_calls", [])
+    if new_calls:
         lines.append("\n**Added calls** (Top 10):")
-        for change in result["call_chain_changes"]["new_calls"][:10]:
-            src_name = (
-                change["from"].split("::")[-2]
-                if "::" in change["from"]
-                else change["from"]
+        for change in new_calls[:10]:
+            src_raw = change.get("from", "")
+            src_name = src_raw.split("::")[-2] if "::" in src_raw else src_raw
+            tgt_raw = change.get("to", "")
+            tgt_name = tgt_raw.split("::")[-2] if "::" in tgt_raw else tgt_raw
+            lines.append(
+                f"  - `{src_name}` -[{change.get('kind', '?')}]-> `{tgt_name}`"
             )
-            tgt_name = (
-                change["to"].split("::")[-2] if "::" in change["to"] else change["to"]
-            )
-            lines.append(f"  - `{src_name}` -[{change['kind']}]-> `{tgt_name}`")
     print("\n".join(lines))
     return 0

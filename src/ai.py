@@ -24,7 +24,20 @@ CONFIDENCE_MARK = {"high": "HIGH", "medium": "MED", "low": "LOW"}
 def _truncate_output(output: str, max_chars: int) -> str:
     if max_chars <= 0 or len(output) <= max_chars:
         return output
-    return output[:max_chars] + "\n\n[output truncated]"
+    # 在 max_chars 内找到最后一个换行边界截断，避免在行中间或 Markdown 标记中间截断
+    truncated = output[:max_chars]
+    last_newline = truncated.rfind("\n")
+    if last_newline > max_chars // 2:
+        truncated = truncated[:last_newline]
+    else:
+        truncated = truncated[:max_chars]
+    original_size = len(output)
+    truncated_size = len(truncated)
+    ratio = int(truncated_size / original_size * 100)
+    return (
+        truncated
+        + f"\n\n[output truncated: {truncated_size}/{original_size} chars ({ratio}%)]"
+    )
 
 
 def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
@@ -283,14 +296,12 @@ def _render_co_change_section(
     pairs: list[tuple[str, str, int]] = []
     for entry in high_score_files:
         file_path = entry["file"]
-        # 将分析路径（相对于 project_root）转换为 git 路径（相对于 git root）
-        git_path = f"{git_rel_prefix}/{file_path}" if git_rel_prefix else file_path
+        # get_co_change_neighbors 接收 project_root 和 project_root 相对路径
         neighbors = get_co_change_neighbors(
-            project_root, git_path, top_n=3, since_days=co_change_days
+            project_root, file_path, top_n=3, since_days=co_change_days
         )
         if not neighbors:
             continue
-        # 将 git 路径转换回分析路径用于展示
         for neighbor_git_path, count in neighbors:
             display_a = file_path
             if git_rel_prefix:
@@ -434,7 +445,7 @@ def render_overview_report(
                 item.get("semantic_symbol_count") is not None
                 and item.get("semantic_symbol_count") != item["symbol_count"]
             ):
-                count_text += f"(total symbols {item['symbol_count']}）"
+                count_text += f"(total symbols {item['symbol_count']})"
             lines.append(
                 f"{index}. `{item['file']}`{hot_tag} — {item['reason']}；"
                 f"{count_text}{highlights}"
@@ -470,7 +481,7 @@ def render_overview_report(
                 module.get("semantic_symbol_count") is not None
                 and module.get("semantic_symbol_count") != module["symbol_count"]
             ):
-                count_text += f"(total symbols {module['symbol_count']}）"
+                count_text += f"(total symbols {module['symbol_count']})"
             lines.append(
                 f"- `{module['module']}` — {module['file_count']} files / {count_text}"
                 f"; representative `{module['representative_file']}`{highlights}"
@@ -515,7 +526,7 @@ def render_overview_report(
                 hotspot.get("semantic_symbol_count") is not None
                 and hotspot.get("semantic_symbol_count") != hotspot["symbol_count"]
             ):
-                count_text += f"(total symbols {hotspot['symbol_count']}）"
+                count_text += f"(total symbols {hotspot['symbol_count']})"
             lines.append(
                 f"- {RISK_MARK.get(hotspot['risk'], '[info]')} `{hotspot['file']}`"
                 f" — {count_text}"

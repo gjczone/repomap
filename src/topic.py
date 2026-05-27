@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
     from . import RepoGraph
 
 from . import LOW_SIGNAL_KINDS, signal_weight_for_symbol
+
+logger = logging.getLogger("repomap")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -620,6 +623,7 @@ def _load_co_change_scores(
         git = GitBackend(project_root)
         commit_groups = git.log_commits_grouped(since_days=since_days)
     except Exception:
+        logger.warning("Failed to load co-change scores from git", exc_info=True)
         return dict(scores)
 
     for commit_files in commit_groups:

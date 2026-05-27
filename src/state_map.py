@@ -38,7 +38,7 @@ class StateDefinition:
 
 
 def _read_file(project_root: str, file_path: str) -> str | None:
-    """读取文件内容。返回 None 时通过 debug 日志区分原因（安全拦截/二进制/IO异常）。"""
+    """读取文件内容。返回 None 时通过日志区分原因（安全拦截/二进制/IO异常）。"""
     try:
         resolved = (Path(project_root) / file_path).resolve()
         if not str(resolved).startswith(str(Path(project_root).resolve()) + os.sep):
@@ -46,11 +46,11 @@ def _read_file(project_root: str, file_path: str) -> str | None:
             return None
         raw = resolved.read_bytes()
         if b"\x00" in raw[:8192]:
-            logger.debug(f"Skipping binary file: {file_path}")
+            logger.warning(f"Skipping binary file: {file_path}")
             return None
         return raw.decode("utf-8", errors="replace")[:131072]
     except OSError as exc:
-        logger.debug(f"Failed to read {file_path}: {exc}")
+        logger.warning(f"Failed to read {file_path}: {exc}")
         return None
 
 
@@ -145,7 +145,12 @@ def _scan_rust_state(
         if in_enum and brace_depth == 0:
             break
         if brace_depth == 1:
-            m = re.match(r"^\s*(\w+)\s*(?:=|,)", line)
+            # 匹配 Rust enum variant：单元变体(Active)、含值变体(Active = 1)、
+            # 元组变体(Active(bool))、结构体变体(Active { inner: bool })
+            m = re.match(
+                r"^\s*(\w+)\s*(?:=|,|\(.*?\)|$|\{.*?\}|//)",
+                line,
+            )
             if m and m.group(1) not in ("pub", "use", "where", "impl"):
                 defn.values.append(
                     StateValue(name=m.group(1), file=defn.file, line=i + 1)
@@ -248,7 +253,7 @@ def _scan_go_state(defn: StateDefinition, sym, content: str, lines: list[str], e
             # Read until )，最多扫描 200 行防止缺失闭合括号时无限循环
             j = i
             max_lines = min(i + 200, len(lines))
-            while j < max_lines and ")" not in lines[j]:
+            while j < max_lines and not lines[j].strip().startswith(")"):
                 ct = lines[j].strip()
                 if "=" in ct or not ct.startswith("//"):
                     name = ct.split()[0] if ct and not ct.startswith("//") else ""

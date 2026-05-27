@@ -14,6 +14,7 @@ Repo Map Ranking — PageRank and Analysis Layer
 from __future__ import annotations
 
 import logging
+import math
 from collections import defaultdict
 from collections import deque
 from pathlib import PurePosixPath
@@ -63,8 +64,12 @@ class GraphAnalyzer:
         out_w: dict[str, float] = {
             s: sum(e.weight for e in self.graph.outgoing.get(s, [])) for s in syms
         }
-        # 只保留有出边的节点，避免除零
-        active_srcs = {s for s, w in out_w.items() if w > 0}
+        # 只保留有出边的节点，避免除零；过滤 NaN/Inf/负值权重
+        active_srcs = {
+            s
+            for s, w in out_w.items()
+            if w > 0 and not math.isnan(w) and not math.isinf(w)
+        }
         # incoming: tgt -> [(src, weight)]，只包含有出边的源节点
         inc: dict[str, list[tuple[str, float]]] = defaultdict(list)
         for src, edges in self.graph.outgoing.items():

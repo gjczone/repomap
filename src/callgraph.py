@@ -35,6 +35,7 @@ def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
     try:
         return ast.parse(source, filename)
     except SyntaxError:
+        logger.debug("Syntax error in %s, skipping call graph analysis", filename)
         return None
 
 
@@ -156,9 +157,13 @@ def analyze_python_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = _safe_parse(source, rel_path)
         if not tree:
+            logger.debug("Python AST parse returned None for %s", rel_path)
             continue
         visitor = _PyCallGraphVisitor(rel_path)
         visitor.visit(tree)
@@ -280,11 +285,15 @@ def analyze_ts_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         ext = Path(rel_path).suffix.lower()
         lang = "tsx" if ext == ".tsx" else "typescript"
         tree = ts_adapter.parse(source, lang)
         if not tree:
+            logger.debug("TypeScript tree-sitter parse returned None for %s", rel_path)
             continue
         info = ModuleInfo(rel_path)
         _walk_ts_node(tree.root_node, info, [None])
@@ -415,9 +424,13 @@ def analyze_go_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = ts_adapter.parse(source, "go")
         if not tree:
+            logger.debug("Go tree-sitter parse returned None for %s", rel_path)
             continue
         info = ModuleInfo(rel_path)
         _walk_go_node(tree.root_node, info, [None])
@@ -533,9 +546,13 @@ def analyze_rust_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = ts_adapter.parse(source, "rust")
         if not tree:
+            logger.debug("Rust tree-sitter parse returned None for %s", rel_path)
             continue
         info = ModuleInfo(rel_path)
         _walk_rust_node(tree.root_node, info, [None])

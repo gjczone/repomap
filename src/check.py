@@ -10,6 +10,7 @@ RepoMap Check — 编译器/静态分析诊断模块
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -20,6 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from . import json_dumps, json_loads
+
+logger = logging.getLogger("repomap")
 
 
 @dataclass
@@ -114,7 +117,9 @@ class ProjectDetector:
                     if re.search(r"\.(mjs|cjs|js|jsx)$", line):
                         return True
         except Exception:
-            pass
+            logger.warning(
+                "rg --files failed for JS detection, falling back to os.walk"
+            )
 
         # fallback: 简单遍历，剪掉依赖和构建目录，避免只因 node_modules 内文件误判为 JS 项目
         skip_dirs = {
@@ -155,6 +160,10 @@ class GitHelper:
                 files.update(git.diff_name_only(since=since_commit))
             return sorted(files)
         except Exception:
+            logger.warning(
+                "Failed to get modified files from git, returning empty list",
+                exc_info=True,
+            )
             return []
 
 
@@ -217,7 +226,7 @@ class DiagnosticRunner:
                     DiagnosticResult(
                         tool="eslint",
                         command="skip (no eslint config)",
-                        exit_code=0,
+                        exit_code=-1,
                         duration_ms=0,
                         skipped=True,
                         skip_reason="eslint config not found",
@@ -601,6 +610,7 @@ class DiagnosticRunner:
         try:
             data = json_loads(output) if output.strip() else {}
         except Exception:
+            logger.warning("Failed to parse pyright JSON output", exc_info=True)
             return errors, warnings
 
         for diag in data.get("generalDiagnostics", []):

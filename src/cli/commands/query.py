@@ -397,8 +397,7 @@ def _build_match_reasons(
             rel_file = file_path
             if hasattr(r, "file") and (
                 r.file == rel_file
-                or rel_file.endswith(r.file)
-                or r.file.endswith(rel_file)
+                or PurePosixPath(rel_file).name == PurePosixPath(r.file).name
             ):
                 for kw, source in expanded:
                     if kw in r.path.lower() or kw in r.handler.lower():

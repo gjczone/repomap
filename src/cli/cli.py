@@ -180,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Transitive impact depth (default 1=direct, 2=one hop out).",
     )
+    impact_parser.add_argument(
+        "--no-incremental",
+        action="store_true",
+        help="Force full scan instead of incremental.",
+    )
 
     verify_parser = subparsers.add_parser(
         "verify", help="Aggregate post-edit evidence before final handoff."

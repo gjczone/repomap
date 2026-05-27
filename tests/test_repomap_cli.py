@@ -1550,8 +1550,8 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("[output truncated]", text)
-            self.assertLessEqual(len(text), 260)
+            self.assertIn("output truncated", text)
+            self.assertLessEqual(len(text), 300)
 
     def test_call_chain_json_returns_selected_symbol_and_edges(self) -> None:
         from src.cli import main

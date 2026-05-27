@@ -278,7 +278,9 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
         if head:
             git_head = head
     except Exception as exc:
-        logger.debug(f"git rev-parse HEAD failed during incremental cache save: {exc}")
+        logger.warning(
+            f"git rev-parse HEAD failed during incremental cache save: {exc}"
+        )
 
     files: dict[str, dict] = {}
     for file_path in engine.graph.file_symbols:
@@ -483,7 +485,7 @@ def get_symbol_git_history(project_path: str, symbol_name: str) -> dict | None:
         }
 
     except Exception as exc:
-        logger.debug(f"get_symbol_git_history failed for {symbol_name}: {exc}")
+        logger.warning(f"get_symbol_git_history failed for {symbol_name}: {exc}")
         return None
 
 
@@ -526,7 +528,7 @@ def get_hot_symbols(project_path: str, days: int = 30) -> list[dict]:
         return sorted(hot_symbols, key=symbol_count, reverse=True)[:10]
 
     except Exception as exc:
-        logger.debug(f"get_hot_symbols failed: {exc}")
+        logger.warning(f"get_hot_symbols failed: {exc}")
         return []
 
 

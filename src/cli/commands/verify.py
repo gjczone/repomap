@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ from ...topic import (
     find_untested_symbols,
     is_test_like_file,
 )
+
+logger = logging.getLogger("repomap")
 
 _ORPHAN_EXCLUDED_KINDS: set[str] = {
     "element",
@@ -130,7 +133,7 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
         try:
             changed_files.append(abs_path.relative_to(project_path).as_posix())
         except ValueError:
-            pass
+            logger.debug("Changed file outside project root: %s", abs_path)
     return changed_files, None
 
 
@@ -291,12 +294,12 @@ def _diff_risk_evidence(
     if ".ts" in all_exts or ".tsx" in all_exts:
         if not any(test.test_file.endswith((".ts", ".tsx")) for test in tests):
             missing_checks.append(
-                "No frontend test file changes detected; consider adding frontend tests"
+                "No TypeScript test file changes detected; consider adding tests"
             )
     if ".py" in all_exts:
         if not any(test.test_file.endswith(".py") for test in tests):
             missing_checks.append(
-                "No Python test file changes detected; consider adding backend tests"
+                "No Python test file changes detected; consider adding tests"
             )
 
     return {
@@ -412,7 +415,7 @@ def _verify_graph_diff_payload(
     # 如果提供了 incoming_map，二次调用带调用者分析的 compare
     if incoming_map is not None:
         from ...toolkit import load_cache
-        from .. import compare_graph_snapshots
+        from ... import compare_graph_snapshots
 
         cache = load_cache(project_root)
         if cache:
@@ -459,8 +462,8 @@ def _overall_verify_status(
     check_status = check_payload.get("status")
     if check_status == "warning":
         return "warning"
-    # unknown 表示没有诊断工具运行，不能视为 passed
-    if check_status == "unknown":
+    # unknown 表示没有诊断工具运行，不能视为 passed；缺失 status 同样视为 warning
+    if check_status in (None, "unknown"):
         return "warning"
     return "passed"
 
@@ -516,7 +519,7 @@ def _print_missed_files_section(
         if not co_change_found:
             print("\n  (no co-change neighbors found)")
     except Exception:
-        pass
+        logger.warning("Co-change neighbor lookup failed", exc_info=True)
     print("")
 
 

@@ -39,15 +39,19 @@ def _symbol_is_large(sym: Any, threshold: int = 100) -> bool:
 
 
 def _tokenize(text: str) -> list[str]:
-    tokens = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z]+|\d+", text.lower())
+    # 使用 Unicode-aware \w 支持非 ASCII 标识符（中文、西里尔字母等）
+    tokens = re.findall(r"[\w_][\w\d_]*", text.lower())
+    if not tokens:
+        # fallback: 数字和 ASCII 字母的备用匹配
+        tokens = re.findall(r"[a-zA-Z]+|\d+", text.lower())
     return tokens
 
 
 def _symbol_to_document(sym: Any) -> list[str]:
     parts = []
     name = sym.name
-    for sub in re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", name):
-        parts.extend(re.findall(r"[a-zA-Z]+|\d+", sub.lower()))
+    for sub in re.findall(r"[\w_][\w\d_]*", name):
+        parts.extend(re.findall(r"[\w]+|\d+", sub.lower()))
     if sym.signature:
         parts.extend(_tokenize(sym.signature))
     if sym.docstring:
@@ -91,7 +95,7 @@ class SymbolSearchIndex:
                 self._bm25 = BM25Okapi(self._documents)
                 self._built = True
             except Exception as exc:
-                logger.debug(f"BM25 index build failed: {exc}")
+                logger.warning(f"BM25 index build failed: {exc}")
 
     def search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
         """

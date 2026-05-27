@@ -269,7 +269,7 @@ class ImportResolver:
                 if isinstance(data, dict) and "imports" in data:
                     self._parse_package_imports(data["imports"])
             except Exception as e:
-                logger.debug(f"Failed to parse package.json: {e}")
+                logger.warning(f"Failed to parse package.json: {e}")
 
         # 解析子包的 package.json（monorepo 场景），跳过依赖和构建目录，避免读取海量无关 package。
         packages_found = 0
@@ -308,7 +308,7 @@ class ImportResolver:
             except ValueError:
                 continue
             except Exception as e:
-                logger.debug(f"Failed to parse {sub_package_path}: {e}")
+                logger.warning(f"Failed to parse {sub_package_path}: {e}")
 
     def _detect_vite_alias(self) -> None:
         """检测 Vite 默认 alias: ~/ → src/。"""
@@ -629,6 +629,10 @@ class ImportResolver:
 
     @staticmethod
     def _normalize_posix_path(path: PurePosixPath) -> PurePosixPath | None:
+        # 拒绝绝对路径，防止路径穿越
+        if path.is_absolute():
+            logger.debug("Rejecting absolute path in _normalize_posix_path: %s", path)
+            return None
         normalized_parts: list[str] = []
         for part in path.parts:
             if part in ("", "."):

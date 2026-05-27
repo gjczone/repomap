@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("repomap")
 
 try:
     import orjson as _orjson
@@ -58,6 +61,9 @@ def get_repomap_version() -> str:
 
         return version("repomap")
     except Exception:
+        logger.debug(
+            "Failed to resolve repomap version via importlib.metadata", exc_info=True
+        )
         return "0.0.0-dev"
 
 

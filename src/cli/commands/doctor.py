@@ -101,7 +101,8 @@ def run_lsp_setup(project: str, languages: list[str] | None, dry_run: bool) -> i
         print("Installation not yet automated. Run the commands above manually.")
         print("Tip: repomap cannot auto-install LSP servers without your consent.")
         print("      Use the commands listed above, then re-run `repomap lsp doctor`.")
-        return 2
+        print("      (returning 0 — this is expected behavior, not an error)")
+        return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] lsp setup failed: {exc}", file=sys.stderr)
         return 1
