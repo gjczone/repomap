@@ -451,6 +451,11 @@ class RepoMapEngine:
         actual_mtime = full.stat().st_mtime
         if not _mtime_matches(actual_mtime, entry.mtime):
             return False
+        # 同时验证文件大小，防止内容替换后 mtime 不变的场景
+        if hasattr(entry, "size") and entry.size is not None:
+            actual_size = full.stat().st_size
+            if actual_size != entry.size:
+                return False
 
         # 还原符号
         self.graph.file_symbols.setdefault(file_path, [])

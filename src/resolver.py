@@ -190,6 +190,7 @@ class ImportResolver:
         self._load_import_configs()
         self._load_package_json_exports()
         self._detect_vite_alias()
+        self._detect_webpack_alias()
 
     def _load_import_configs(self) -> None:
         """加载所有 tsconfig.json / jsconfig.json 配置。"""
@@ -311,12 +312,54 @@ class ImportResolver:
                 logger.warning(f"Failed to parse {sub_package_path}: {e}")
 
     def _detect_vite_alias(self) -> None:
-        """检测 Vite 默认 alias: ~/ → src/。"""
+        """检测 Vite alias 配置: 读取 resolve.alias 和默认 ~/ → src/。"""
         for cfg_name in ("vite.config.ts", "vite.config.js", "vite.config.mjs"):
-            if (self.project_root / cfg_name).exists():
-                if "~" not in self.bundler_aliases.aliases:
-                    self.bundler_aliases.aliases["~"] = "src"
-                break
+            cfg_path = self.project_root / cfg_name
+            if not cfg_path.exists():
+                continue
+            if "~" not in self.bundler_aliases.aliases:
+                self.bundler_aliases.aliases["~"] = "src"
+            # 尝试提取 resolve.alias 中的简单字符串映射
+            try:
+                content = cfg_path.read_text(encoding="utf-8", errors="replace")
+                self._parse_bundler_alias_strings(content)
+            except Exception:
+                logger.debug("Failed to read Vite config: %s", cfg_path, exc_info=True)
+            break
+
+    def _detect_webpack_alias(self) -> None:
+        """检测 Webpack alias 配置。"""
+        for cfg_name in ("webpack.config.js", "webpack.config.cjs"):
+            cfg_path = self.project_root / cfg_name
+            if not cfg_path.exists():
+                continue
+            try:
+                content = cfg_path.read_text(encoding="utf-8", errors="replace")
+                self._parse_bundler_alias_strings(content)
+            except Exception:
+                logger.debug(
+                    "Failed to read Webpack config: %s", cfg_path, exc_info=True
+                )
+            break
+
+    def _parse_bundler_alias_strings(self, content: str) -> None:
+        """从 bundler 配置内容中提取简单的 alias 字符串映射。
+
+        匹配模式: '@alias': 'path' 或 '@alias': path.resolve(__dirname, 'path')
+        """
+        alias_pattern = re.compile(
+            r"""['\"]@?(\w[\w/-]*)['\"]\s*:\s*"""  # key: '@alias' or 'alias'
+            r"""(?:path\.resolve\(__dirname,\s*['\"]([^'\"]+)['\"]\)|['\"]([^'\"]+)['\"])""",  # value
+        )
+        for match in alias_pattern.finditer(content):
+            key = match.group(1)
+            value = match.group(2) or match.group(3)
+            if key and value and key not in self.bundler_aliases.aliases:
+                self.bundler_aliases.aliases[key] = value
+            elif key and value:
+                logger.debug(
+                    "Bundler alias %r already defined, skipping duplicate", key
+                )
 
     def _parse_package_imports(self, imports: Any) -> None:
         """解析 package.json imports 字段（# 私有导入映射）。"""
@@ -502,8 +545,8 @@ class ImportResolver:
             if resolved.suffix.lower() in EXT_TO_LANG:
                 return sorted(set(matches))
         runtime_source_exts = {
-            ".js": (".ts", ".tsx"),
-            ".jsx": (".tsx",),
+            ".js": (".ts", ".tsx", ".jsx"),
+            ".jsx": (".tsx", ".js"),
             ".mjs": (".mts", ".ts", ".tsx"),
             ".cjs": (".cts", ".ts", ".tsx"),
         }

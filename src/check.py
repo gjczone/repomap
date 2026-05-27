@@ -457,7 +457,7 @@ class DiagnosticRunner:
                     elif severity == "warning":
                         warnings.append(issue)
         except ValueError:
-            pass
+            logger.warning("Failed to parse ESLint output as JSON")
 
         return errors, warnings
 
@@ -706,7 +706,7 @@ class DiagnosticRunner:
                 )
                 errors.append(issue)
         except ValueError:
-            pass
+            logger.warning("Failed to parse ruff output as JSON")
 
         return errors, []
 

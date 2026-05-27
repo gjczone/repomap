@@ -43,13 +43,13 @@ jobs:
          - name: Run test suite
            shell: bash
            run: |
-              uv run --with pytest,pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp \
+              uv run --with pytest,pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp,tree-sitter-c,tree-sitter-c-sharp \
                 pytest tests -v
 
          - name: Build binary
            shell: bash
            run: |
-              uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp \
+              uv run --with pyinstaller,tree-sitter,tree-sitter-python,tree-sitter-javascript,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-html,tree-sitter-css,tree-sitter-json,tree-sitter-java,tree-sitter-cpp,tree-sitter-c,tree-sitter-c-sharp \
                 python -m src.cli build-binary --output dist
 
          - name: Smoke test binary

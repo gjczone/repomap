@@ -52,6 +52,25 @@ jobs:
          - name: Run tests
            run: uv run pytest --tb=short -q
 
+   typecheck:
+      needs: lint
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      continue-on-error: true
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
+
+         - name: Install uv
+           run: pip install uv
+
+         - name: Install dependencies
+           run: uv sync --all-extras --group dev
+
+         - name: Run mypy
+           run: uv run mypy src/ --ignore-missing-imports --no-error-summary || echo "mypy found issues — informational only for now"
+
    security:
       needs: lint
       runs-on: ubuntu-latest

@@ -45,7 +45,8 @@ QUERIES: dict[str, dict[str, str]] = {
             (call function: (attribute attribute: (identifier) @name)) @reference.call
         """,
         "http_route": """
-            ;; FastAPI: @app.get("/path") or @router.post("/path")
+            ;; FastAPI: @app.get("/path") / Flask: @app.route("/path", methods=["GET"])
+            ;; Blueprint: @bp.route("/path") / @blueprint.get("/path")
             (decorated_definition
               (decorator
                 (call
@@ -54,8 +55,8 @@ QUERIES: dict[str, dict[str, str]] = {
                     attribute: (identifier) @method)
                   arguments: (argument_list (string) @path)))
               definition: (function_definition name: (identifier) @handler))
-            (#match? @_obj "^(app|router|api)$")
-            (#match? @method "^(get|post|put|delete|patch|head|options)$")
+            (#match? @_obj "^(app|router|api|bp|blueprint|routes|endpoints)$")
+            (#match? @method "^(get|post|put|delete|patch|head|options|route)$")
         """,
     },
     "javascript": {
@@ -91,7 +92,7 @@ QUERIES: dict[str, dict[str, str]] = {
                 (string) @path
                 .
                 [(identifier) @handler (arrow_function) @handler (function_expression) @handler]))
-            (#match? @_router "^(app|router)$")
+            (#match? @_router "^(app|router|api|server|routes)$")
             (#match? @method "^(get|post|put|delete|patch|use|all)$")
         """,
     },
@@ -129,7 +130,7 @@ QUERIES: dict[str, dict[str, str]] = {
                 (string) @path
                 .
                 [(identifier) @handler (arrow_function) @handler (function_expression) @handler]))
-            (#match? @_router "^(app|router)$")
+            (#match? @_router "^(app|router|api|server|routes)$")
             (#match? @method "^(get|post|put|delete|patch|use|all)$")
         """,
     },
@@ -148,6 +149,19 @@ QUERIES: dict[str, dict[str, str]] = {
         "call": """
             (call_expression function: (identifier) @name) @reference.call
             (call_expression function: (selector_expression field: (field_identifier) @name)) @reference.call
+        """,
+        "http_route": """
+            ;; gin: r.GET("/path", handler), echo: e.GET("/path", handler)
+            ;; chi: r.Get("/path", handler), net/http: mux.HandleFunc("/path", handler)
+            (call_expression
+              function: (selector_expression
+                operand: (identifier) @_router
+                field: (field_identifier) @method)
+              arguments: (argument_list
+                (interpreted_string_literal) @path
+                .
+                (identifier) @handler))
+            (#match? @method "^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|Get|Post|Put|Delete|Patch|Head|Options|HandleFunc|Handle)$")
         """,
     },
     "rust": {
@@ -238,12 +252,15 @@ QUERIES: dict[str, dict[str, str]] = {
             (method_invocation name: (identifier) @name) @reference.call
         """,
         "http_route": """
-            ;; Spring Boot: @GetMapping("/path") / @PostMapping("/path")
-            (annotation
-              name: (identifier) @method
-              arguments: (annotation_argument_list
-                (element_value_pair
-                  value: (string_literal) @path)))
+            ;; Spring Boot: @GetMapping("/path") on a controller method
+            (method_declaration
+              (modifiers
+                (annotation
+                  name: (identifier) @method
+                  arguments: (annotation_argument_list
+                    (element_value_pair
+                      value: (string_literal) @path))))
+              name: (identifier) @handler)
             (#match? @method "^(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)$")
         """,
     },
@@ -455,6 +472,10 @@ class TreeSitterAdapter:
             logger.debug("Parser loaded: typescript (dedicated)")
             logger.debug("Parser loaded: tsx (dedicated)")
         except Exception:
+            logger.debug(
+                "TypeScript+TSX parser load failed, trying TypeScript-only",
+                exc_info=True,
+            )
             try:
                 from tree_sitter_typescript import language_typescript  # type: ignore
                 from tree_sitter import Language, Parser  # type: ignore
@@ -1558,7 +1579,35 @@ class TreeSitterAdapter:
 
         if lang == "python":
             obj = self._text(self._first_capture(captures, "_obj"))
-            if obj not in {"app", "router", "api"} or method not in {
+            if obj not in {
+                "app",
+                "router",
+                "api",
+                "bp",
+                "blueprint",
+                "routes",
+                "endpoints",
+            } or method not in {
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "head",
+                "options",
+                "route",
+            }:
+                return None
+            # Flask: @app.route("/path", methods=["GET"]) — method comes from a list, not the attribute name
+            if method == "route":
+                # 尝试从 methods= 参数提取 HTTP method
+                methods_node = self._first_capture(captures, "_methods")
+                if methods_node is not None:
+                    method_text = self._text(methods_node).strip("\"'")
+                    method = method_text.lower()
+                else:
+                    method = "get"  # Flask route 默认为 GET
+            if method not in {
                 "get",
                 "post",
                 "put",
@@ -1568,10 +1617,20 @@ class TreeSitterAdapter:
                 "options",
             }:
                 return None
-            framework = "fastapi"
+            framework = (
+                "flask"
+                if method == "route" or obj in {"bp", "blueprint"}
+                else "fastapi"
+            )
         elif lang in ("javascript", "typescript", "tsx"):
             router = self._text(self._first_capture(captures, "_router"))
-            if router not in {"app", "router"} or method not in {
+            if router not in {
+                "app",
+                "router",
+                "api",
+                "server",
+                "routes",
+            } or method not in {
                 "get",
                 "post",
                 "put",
@@ -1596,6 +1655,11 @@ class TreeSitterAdapter:
             }:
                 return None
             framework = "express"
+        elif lang == "go":
+            router = self._text(self._first_capture(captures, "_router"))
+            if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
+                return None
+            framework = "go-http"
         elif lang == "rust":
             method_name = self._text(self._first_capture(captures, "_method_name"))
             if method_name != "route" or method not in {
@@ -1611,6 +1675,11 @@ class TreeSitterAdapter:
             if method in {"some", "ok", "err", "is_some", "unwrap", "map", "filter"}:
                 return None
             framework = "axum"
+        elif lang == "java":
+            # Spring Boot: @GetMapping("/path") on a method
+            if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
+                return None
+            framework = "spring"
         else:
             return None
 
