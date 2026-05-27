@@ -171,6 +171,8 @@ The public README files serve different audiences than this document:
 - Run the focused test before the full suite; when behavior contracts change, update affected assertions, fixtures, mocks, and snapshots.
 - Regression tests: for every P0/P1 bug fixed, add or update a test that would have caught it before the fix.
 - mypy typecheck is **blocking** in CI (`uv run mypy src/ --ignore-missing-imports --no-error-summary`). PRs that introduce new mypy errors will fail CI. Run mypy locally before committing changes to `src/`.
+- **mypy strict 迁移路径**: 当前使用 `--ignore-missing-imports`，远期目标逐步收紧 → `--strict`。阶段：(1) 当前：基本通过 (2) 下一步：移除 `--ignore-missing-imports`，为所有可选依赖添加 `type: ignore[import-untyped]` (3) 远期：启用 `--strict`。
+- **ruff type-checking**: ruff 目前仅有 annotation 存在性检查（ANN 规则），不支持类型推断。ruff 比 mypy 快 10-100x 但不替代 mypy。可考虑开启 ANN 规则作为补充。
 
 ## API / CLI Rules
 
