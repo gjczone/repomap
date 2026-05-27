@@ -11,7 +11,7 @@ from ..handlers import (
 from ...toolkit import diff_project, save_cache, scan_project
 
 
-def run_cache(project: str, action: str) -> int:
+def run_cache(project: str, action: str, as_json: bool = False) -> int:
     project_path = _resolve_project(project)
     if action != "save":
         print(f"[{CLI_NAME}] unsupported cache action: {action}", file=sys.stderr)
@@ -19,6 +19,22 @@ def run_cache(project: str, action: str) -> int:
     try:
         symbols, edges = scan_project(project_path)
         cache_path = save_cache(project_path, symbols, edges)
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(
+                json_envelope(
+                    "cache",
+                    project,
+                    {
+                        "action": action,
+                        "cache_path": str(cache_path),
+                        "symbols": len(symbols),
+                        "edges": len(edges),
+                    },
+                )
+            )
+            return 0
         print(
             "✅ Graph baseline saved for a future comparison\n"
             f"- Path: `{cache_path}`\n"

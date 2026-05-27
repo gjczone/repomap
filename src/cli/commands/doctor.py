@@ -115,7 +115,7 @@ def _module_origin(module_name: str) -> str:
     return spec.origin or "built-in"
 
 
-def run_doctor(project: str, show_lsp: bool = False) -> int:
+def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> int:
     from ...parser import TreeSitterAdapter
 
     if project:
