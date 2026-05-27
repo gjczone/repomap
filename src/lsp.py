@@ -685,7 +685,16 @@ class StdioLspClient:
         self.server_capabilities = response.get("result", {}).get("capabilities", {})
         self.send_notification("initialized", {})
 
+    MAX_FILE_SIZE = 1_048_576  # 1 MiB，超过此大小的文件不送 LSP 诊断
+
     def did_open(self, file_path: Path, language: str, text: str) -> None:
+        if len(text.encode("utf-8", errors="replace")) > self.MAX_FILE_SIZE:
+            logger.warning(
+                "Skipping LSP diagnostics for large file %s (%d bytes)",
+                file_path,
+                len(text.encode("utf-8", errors="replace")),
+            )
+            return
         self.send_notification(
             "textDocument/didOpen",
             {

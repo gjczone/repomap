@@ -691,7 +691,7 @@ class EdgeBuilder:
             kind = self._KIND_RANK.get(sym.kind, 1)
             scored.append((vis + kind, sid))
         scored.sort(key=lambda x: -x[0])
-        return [sid for _, sid in scored[: max(max_count, int(len(ids) * 0.3))]]
+        return [sid for _, sid in scored[:max_count]]
 
     def build_edges(self) -> None:
         """构建 import 边和 call 边。"""
