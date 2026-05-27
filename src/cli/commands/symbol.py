@@ -125,8 +125,11 @@ def run_call_chain(
         if direction != "both":
             data = engine.call_chain(selected.id, direction, depth)
             lines = [f"## Call Chain — `{selected.name}`\n"]
-            for item in data[direction]:
+            items = data[direction][:50]
+            for item in items:
                 lines.append(f"- `{item.name}` ({item.file}:{item.line})")
+            if len(data[direction]) > 50:
+                lines.append(f"\n... and {len(data[direction]) - 50} more")
             print(_truncate_output("\n".join(lines), max_chars))
             return 0
         print(

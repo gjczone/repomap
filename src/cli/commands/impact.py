@@ -155,37 +155,9 @@ def _impact_type_level(
                 "note": "",
             }
 
-            # Compare symbol signature with what callers might expect
-            if sym.return_type:
-                for edge in engine.graph.incoming.get(sid, []):
-                    caller = engine.graph.symbols.get(edge.source)
-                    if (
-                        caller
-                        and caller.return_type
-                        and caller.return_type != sym.return_type
-                    ):
-                        entry["return_type_changed"] = True
-                        entry["note"] = (
-                            f"Return type `{sym.return_type}` may not match "
-                            f"caller `{caller.name}` expectation `{caller.return_type}`"
-                        )
-                        break
-
-            if sym.signature:
-                for edge in engine.graph.incoming.get(sid, []):
-                    caller = engine.graph.symbols.get(edge.source)
-                    if (
-                        caller
-                        and caller.signature
-                        and caller.signature != sym.signature
-                    ):
-                        entry["param_type_changed"] = True
-                        if not entry["note"]:
-                            entry["note"] = (
-                                f"Signature `{sym.signature}` may conflict with "
-                                f"caller `{caller.name}` signature `{caller.signature}`"
-                            )
-                        break
+            # 不在当前扫描中做 caller/callee 类型比较——
+            # 正确的变更检测需要前后版本对比（cache diff），此处仅标记
+            # 有外部调用者的符号，由 verify --with-diff 做精确比较
 
             results.append(entry)
 

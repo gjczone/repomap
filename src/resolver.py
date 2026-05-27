@@ -629,6 +629,10 @@ class ImportResolver:
 
     @staticmethod
     def _normalize_posix_path(path: PurePosixPath) -> PurePosixPath | None:
+        # 拒绝绝对路径，防止路径穿越
+        if path.is_absolute():
+            logger.debug("Rejecting absolute path in _normalize_posix_path: %s", path)
+            return None
         normalized_parts: list[str] = []
         for part in path.parts:
             if part in ("", "."):

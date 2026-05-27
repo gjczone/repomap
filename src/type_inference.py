@@ -367,7 +367,11 @@ def extract_types_for_file(
 
     def _walk(node: Any, depth: int = 0) -> None:
         if depth > 30:
-            logger.debug("Type inference recursion depth limit reached at depth 30")
+            logger.debug(
+                "Type inference recursion depth limit reached at depth 30 "
+                "for node type %r in language %s",
+                node.type, lang,
+            )
             return
         if node.type in func_types:
             node_start_line = node.start_point[0] + 1
