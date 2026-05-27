@@ -119,7 +119,9 @@ def run_overview(
         return 1
 
 
-def run_hotspots(project: str, max_files: int, limit: int, as_json: bool = False) -> int:
+def run_hotspots(
+    project: str, max_files: int, limit: int, as_json: bool = False
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         hotspots = engine.hotspots(limit)

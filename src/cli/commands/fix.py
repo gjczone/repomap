@@ -233,7 +233,9 @@ def run_ready(project: str, as_json: bool = False) -> int:
                     {
                         "verify": "PASS" if verify_ok else "FAIL",
                         "check": "PASS" if check_ok else "FAIL",
-                        "format": "PASS" if format_ok else ("SKIP" if format_ok is None else "FAIL"),
+                        "format": "PASS"
+                        if format_ok
+                        else ("SKIP" if format_ok is None else "FAIL"),
                         "overall": "READY" if all_ok else "NOT READY",
                     },
                 )

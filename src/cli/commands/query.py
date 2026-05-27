@@ -443,7 +443,9 @@ def _query_symbols_json(
     return result
 
 
-def run_search(project: str, max_files: int, query: str, top_k: int, as_json: bool = False) -> int:
+def run_search(
+    project: str, max_files: int, query: str, top_k: int, as_json: bool = False
+) -> int:
     try:
         engine = _scan_engine(project, max_files)
         results = engine.search_symbols(query, top_k)

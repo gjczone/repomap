@@ -749,15 +749,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "routes":
         return run_routes(args.project, args.max_files, args.json, args.with_consumers)
     if command == "doctor":
-        return run_doctor(args.project, getattr(args, "lsp", False), getattr(args, "json", False))
+        return run_doctor(
+            args.project, getattr(args, "lsp", False), getattr(args, "json", False)
+        )
     if command == "state-map":
         return run_state_map(
             args.project, args.max_files, args.symbol, args.query, args.json
         )
     if command == "search":
-        return run_search(args.project, args.max_files, args.query, args.top_k, args.json)
+        return run_search(
+            args.project, args.max_files, args.query, args.top_k, args.json
+        )
     if command == "fix":
-        return run_fix(args.project, getattr(args, "dry_run", False), getattr(args, "json", False))
+        return run_fix(
+            args.project, getattr(args, "dry_run", False), getattr(args, "json", False)
+        )
     if command == "ready":
         return run_ready(args.project, getattr(args, "json", False))
     if command == "build-binary":
