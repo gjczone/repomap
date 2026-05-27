@@ -552,7 +552,7 @@ def analyze_refs(project_path: str, symbol_name: str | None = None) -> dict:
     calls_in: dict[str, set] = {s: set() for s in symbol_ids}
 
     for e in cache.edges:
-        if e.get("kind", "call") != "call":
+        if e.get("kind", "call") not in {"call", "import"}:
             continue
         from_id = e.get("source", e.get("from_id"))
         to_id = e.get("target", e.get("to_id"))
