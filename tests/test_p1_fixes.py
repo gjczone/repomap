@@ -139,7 +139,6 @@ class TestP1_9_SignalWeightUnified(unittest.TestCase):
 
     def test_topic_delegates_to_shared(self) -> None:
         """topic.py 的 _signal_weight_for_symbol 应委托给统一实现。"""
-        from src import signal_weight_for_symbol
         from src.topic import _signal_weight_for_symbol
 
         sym = MagicMock()

@@ -1623,7 +1623,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1714,7 +1714,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1732,7 +1732,7 @@ class RepoMapCliTests(unittest.TestCase):
                 )
                 session_cache.write_text(json.dumps(payload), encoding="utf-8")
 
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
@@ -1755,7 +1755,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1766,7 +1766,7 @@ class RepoMapCliTests(unittest.TestCase):
             ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
@@ -1807,7 +1807,7 @@ class RepoMapCliTests(unittest.TestCase):
                 "src/App.tsx",
                 "export function App() {\n  return <div>app</div>;\n}\n",
             )
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             session_cache = get_session_cache_path(project_root)
             if session_cache.exists():
                 session_cache.unlink()
@@ -1815,7 +1815,7 @@ class RepoMapCliTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 code1 = main(["overview", "--project", project_root])
 
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 code2 = main(["overview", "--project", project_root, "--json"])
@@ -1840,7 +1840,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1868,7 +1868,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def helper():\n    return 1\n")
-            cli_mod._SCAN_CACHE.clear()
+            cli_mod.clear_scan_cache()
 
             original_scan = cli_mod.RepoMapEngine.scan
             with patch.object(
@@ -1876,7 +1876,7 @@ class RepoMapCliTests(unittest.TestCase):
             ) as scan_mock:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code1 = main(["overview", "--project", project_root])
-                cli_mod._SCAN_CACHE.clear()
+                cli_mod.clear_scan_cache()
                 write_file(
                     project_root,
                     "main.py",
