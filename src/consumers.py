@@ -153,7 +153,11 @@ def find_route_consumers(
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read(65536)  # 64KB max
         except (OSError, UnicodeDecodeError):
-            logger.debug("Failed to read %s for route consumer detection", file_path, exc_info=True)
+            logger.debug(
+                "Failed to read %s for route consumer detection",
+                file_path,
+                exc_info=True,
+            )
             continue
 
         lines = content.split("\n")

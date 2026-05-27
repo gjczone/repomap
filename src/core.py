@@ -543,7 +543,9 @@ class RepoMapEngine:
                 if line and Path(line).suffix.lower() in EXT_TO_LANG
             )
         except Exception:
-            logger.warning("rg --files failed for source listing, falling back to os.walk")
+            logger.warning(
+                "rg --files failed for source listing, falling back to os.walk"
+            )
             # fallback：一次遍历过滤扩展名，跳过已知大型目录
             valid_exts = set(EXT_TO_LANG)
             skip_dirs = {
@@ -619,7 +621,9 @@ class RepoMapEngine:
                 line for line in result.stdout.strip().split("\n") if line
             )
         except Exception:
-            logger.warning("rg --files failed for supporting files, falling back to rglob")
+            logger.warning(
+                "rg --files failed for supporting files, falling back to rglob"
+            )
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")

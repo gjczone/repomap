@@ -5,8 +5,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("repomap")
-
 from ... import json_dumps
 from ... import (
     Symbol,
@@ -32,6 +30,8 @@ from ...topic import (
     find_untested_symbols,
     is_test_like_file,
 )
+
+logger = logging.getLogger("repomap")
 
 _ORPHAN_EXCLUDED_KINDS: set[str] = {
     "element",

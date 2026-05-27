@@ -61,7 +61,9 @@ def get_repomap_version() -> str:
 
         return version("repomap")
     except Exception:
-        logger.debug("Failed to resolve repomap version via importlib.metadata", exc_info=True)
+        logger.debug(
+            "Failed to resolve repomap version via importlib.metadata", exc_info=True
+        )
         return "0.0.0-dev"
 
 

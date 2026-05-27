@@ -370,7 +370,8 @@ def extract_types_for_file(
             logger.debug(
                 "Type inference recursion depth limit reached at depth 30 "
                 "for node type %r in language %s",
-                node.type, lang,
+                node.type,
+                lang,
             )
             return
         if node.type in func_types:

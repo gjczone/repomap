@@ -14,12 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-logger = logging.getLogger("repomap")
-
 if TYPE_CHECKING:
     from . import RepoGraph
 
 from . import LOW_SIGNAL_KINDS, signal_weight_for_symbol
+
+logger = logging.getLogger("repomap")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

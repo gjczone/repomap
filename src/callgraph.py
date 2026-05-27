@@ -157,7 +157,9 @@ def analyze_python_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
-            logger.debug("Failed to read %s for call graph analysis", rel_path, exc_info=True)
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = _safe_parse(source, rel_path)
         if not tree:
@@ -283,7 +285,9 @@ def analyze_ts_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
-            logger.debug("Failed to read %s for call graph analysis", rel_path, exc_info=True)
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         ext = Path(rel_path).suffix.lower()
         lang = "tsx" if ext == ".tsx" else "typescript"
@@ -420,7 +424,9 @@ def analyze_go_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
-            logger.debug("Failed to read %s for call graph analysis", rel_path, exc_info=True)
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = ts_adapter.parse(source, "go")
         if not tree:
@@ -540,7 +546,9 @@ def analyze_rust_callgraph(
         try:
             source = full_path.read_bytes()
         except OSError:
-            logger.debug("Failed to read %s for call graph analysis", rel_path, exc_info=True)
+            logger.debug(
+                "Failed to read %s for call graph analysis", rel_path, exc_info=True
+            )
             continue
         tree = ts_adapter.parse(source, "rust")
         if not tree:

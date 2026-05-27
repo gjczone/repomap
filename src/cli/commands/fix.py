@@ -44,10 +44,23 @@ def run_fix(project: str, dry_run: bool = False) -> int:
             valid_exts = {".js", ".ts", ".jsx", ".tsx"}
             for dirpath, _dirnames, filenames in os.walk(str(project_root)):
                 # 跳过不关心的目录（按路径组件匹配，非子串）
-                skip_parts = {"node_modules", ".git", "dist", "build",
-                              "__pycache__", ".venv", "venv", "target",
-                              ".next", ".nuxt", ".cache", ".pytest_cache",
-                              ".mypy_cache", ".ruff_cache", "coverage"}
+                skip_parts = {
+                    "node_modules",
+                    ".git",
+                    "dist",
+                    "build",
+                    "__pycache__",
+                    ".venv",
+                    "venv",
+                    "target",
+                    ".next",
+                    ".nuxt",
+                    ".cache",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                    "coverage",
+                }
                 dir_parts = set(Path(dirpath).parts)
                 if dir_parts & skip_parts:
                     continue

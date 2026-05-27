@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("repomap")
-
 from . import json_dumps, json_loads
+
+logger = logging.getLogger("repomap")
 
 
 @dataclass
@@ -117,7 +117,9 @@ class ProjectDetector:
                     if re.search(r"\.(mjs|cjs|js|jsx)$", line):
                         return True
         except Exception:
-            logger.warning("rg --files failed for JS detection, falling back to os.walk")
+            logger.warning(
+                "rg --files failed for JS detection, falling back to os.walk"
+            )
 
         # fallback: 简单遍历，剪掉依赖和构建目录，避免只因 node_modules 内文件误判为 JS 项目
         skip_dirs = {
@@ -158,7 +160,10 @@ class GitHelper:
                 files.update(git.diff_name_only(since=since_commit))
             return sorted(files)
         except Exception:
-            logger.warning("Failed to get modified files from git, returning empty list", exc_info=True)
+            logger.warning(
+                "Failed to get modified files from git, returning empty list",
+                exc_info=True,
+            )
             return []
 
 

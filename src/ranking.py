@@ -66,7 +66,8 @@ class GraphAnalyzer:
         }
         # 只保留有出边的节点，避免除零；过滤 NaN/Inf/负值权重
         active_srcs = {
-            s for s, w in out_w.items()
+            s
+            for s, w in out_w.items()
             if w > 0 and not math.isnan(w) and not math.isinf(w)
         }
         # incoming: tgt -> [(src, weight)]，只包含有出边的源节点

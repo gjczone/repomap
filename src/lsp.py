@@ -556,7 +556,9 @@ class StdioLspClient:
                             "utf-8", errors="replace"
                         ).strip()[-200:]
             except Exception:
-                logger.debug("Failed to read LSP stderr for error diagnostics", exc_info=True)
+                logger.debug(
+                    "Failed to read LSP stderr for error diagnostics", exc_info=True
+                )
             detail = f"exit code {exit_code}"
             if stderr_tail:
                 detail += f", stderr: {stderr_tail}"
@@ -609,7 +611,10 @@ class StdioLspClient:
                                 "utf-8", errors="replace"
                             ).strip()[-200:]
                 except Exception:
-                    logger.debug("Failed to read LSP stderr for timeout diagnostics", exc_info=True)
+                    logger.debug(
+                        "Failed to read LSP stderr for timeout diagnostics",
+                        exc_info=True,
+                    )
                 detail = f"exit code {exit_code}"
                 if stderr_tail:
                     detail += f", stderr: {stderr_tail}"
@@ -1233,7 +1238,9 @@ def collect_lsp_hover(
             contents=_parse_hover_response(raw),
         )
     except Exception:
-        logger.debug("LSP hover collection failed for %s:%d", file_path, line, exc_info=True)
+        logger.debug(
+            "LSP hover collection failed for %s:%d", file_path, line, exc_info=True
+        )
         return None
 
 

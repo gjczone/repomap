@@ -634,7 +634,9 @@ class Pygit2Backend:
                 if start <= line <= end:
                     return {"commit": str(hunk.final_commit_id)[:8]}
         except Exception:
-            logger.debug("pygit2 blame_line failed for %s:%d", file_path, line, exc_info=True)
+            logger.debug(
+                "pygit2 blame_line failed for %s:%d", file_path, line, exc_info=True
+            )
             pass
         return None
 
@@ -754,7 +756,10 @@ class GitBackend:
                     logger.debug("Using pygit2 backend for %s", project_root)
                     return
             except Exception:
-                logger.debug("pygit2 backend init failed, falling back to subprocess", exc_info=True)
+                logger.debug(
+                    "pygit2 backend init failed, falling back to subprocess",
+                    exc_info=True,
+                )
                 pass
         self._backend = SubprocessBackend
         logger.debug("Using subprocess backend for %s", project_root)
