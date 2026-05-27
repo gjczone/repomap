@@ -71,6 +71,23 @@ EXIT_INVALID_ARGS = 2
 EXIT_NO_RESULTS = 3
 
 
+def json_envelope(command: str, project: str, result: dict, status: str = "ok") -> str:
+    """统一的 JSON 输出信封格式，所有 --json 输出必须使用此格式。"""
+    from .. import json_dumps
+
+    return json_dumps(
+        {
+            "schema_version": "1.0",
+            "command": command,
+            "project": str(project),
+            "status": status,
+            "result": result,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 def _resolve_project(project: str) -> str:
     project_path = Path(project).expanduser().resolve()
     if not project_path.is_dir():

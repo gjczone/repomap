@@ -21,9 +21,27 @@ from ..handlers import (
 )
 
 
-def run_scan(project: str, max_files: int) -> int:
+def run_scan(project: str, max_files: int, as_json: bool = False) -> int:
     try:
         engine = _scan_engine(project, max_files)
+        if as_json:
+            from ..handlers import json_envelope
+
+            hot = engine.hotspots(5)
+            print(
+                json_envelope(
+                    "scan",
+                    project,
+                    {
+                        "project_root": str(engine.project_root),
+                        "files": engine.scan_stats.processed_files,
+                        "symbols": len(engine.graph.symbols),
+                        "entry_points": engine.entry_points(),
+                        "hotspots": hot,
+                    },
+                )
+            )
+            return 0
         hot = engine.hotspots(5)
         entry_points = engine.entry_points()
         lines = [
@@ -101,10 +119,21 @@ def run_overview(
         return 1
 
 
-def run_hotspots(project: str, max_files: int, limit: int) -> int:
+def run_hotspots(project: str, max_files: int, limit: int, as_json: bool = False) -> int:
     try:
         engine = _scan_engine(project, max_files)
         hotspots = engine.hotspots(limit)
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(
+                json_envelope(
+                    "hotspots",
+                    project,
+                    {"hotspots": hotspots},
+                )
+            )
+            return 0
         risk_mark = {"high": "🔴", "medium": "🟡", "low": "🟢"}
         lines = ["## High-Density Files (by symbol count)\n"]
         for index, item in enumerate(hotspots, 1):

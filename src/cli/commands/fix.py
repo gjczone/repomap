@@ -15,7 +15,7 @@ from .verify import run_verify, run_check
 logger = logging.getLogger("repomap")
 
 
-def run_fix(project: str, dry_run: bool = False) -> int:
+def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
     """Auto-fix: ruff --fix, eslint --fix, etc."""
     try:
         project_root = _resolve_project(project)
@@ -109,6 +109,22 @@ def run_fix(project: str, dry_run: bool = False) -> int:
         except Exception as exc:
             tools_failed.append(f"eslint (error: {exc})")
 
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(
+                json_envelope(
+                    "fix",
+                    project,
+                    {
+                        "dry_run": dry_run,
+                        "fixes_applied": fixes_applied,
+                        "tools_failed": tools_failed,
+                        "dry_run_actions": dry_run_actions,
+                    },
+                )
+            )
+            return 0
         if dry_run:
             if dry_run_actions:
                 print(f"Dry run — would apply: {', '.join(dry_run_actions)}")
@@ -127,14 +143,15 @@ def run_fix(project: str, dry_run: bool = False) -> int:
         return 1
 
 
-def run_ready(project: str) -> int:
+def run_ready(project: str, as_json: bool = False) -> int:
     """Quick readiness check: verify --quick + check + ruff format --check."""
     try:
         project_root = _resolve_project(project)
 
-        print("=" * 60)
-        print("Ready Check")
-        print("=" * 60)
+        if not as_json:
+            print("=" * 60)
+            print("Ready Check")
+            print("=" * 60)
 
         # 1. Quick verify (risk-only)
         print("\n--- Step 1: verify --quick ---")
@@ -205,10 +222,26 @@ def run_ready(project: str) -> int:
             format_ok = None
 
         # Summary
+        all_ok = verify_ok and check_ok and (format_ok is not False)
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(
+                json_envelope(
+                    "ready",
+                    project,
+                    {
+                        "verify": "PASS" if verify_ok else "FAIL",
+                        "check": "PASS" if check_ok else "FAIL",
+                        "format": "PASS" if format_ok else ("SKIP" if format_ok is None else "FAIL"),
+                        "overall": "READY" if all_ok else "NOT READY",
+                    },
+                )
+            )
+            return 0 if all_ok else 1
         print("\n" + "=" * 60)
         print("Ready Check Summary")
         print("=" * 60)
-        all_ok = verify_ok and check_ok and (format_ok is not False)
         print(f"  verify --quick: {'PASS' if verify_ok else 'FAIL'}")
         print(f"  check:         {'PASS' if check_ok else 'FAIL'}")
         if format_ok is None:

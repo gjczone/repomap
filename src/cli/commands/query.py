@@ -443,10 +443,25 @@ def _query_symbols_json(
     return result
 
 
-def run_search(project: str, max_files: int, query: str, top_k: int) -> int:
+def run_search(project: str, max_files: int, query: str, top_k: int, as_json: bool = False) -> int:
     try:
         engine = _scan_engine(project, max_files)
         results = engine.search_symbols(query, top_k)
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(
+                json_envelope(
+                    "search",
+                    project,
+                    {
+                        "query": query,
+                        "results": results,
+                        "count": len(results),
+                    },
+                )
+            )
+            return 0 if results else EXIT_NO_RESULTS
         if not results:
             # Fallback: use hotspots when no symbol matches found
             hotspot_entries = engine.hotspots(10)

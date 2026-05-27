@@ -28,6 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
         "scan", help="Scan a repository and print the scan summary."
     )
     _add_project_args(scan_parser)
+    scan_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
+    )
 
     overview_parser = subparsers.add_parser(
         "overview", help="Scan a repository and print the overview report."
@@ -284,6 +287,9 @@ def build_parser() -> argparse.ArgumentParser:
     hotspots_parser.add_argument(
         "--limit", type=int, default=15, help="Number of files to print."
     )
+    hotspots_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
+    )
 
     cache_parser = subparsers.add_parser(
         "cache", help="Prepare a graph baseline before the target edits."
@@ -298,6 +304,9 @@ def build_parser() -> argparse.ArgumentParser:
         "-p",
         required=True,
         help="Project root path (absolute path recommended).",
+    )
+    cache_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
     )
 
     diff_parser = subparsers.add_parser(
@@ -417,6 +426,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show what would be fixed without applying changes.",
     )
+    fix_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
+    )
 
     ready_parser = subparsers.add_parser(
         "ready", help="Quick readiness check: verify --quick + check + format."
@@ -426,6 +438,9 @@ def build_parser() -> argparse.ArgumentParser:
         "-p",
         required=True,
         help="Project root path (absolute path recommended).",
+    )
+    ready_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
     )
 
     lsp_parser = subparsers.add_parser(
@@ -493,6 +508,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also check LSP server availability and suggest install commands.",
     )
+    doctor_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
+    )
 
     state_map_parser = subparsers.add_parser(
         "state-map", help="Map state values, writers, and readers for an enum/type."
@@ -520,6 +538,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     search_parser.add_argument(
         "--top-k", type=int, default=20, help="Maximum results (default 20)."
+    )
+    search_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
     )
 
     build_parser_cmd = subparsers.add_parser(
@@ -602,7 +623,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = args.command
     if command == "scan":
-        return run_scan(args.project, args.max_files)
+        return run_scan(args.project, args.max_files, args.json)
     if command == "overview":
         return run_overview(
             args.project,
@@ -687,9 +708,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.json,
         )
     if command == "hotspots":
-        return run_hotspots(args.project, args.max_files, args.limit)
+        return run_hotspots(args.project, args.max_files, args.limit, args.json)
     if command == "cache":
-        return run_cache(args.project, args.action)
+        return run_cache(args.project, args.action, getattr(args, "json", False))
     if command == "diff":
         return run_diff(args.project, args.json)
     if command == "refs":
@@ -728,17 +749,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "routes":
         return run_routes(args.project, args.max_files, args.json, args.with_consumers)
     if command == "doctor":
-        return run_doctor(args.project, getattr(args, "lsp", False))
+        return run_doctor(args.project, getattr(args, "lsp", False), getattr(args, "json", False))
     if command == "state-map":
         return run_state_map(
             args.project, args.max_files, args.symbol, args.query, args.json
         )
     if command == "search":
-        return run_search(args.project, args.max_files, args.query, args.top_k)
+        return run_search(args.project, args.max_files, args.query, args.top_k, args.json)
     if command == "fix":
-        return run_fix(args.project, getattr(args, "dry_run", False))
+        return run_fix(args.project, getattr(args, "dry_run", False), getattr(args, "json", False))
     if command == "ready":
-        return run_ready(args.project)
+        return run_ready(args.project, getattr(args, "json", False))
     if command == "build-binary":
         return run_build_binary(args.output, args.name)
     parser.error(f"unknown command: {command}")
