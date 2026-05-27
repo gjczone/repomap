@@ -655,7 +655,17 @@ def _is_public_entry(symbol: dict) -> bool:
     name = symbol.get("name", "")
     visibility = symbol.get("visibility", "")
     # 只保留有真实静态证据的入口豁免，避免用命名猜测掩盖死代码
-    if name in {"main", "__main__"}:
+    if name in {
+        "main",
+        "__main__",
+        "run",
+        "serve",
+        "start",
+        "init",
+        "setup",
+        "create_app",
+        "mainloop",
+    }:
         return True
     if visibility == "exported":
         return True

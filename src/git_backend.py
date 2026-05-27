@@ -333,16 +333,18 @@ class SubprocessBackend:
             return []
 
     @staticmethod
-    def file_authors(project_root: str, file_path: str) -> list[str]:
+    def file_authors(
+        project_root: str, file_path: str, since_days: int = 365
+    ) -> list[str]:
         safe_path = _validate_file_path(project_root, file_path)
         if safe_path is None:
             return []
         try:
-            r = SubprocessBackend._run_git(
-                ["shortlog", "-sn", "--", safe_path],
-                project_root,
-                timeout=5,
-            )
+            args = ["shortlog", "-sn"]
+            if since_days > 0:
+                args.extend(["--since", f"{since_days}.days.ago"])
+            args.extend(["--", safe_path])
+            r = SubprocessBackend._run_git(args, project_root, timeout=10)
             authors = []
             if r.returncode == 0:
                 for line in r.stdout.strip().split("\n"):

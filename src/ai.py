@@ -641,14 +641,22 @@ def render_file_detail_report(
     max_chars: int = 6000,
     lsp_symbol_tree: list[Any] | None = None,
 ) -> str:
+    original_file_path = file_path
     symbol_ids = engine.graph.file_symbols.get(file_path, [])
     if not symbol_ids:
         matches = [path for path in engine.graph.file_symbols if file_path in path]
         if matches:
-            file_path = matches[0]
+            matched = matches[0]
+            file_path = matched
             symbol_ids = engine.graph.file_symbols[file_path]
+            redirect_note = (
+                f"> Note: `{original_file_path}` not found directly; "
+                f"showing closest match `{matched}`.\n"
+            )
         else:
             return f"> File `{file_path}` not found or has no symbols"
+    else:
+        redirect_note = ""
 
     analysis = engine.file_analysis().get(file_path, {})
     symbols = sorted(
@@ -665,6 +673,8 @@ def render_file_detail_report(
         f"## File Detail — `{file_path}`\n",
         f"{len(symbols)}  symbols",
     ]
+    if redirect_note:
+        lines.append(redirect_note)
     if analysis:
         lines.append(
             f"Cross-file references: {analysis.get('neighbor_count', 0)}, "

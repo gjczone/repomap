@@ -162,6 +162,7 @@ class FileCacheEntry:
     """单文件增量缓存条目——对应一次全量扫描中一个文件的解析结果"""
 
     mtime: float
+    size: int = 0
     symbols_json: list[dict] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     import_bindings_json: list[dict] = field(default_factory=list)

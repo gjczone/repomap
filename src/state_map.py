@@ -165,10 +165,9 @@ def _scan_rust_state(
                     StateValue(name=f"{sym.name}::{vname}", file=defn.file, line=i)
                 )
     for i, line in enumerate(lines, 1):
-        if f"{sym.name}::" in line:
-            defn.readers.append(
-                StateValue(name=line.strip()[:80], file=defn.file, line=i)
-            )
+        stripped = line.strip()
+        if f"{sym.name}::" in stripped and not stripped.startswith("use "):
+            defn.readers.append(StateValue(name=stripped[:80], file=defn.file, line=i))
 
 
 def _scan_ts_state(defn: StateDefinition, sym, content: str, lines: list[str], engine):
@@ -198,7 +197,7 @@ def _scan_ts_state(defn: StateDefinition, sym, content: str, lines: list[str], e
                     )
 
     if sym.kind == "type":
-        for i in range(sym.line - 1, min(sym.line + 20, len(lines))):
+        for i in range(sym.line - 1, min(sym.line + 50, len(lines))):
             line = lines[i]
             for m in re.finditer(r"(\w+)\s*:\s*['\"]([^'\"]+)['\"]", line):
                 defn.values.append(
@@ -225,7 +224,10 @@ def _scan_python_state(
         # Exit on dedent (non-empty, non-indented, non-comment line)
         if stripped and not line[0].isspace() and not stripped.startswith("#"):
             break
-        m = re.match(r"^\s*(\w+)\s*=\s*(?:auto\(\)|\d+|'[^']*'|\"[^\"]*\")", line)
+        m = re.match(
+            r"^\s*(\w+)\s*=\s*(?:auto\(\)|\d+(?:\.\d+)?|'[^']*'|\"[^\"]*\"|\(.*?\))",
+            line,
+        )
         if m and not m.group(1).startswith("_"):
             defn.values.append(StateValue(name=m.group(1), file=defn.file, line=i + 1))
 

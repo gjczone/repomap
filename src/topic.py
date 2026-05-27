@@ -377,7 +377,7 @@ def _bare_name(stem: str) -> str:
     "VirtualKeyboard.test" -> "VirtualKeyboard"
     "terminal_test"        -> "terminal"
     """
-    for suffix in (".test", ".spec", "_test", "Test"):
+    for suffix in (".test", ".spec", "_test"):
         if stem.endswith(suffix) and len(stem) > len(suffix):
             return stem[: -len(suffix)]
     if stem.startswith("test_") and len(stem) > 5:

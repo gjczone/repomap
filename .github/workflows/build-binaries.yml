@@ -54,7 +54,10 @@ jobs:
 
          - name: Smoke test binary
            shell: bash
-           run: ./dist/repomap doctor --project .
+           run: |
+              ./dist/repomap doctor --project .
+              ./dist/repomap overview --project .
+              ./dist/repomap verify --project . --quick
 
          - name: Upload binary artifact
            uses: actions/upload-artifact@v7

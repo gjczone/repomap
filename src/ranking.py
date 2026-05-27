@@ -833,8 +833,10 @@ def detect_file_clusters(
                     label_counts[lbl] = label_counts.get(lbl, 0) + weight
             if not label_counts:
                 continue
-            # Most common label
-            new_label = max(label_counts, key=label_counts.get)
+            # Most common label; break ties with smallest label ID for determinism
+            new_label = max(label_counts.items(), key=lambda item: (item[1], -item[0]))[
+                0
+            ]
             if labels[f] != new_label:
                 labels[f] = new_label
                 changed += 1
