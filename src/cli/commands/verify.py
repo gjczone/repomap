@@ -74,6 +74,8 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
     for line in output.splitlines():
         if not line:
             continue
+        # porcelain format: "XY path" (X=index, Y=work-tree, then space, then path)
+        # Handle both "XY path" (len>=3, space at pos 2) and "X path" (len>=2, space at pos 1)
         if len(line) >= 3 and line[2] == " ":
             path = line[3:]
         elif len(line) >= 2 and line[1] == " ":

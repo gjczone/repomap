@@ -478,7 +478,7 @@ def _read_lsp_message(stream: Any) -> dict[str, Any] | None:
         text = line.decode("ascii", errors="replace").strip()
         if ":" in text:
             key, value = text.split(":", 1)
-            headers[key.lower()] = value.strip()
+            headers[key.strip().lower()] = value.strip()
     try:
         length = int(headers.get("content-length", "0"))
     except (ValueError, TypeError):
@@ -514,6 +514,7 @@ class StdioLspClient:
         self._reader: threading.Thread | None = None
         self._stderr_reader: threading.Thread | None = None
         self._stop_reader = False
+        self.server_capabilities: dict[str, Any] = {}
 
     def __enter__(self) -> "StdioLspClient":
         self.start()
@@ -543,10 +544,10 @@ class StdioLspClient:
             try:
                 message = _read_lsp_message(self.process.stdout)
             except Exception as exc:
-                self._messages.put(
-                    {"method": "$/repomapReadError", "params": {"message": str(exc)}}
+                logger.warning(
+                    "LSP message read error: %s (reader thread continues)", exc
                 )
-                return
+                continue
             if message is None:
                 return
             self._messages.put(message)
@@ -662,7 +663,7 @@ class StdioLspClient:
         self.process.stdin.flush()
 
     def initialize(self) -> None:
-        self.request(
+        response = self.request(
             "initialize",
             {
                 "processId": os.getpid(),
@@ -681,6 +682,7 @@ class StdioLspClient:
                 },
             },
         )
+        self.server_capabilities = response.get("result", {}).get("capabilities", {})
         self.send_notification("initialized", {})
 
     def did_open(self, file_path: Path, language: str, text: str) -> None:

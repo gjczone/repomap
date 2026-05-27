@@ -22,17 +22,28 @@ def run_fix(project: str, dry_run: bool = False) -> int:
 
         fixes_applied: list[str] = []
         tools_failed: list[str] = []
+        dry_run_actions: list[str] = []
 
         # Try ruff
         try:
+            ruff_args = (
+                ["ruff", "check", str(project_root)]
+                if dry_run
+                else ["ruff", "check", "--fix", str(project_root)]
+            )
             result = subprocess.run(
-                ["ruff", "check", "--fix", str(project_root)],
+                ruff_args,
                 capture_output=True,
                 text=True,
                 timeout=60,
             )
             if result.returncode == 0:
-                fixes_applied.append("ruff --fix")
+                if dry_run:
+                    dry_run_actions.append("ruff (would fix issues)")
+                else:
+                    fixes_applied.append("ruff --fix")
+            elif dry_run and result.stdout.strip():
+                dry_run_actions.append("ruff (would fix issues)")
         except FileNotFoundError:
             tools_failed.append("ruff (not installed)")
         except Exception as exc:
@@ -43,7 +54,6 @@ def run_fix(project: str, dry_run: bool = False) -> int:
             eslint_files: list[str] = []
             valid_exts = {".js", ".ts", ".jsx", ".tsx"}
             for dirpath, _dirnames, filenames in os.walk(str(project_root)):
-                # 跳过不关心的目录（按路径组件匹配，非子串）
                 skip_parts = {
                     "node_modules",
                     ".git",
@@ -76,25 +86,41 @@ def run_fix(project: str, dry_run: bool = False) -> int:
                     )
                     break
             if eslint_files:
-                result = subprocess.run(
-                    ["eslint", "--fix", "--", *eslint_files],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-                if result.returncode == 0:
-                    fixes_applied.append("eslint --fix")
+                if dry_run:
+                    result = subprocess.run(
+                        ["eslint", "--", *eslint_files],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                    )
+                    if result.stdout.strip():
+                        dry_run_actions.append("eslint (would fix issues)")
+                else:
+                    result = subprocess.run(
+                        ["eslint", "--fix", "--", *eslint_files],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                    )
+                    if result.returncode == 0:
+                        fixes_applied.append("eslint --fix")
         except FileNotFoundError:
             tools_failed.append("eslint (not installed)")
         except Exception as exc:
             tools_failed.append(f"eslint (error: {exc})")
 
-        if fixes_applied:
-            print(f"Applied: {', '.join(fixes_applied)}")
-        if tools_failed:
-            print(f"Skipped: {', '.join(tools_failed)}")
-        if not fixes_applied and not tools_failed:
-            print("No auto-fixable issues found.")
+        if dry_run:
+            if dry_run_actions:
+                print(f"Dry run — would apply: {', '.join(dry_run_actions)}")
+            else:
+                print("Dry run — no auto-fixable issues found.")
+        else:
+            if fixes_applied:
+                print(f"Applied: {', '.join(fixes_applied)}")
+            if tools_failed:
+                print(f"Skipped: {', '.join(tools_failed)}")
+            if not fixes_applied and not tools_failed:
+                print("No auto-fixable issues found.")
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] fix failed: {exc}", file=sys.stderr)

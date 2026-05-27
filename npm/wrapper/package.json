@@ -1,6 +1,6 @@
 {
    "name": "repomap-bin",
-   "version": "2.4.6",
+   "version": "2.6.0",
    "description": "Standalone repomap binary — tree-sitter AST code intelligence CLI",
    "bin": {
       "repomap": "repomap.js"
@@ -9,7 +9,7 @@
       "repomap.js"
    ],
    "optionalDependencies": {
-      "@gjczone/repomap-linux-x64": "2.4.6"
+      "@gjczone/repomap-linux-x64": "2.6.0"
    },
    "keywords": [
       "repomap",

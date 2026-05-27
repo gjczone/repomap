@@ -22,13 +22,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from .parser import TreeSitterAdapter
 from . import find_child_by_type as _find_child_by_type
 from . import find_children_by_type as _find_children_by_type
 
 logger = logging.getLogger("repomap.callgraph")
 
-_node_text = TreeSitterAdapter._text
+
+def _node_text(node: Any) -> str:
+    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
 
 
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
@@ -657,13 +658,6 @@ def _resolve_call(
                         "method_call",
                     )
 
-        import_target = caller_info.imports.get(obj_name)
-        if import_target:
-            func_matches = name_to_file.get(method_name, [])
-            for mfpath, mline in func_matches:
-                if mfpath != caller_file:
-                    return (mfpath, method_name, mline, "import_call")
-
         class_matches = class_name_to_file.get(obj_name, [])
         for cfpath, cinfo in class_matches:
             if method_name in cinfo.methods:
@@ -673,6 +667,13 @@ def _resolve_call(
                     cinfo.methods[method_name],
                     "method_call",
                 )
+
+        import_target = caller_info.imports.get(obj_name)
+        if import_target:
+            func_matches = name_to_file.get(method_name, [])
+            for mfpath, mline in func_matches:
+                if mfpath != caller_file:
+                    return (mfpath, method_name, mline, "import_call")
 
     func_name = parts[0]
     matches = name_to_file.get(func_name, [])

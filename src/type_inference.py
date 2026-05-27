@@ -297,6 +297,27 @@ def _extract_cpp_params(def_node: Any) -> str:
     return ", ".join(parts) if parts else ""
 
 
+def _extract_php_return_type(def_node: Any) -> str:
+    for child in def_node.children:
+        if child.type == "return_type":
+            return _node_text(child).lstrip(":").strip()
+    return ""
+
+
+def _extract_php_params(def_node: Any) -> str:
+    params_node = _find_child_by_type(
+        def_node, "formal_parameters"
+    ) or _find_child_by_type(def_node, "parameters")
+    if not params_node:
+        return ""
+    parts: list[str] = []
+    for child in params_node.children:
+        if child.type in ("(", ")", ",", "comment"):
+            continue
+        parts.append(_node_text(child).strip())
+    return ", ".join(parts) if parts else ""
+
+
 _EXTRACTORS: dict[str, tuple[Any, Any]] = {
     "python": (_extract_python_return_type, _extract_python_params),
     "typescript": (_extract_ts_return_type, _extract_ts_params),
@@ -308,6 +329,7 @@ _EXTRACTORS: dict[str, tuple[Any, Any]] = {
     "swift": (_extract_swift_return_type, _extract_swift_params),
     "c_sharp": (_extract_c_sharp_return_type, _extract_c_sharp_params),
     "cpp": (_extract_cpp_return_type, _extract_cpp_params),
+    "php": (_extract_php_return_type, _extract_php_params),
 }
 
 _FUNC_NODE_TYPES: dict[str, frozenset[str]] = {
@@ -337,6 +359,7 @@ _FUNC_NODE_TYPES: dict[str, frozenset[str]] = {
     "swift": frozenset({"function_declaration"}),
     "c_sharp": frozenset({"method_declaration", "constructor_declaration"}),
     "cpp": frozenset({"function_definition", "declaration"}),
+    "php": frozenset({"function_definition", "method_declaration"}),
 }
 
 

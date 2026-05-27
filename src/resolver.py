@@ -27,7 +27,13 @@ from . import JSImportBinding, PathAliasRule, ProjectImportConfig, RepoGraph, js
 logger = logging.getLogger("repomap")
 
 MAX_EXPORT_RESOLVE_DEPTH = 3
-CALLABLE_KINDS = {"function", "method", "anonymous_function"}
+CALLABLE_KINDS = {
+    "function",
+    "method",
+    "anonymous_function",
+    "trait_method",
+    "constructor",
+}
 
 
 class PackageJsonExports:
@@ -362,7 +368,7 @@ class ImportResolver:
                 )
 
     def _parse_package_imports(self, imports: Any) -> None:
-        """解析 package.json imports 字段（# 私有导入映射）。"""
+        """解析 package.json imports 字段（# 私有导入映射，含通配符支持）。"""
         if not isinstance(imports, dict):
             return
         for pattern, target in imports.items():
@@ -376,6 +382,24 @@ class ImportResolver:
                         break
             if resolved and isinstance(pattern, str):
                 self._package_imports[pattern] = resolved
+
+    def _resolve_package_import(self, imp: str) -> str | None:
+        """解析 # 私有导入，支持通配符模式匹配。"""
+        # 精确匹配
+        if imp in self._package_imports:
+            return self._package_imports[imp]
+        # 通配符匹配
+        for pattern, target in sorted(
+            self._package_imports.items(), key=lambda x: -len(x[0])
+        ):
+            if "*" not in pattern:
+                continue
+            prefix = pattern.split("*")[0]
+            if imp.startswith(prefix):
+                suffix = imp[len(prefix) :]
+                if "*" in target:
+                    return target.replace("*", suffix, 1)
+        return None
 
     def _register_package_exports(
         self, package_name: str, exports: Any, package_root: PurePosixPath
@@ -415,7 +439,7 @@ class ImportResolver:
         result: list[str]
         # 处理 Node.js # 私有导入
         if imp.startswith("#") and self._package_imports:
-            target = self._package_imports.get(imp)
+            target = self._resolve_package_import(imp)
             if target:
                 result = self._resolve_package_export_target(".", target)
                 if result:
@@ -979,8 +1003,14 @@ class ImportResolver:
             resolved = candidate
         else:
             if not extends_value.startswith("."):
-                return None
-            resolved = (config_path.parent / candidate).resolve()
+                # Try node_modules resolution for npm package extends
+                node_modules = self.project_root / "node_modules"
+                if node_modules.is_dir():
+                    resolved = (node_modules / candidate).resolve()
+                else:
+                    return None
+            else:
+                resolved = (config_path.parent / candidate).resolve()
         try:
             resolved.relative_to(self.project_root)
         except ValueError:

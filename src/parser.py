@@ -53,7 +53,10 @@ QUERIES: dict[str, dict[str, str]] = {
                   function: (attribute
                     object: (identifier) @_obj
                     attribute: (identifier) @method)
-                  arguments: (argument_list (string) @path)))
+                  arguments: (argument_list (string) @path
+                    (keyword_argument
+                      name: (identifier) @_kw_name
+                      value: (list (string) @_methods))?)))
               definition: (function_definition name: (identifier) @handler))
             (#match? @_obj "^(app|router|api|bp|blueprint|routes|endpoints)$")
             (#match? @method "^(get|post|put|delete|patch|head|options|route)$")
@@ -161,7 +164,7 @@ QUERIES: dict[str, dict[str, str]] = {
                 (interpreted_string_literal) @path
                 .
                 (identifier) @handler))
-            (#match? @method "^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|Get|Post|Put|Delete|Patch|Head|Options|HandleFunc|Handle)$")
+            (#match? @method "^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|Get|Post|Put|Delete|Patch|Head|Options)$")
         """,
     },
     "rust": {
@@ -253,6 +256,18 @@ QUERIES: dict[str, dict[str, str]] = {
         """,
         "http_route": """
             ;; Spring Boot: @GetMapping("/path") on a controller method
+            ;; Simplified form: @GetMapping("/path") — value is direct string_literal
+            (method_declaration
+              (modifiers
+                (annotation
+                  name: (identifier) @method
+                  arguments: (annotation_argument_list
+                    (string_literal) @path)))
+              name: (identifier) @handler)
+            (#match? @method "^(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)$")
+        """,
+        "http_route_explicit": """
+            ;; Spring Boot: @RequestMapping(value="/path", method=GET) — element_value_pair form
             (method_declaration
               (modifiers
                 (annotation
@@ -270,8 +285,7 @@ QUERIES: dict[str, dict[str, str]] = {
         ),
         "class": (
             "(class_declaration name: (identifier) @name) @definition.class\n"
-            "(object_declaration name: (identifier) @name) @definition.class\n"
-            "(class_declaration name: (identifier) @name) @definition.class"
+            "(object_declaration name: (identifier) @name) @definition.class"
         ),
         "import": "(import (qualified_identifier) @name)",
         "call": (
@@ -1539,15 +1553,20 @@ class TreeSitterAdapter:
         if self._should_skip_route_file(file):
             return []
 
-        query = self._queries.get(lang, {}).get("http_route")
-        if not query:
+        queries = self._queries.get(lang, {})
+        route_query = queries.get("http_route")
+        explicit_query = queries.get("http_route_explicit")
+        if not route_query and not explicit_query:
             return []
 
         routes: list[HttpRoute] = []
-        for captures in self._run_query_matches(query, tree.root_node):
-            route = self._http_route_from_captures(captures, lang, file)
-            if route is not None:
-                routes.append(route)
+        for q in (route_query, explicit_query):
+            if q is None:
+                continue
+            for captures in self._run_query_matches(q, tree.root_node):
+                route = self._http_route_from_captures(captures, lang, file)
+                if route is not None:
+                    routes.append(route)
 
         return sorted(
             routes,
@@ -1757,90 +1776,6 @@ class TreeSitterAdapter:
         if node.type in {"arrow_function", "function_expression", "lambda"}:
             return self._anonymous_symbol_name(node)
         return self._text(node)
-
-    def _parse_import_specifiers(
-        self, spec: str, module: str, line: int
-    ) -> list[JSImportBinding]:
-        bindings: list[JSImportBinding] = []
-        remaining = spec.strip()
-        if not remaining:
-            return bindings
-
-        if remaining.startswith("{"):
-            named_text = remaining[1 : remaining.rfind("}")]
-            for imported_name, local_name in self._parse_named_clause(named_text):
-                bindings.append(
-                    JSImportBinding(local_name, imported_name, module, line, "named")
-                )
-            return bindings
-
-        if remaining.startswith("*"):
-            namespace_match = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)", remaining)
-            if namespace_match:
-                bindings.append(
-                    JSImportBinding(
-                        local_name=namespace_match.group(1),
-                        imported_name="*",
-                        module=module,
-                        line=line,
-                        kind="namespace",
-                    )
-                )
-            return bindings
-
-        default_part = remaining
-        rest = ""
-        if "," in remaining:
-            default_part, rest = remaining.split(",", 1)
-        default_name = default_part.strip()
-        if default_name and re.fullmatch(r"[A-Za-z_$][\w$]*", default_name):
-            bindings.append(
-                JSImportBinding(
-                    local_name=default_name,
-                    imported_name="default",
-                    module=module,
-                    line=line,
-                    kind="default",
-                )
-            )
-        rest = rest.strip()
-        if rest.startswith("{") and "}" in rest:
-            named_text = rest[1 : rest.rfind("}")]
-            for imported_name, local_name in self._parse_named_clause(named_text):
-                bindings.append(
-                    JSImportBinding(local_name, imported_name, module, line, "named")
-                )
-        elif rest.startswith("*"):
-            namespace_match = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)", rest)
-            if namespace_match:
-                bindings.append(
-                    JSImportBinding(
-                        local_name=namespace_match.group(1),
-                        imported_name="*",
-                        module=module,
-                        line=line,
-                        kind="namespace",
-                    )
-                )
-        return bindings
-
-    def _parse_named_clause(self, text: str) -> list[tuple[str, str]]:
-        pairs: list[tuple[str, str]] = []
-        for raw_item in text.split(","):
-            item = raw_item.strip()
-            if not item:
-                continue
-            item = re.sub(r"^type\s+", "", item)
-            parts = re.split(r"\s+as\s+", item, maxsplit=1)
-            if len(parts) == 2:
-                source_name, exported_name = parts[0].strip(), parts[1].strip()
-            else:
-                source_name = exported_name = item
-            if re.fullmatch(r"[A-Za-z_$][\w$]*", source_name) and re.fullmatch(
-                r"[A-Za-z_$][\w$]*", exported_name
-            ):
-                pairs.append((source_name, exported_name))
-        return pairs
 
     # ── 内部辅助 ────────────────────────────────────────────────────────────────
 
