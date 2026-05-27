@@ -24,7 +24,20 @@ CONFIDENCE_MARK = {"high": "HIGH", "medium": "MED", "low": "LOW"}
 def _truncate_output(output: str, max_chars: int) -> str:
     if max_chars <= 0 or len(output) <= max_chars:
         return output
-    return output[:max_chars] + "\n\n[output truncated]"
+    # 在 max_chars 内找到最后一个换行边界截断，避免在行中间或 Markdown 标记中间截断
+    truncated = output[:max_chars]
+    last_newline = truncated.rfind("\n")
+    if last_newline > max_chars // 2:
+        truncated = truncated[:last_newline]
+    else:
+        truncated = truncated[:max_chars]
+    original_size = len(output)
+    truncated_size = len(truncated)
+    ratio = int(truncated_size / original_size * 100)
+    return (
+        truncated
+        + f"\n\n[output truncated: {truncated_size}/{original_size} chars ({ratio}%)]"
+    )
 
 
 def _get_hot_files(project_root: str, days: int = 30) -> set[str]:

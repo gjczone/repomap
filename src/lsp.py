@@ -556,7 +556,7 @@ class StdioLspClient:
                             "utf-8", errors="replace"
                         ).strip()[-200:]
             except Exception:
-                pass
+                logger.debug("Failed to read LSP stderr for error diagnostics", exc_info=True)
             detail = f"exit code {exit_code}"
             if stderr_tail:
                 detail += f", stderr: {stderr_tail}"
@@ -588,8 +588,13 @@ class StdioLspClient:
                 ):  # 防止异常 LSP 服务器导致内存无限增长
                     self._notifications.append(message)
                 continue
-            # 非目标响应消息放回队列（可能是并发请求的响应）
-            self._messages.put(message)
+            # 非目标响应：LSP 单请求模式下不应出现，丢弃并记录
+            logger.warning(
+                "Discarding unmatched LSP response id=%s (expected %s) for method %r",
+                message.get("id"),
+                request_id,
+                method,
+            )
             time.sleep(0.01)
         # 超时后检查进程是否已退出，给出更精确的诊断
         if self.process is not None:
@@ -604,7 +609,7 @@ class StdioLspClient:
                                 "utf-8", errors="replace"
                             ).strip()[-200:]
                 except Exception:
-                    pass
+                    logger.debug("Failed to read LSP stderr for timeout diagnostics", exc_info=True)
                 detail = f"exit code {exit_code}"
                 if stderr_tail:
                     detail += f", stderr: {stderr_tail}"
@@ -725,11 +730,11 @@ class StdioLspClient:
                 try:
                     self.request("shutdown", {})
                 except Exception:
-                    pass
+                    logger.debug("LSP shutdown request failed", exc_info=True)
                 try:
                     self.send_notification("exit", {})
                 except Exception:
-                    pass
+                    logger.debug("LSP exit notification failed", exc_info=True)
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
@@ -1228,6 +1233,7 @@ def collect_lsp_hover(
             contents=_parse_hover_response(raw),
         )
     except Exception:
+        logger.debug("LSP hover collection failed for %s:%d", file_path, line, exc_info=True)
         return None
 
 

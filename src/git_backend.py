@@ -370,7 +370,7 @@ class Pygit2Backend:
                 if tl:
                     return pygit2.Repository(tl)
             except Exception:
-                pass
+                logger.debug("pygit2 _repo fallback also failed", exc_info=True)
             return None
 
     @staticmethod
@@ -381,6 +381,7 @@ class Pygit2Backend:
         try:
             return str(repo.head.target)
         except Exception:
+            logger.debug("pygit2 rev_parse_head failed", exc_info=True)
             return None
 
     @staticmethod
@@ -392,6 +393,7 @@ class Pygit2Backend:
             if repo:
                 return str(Path(repo).parent)
         except Exception:
+            logger.debug("pygit2 show_toplevel failed", exc_info=True)
             pass
         return None
 
@@ -419,6 +421,7 @@ class Pygit2Backend:
                     files.append(fp)
             return files
         except Exception:
+            logger.warning("pygit2 changed_files failed", exc_info=True)
             return []
 
     @staticmethod
@@ -438,6 +441,7 @@ class Pygit2Backend:
                     files.append(fp)
             return files
         except Exception:
+            logger.warning("pygit2 deleted_files failed", exc_info=True)
             return []
 
     @staticmethod
@@ -458,6 +462,7 @@ class Pygit2Backend:
                 diff = repo.diff_index_to_workdir()
             return list({p.new_file.path for p in diff.deltas if p.new_file.path})
         except Exception:
+            logger.warning("pygit2 diff_name_only failed", exc_info=True)
             return []
 
     @staticmethod
@@ -469,6 +474,7 @@ class Pygit2Backend:
             diff = repo.diff_cached()
             return list({p.new_file.path for p in diff.deltas if p.new_file.path})
         except Exception:
+            logger.warning("pygit2 diff_cached_name_only failed", exc_info=True)
             return []
 
     @staticmethod
@@ -522,6 +528,7 @@ class Pygit2Backend:
                 lines.append(f"{x}{y} {fp}")
             return lines
         except Exception:
+            logger.warning("pygit2 status_porcelain failed", exc_info=True)
             return []
 
     @staticmethod
@@ -552,6 +559,7 @@ class Pygit2Backend:
                         files.add(d.new_file.path)
             return list(files)
         except Exception:
+            logger.warning("pygit2 log_name_only failed", exc_info=True)
             return []
 
     @staticmethod
@@ -578,6 +586,7 @@ class Pygit2Backend:
                     groups.append(commit_files)
             return groups
         except Exception:
+            logger.warning("pygit2 log_commits_grouped failed", exc_info=True)
             return []
 
     @staticmethod
@@ -603,6 +612,7 @@ class Pygit2Backend:
                         files.add(d.new_file.path)
             return list(files)
         except Exception:
+            logger.warning("pygit2 diff_name_only_since failed", exc_info=True)
             return []
 
     @staticmethod
@@ -624,6 +634,7 @@ class Pygit2Backend:
                 if start <= line <= end:
                     return {"commit": str(hunk.final_commit_id)[:8]}
         except Exception:
+            logger.debug("pygit2 blame_line failed for %s:%d", file_path, line, exc_info=True)
             pass
         return None
 
@@ -743,6 +754,7 @@ class GitBackend:
                     logger.debug("Using pygit2 backend for %s", project_root)
                     return
             except Exception:
+                logger.debug("pygit2 backend init failed, falling back to subprocess", exc_info=True)
                 pass
         self._backend = SubprocessBackend
         logger.debug("Using subprocess backend for %s", project_root)

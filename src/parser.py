@@ -537,7 +537,7 @@ class TreeSitterAdapter:
                 )
                 return None
         except Exception:
-            pass  # 解码失败继续尝试解析
+            logger.debug("Nesting depth check failed, proceeding to parse", exc_info=True)
 
         try:
             return parser.parse(content)
