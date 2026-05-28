@@ -907,9 +907,10 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["command"], "routes")
-        self.assertIn("scanStats", payload)
-        self.assertEqual(len(payload["routes"]), 1)
-        route = payload["routes"][0]
+        result = payload.get("result", payload)
+        self.assertIn("scanStats", result)
+        self.assertEqual(len(result["routes"]), 1)
+        route = result["routes"][0]
         self.assertEqual(route["method"], "GET")
         self.assertEqual(route["path"], "/items")
         self.assertEqual(route["framework"], "express")
@@ -1124,8 +1125,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["lsp"]["status"], "ok")
-            self.assertEqual(payload["lsp"]["references"][0]["file"], "main.py")
+            result = payload.get("result", payload)
+            self.assertEqual(result["lsp"]["status"], "ok")
+            self.assertEqual(result["lsp"]["references"][0]["file"], "main.py")
 
     def test_cache_save_and_diff_follow_standalone_cli_semantics(self) -> None:
         from src.cli import main

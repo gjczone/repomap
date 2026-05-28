@@ -16,6 +16,7 @@ from . import json_dumps, json_loads
 logger = logging.getLogger("repomap.lsp")
 
 _MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max LSP message body
+_MAX_LSP_FILE_SIZE = 1_048_576  # 1 MiB，超过此大小的文件不送 LSP
 
 
 @dataclass(frozen=True)
@@ -706,10 +707,10 @@ class StdioLspClient:
         self.server_capabilities = response.get("result", {}).get("capabilities", {})
         self.send_notification("initialized", {})
 
-    MAX_FILE_SIZE = 1_048_576  # 1 MiB，超过此大小的文件不送 LSP 诊断
+    MAX_FILE_SIZE = _MAX_LSP_FILE_SIZE  # 向后兼容
 
     def did_open(self, file_path: Path, language: str, text: str) -> None:
-        if len(text.encode("utf-8", errors="replace")) > self.MAX_FILE_SIZE:
+        if len(text.encode("utf-8", errors="replace")) > _MAX_LSP_FILE_SIZE:
             logger.warning(
                 "Skipping LSP diagnostics for large file %s (%d bytes)",
                 file_path,
@@ -1050,13 +1051,24 @@ def _normalize_lsp_locations(project_root: Path, value: Any) -> list[LspLocation
 
 
 def _symbol_position(
-    project_root: Path, file_path: str, line: int, symbol_name: str
+    project_root: Path,
+    file_path: str,
+    line: int,
+    symbol_name: str,
+    *,
+    file_text: str | None = None,
 ) -> tuple[Path, int, int]:
     abs_file = (project_root / file_path).resolve()
     zero_based_line = max(0, line - 1)
     character = 0
     try:
-        lines = abs_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        if file_text is not None:
+            text = file_text
+        else:
+            if abs_file.stat().st_size > _MAX_LSP_FILE_SIZE:
+                return abs_file, zero_based_line, character
+            text = abs_file.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
         if 0 <= zero_based_line < len(lines):
             index = lines[zero_based_line].find(symbol_name)
             if index >= 0:
@@ -1082,13 +1094,21 @@ def collect_lsp_symbol_evidence(
             status="skipped",
             reason="unsupported file type",
         )
-    abs_file, line_index, character = _symbol_position(
-        root, file_path, line, symbol_name
-    )
+    abs_file = (root / file_path).resolve()
     if not abs_file.exists() or not abs_file.is_file():
         return LspRunResult(
             server="lsp", language=language, status="skipped", reason="file not found"
         )
+    # 读取文件一次，同时用于 _symbol_position 和 did_open
+    try:
+        file_text = abs_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return LspRunResult(
+            server="lsp", language=language, status="skipped", reason="file read error"
+        )
+    abs_file, line_index, character = _symbol_position(
+        root, file_path, line, symbol_name, file_text=file_text
+    )
     detection = detect_lsp_server(root, language, abs_file)
     if detection.status != "available":
         return LspRunResult(
@@ -1105,11 +1125,7 @@ def collect_lsp_symbol_evidence(
             detection.command, workspace_root, timeout=timeout
         ) as client:
             client.initialize()
-            client.did_open(
-                abs_file,
-                language,
-                abs_file.read_text(encoding="utf-8", errors="replace"),
-            )
+            client.did_open(abs_file, language, file_text)
             definitions = _normalize_lsp_locations(
                 root, client.definition(abs_file, line_index, character)
             )
@@ -1316,11 +1332,16 @@ def collect_lsp_hover(
     language = language_for_file(file_path)
     if not language:
         return None
-    abs_file, line_index, character = _symbol_position(
-        root, file_path, line, symbol_name
-    )
+    abs_file = (root / file_path).resolve()
     if not abs_file.exists() or not abs_file.is_file():
         return None
+    try:
+        file_text = abs_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    abs_file, line_index, character = _symbol_position(
+        root, file_path, line, symbol_name, file_text=file_text
+    )
     detection = detect_lsp_server(root, language, abs_file)
     if detection.status != "available":
         return None
@@ -1330,11 +1351,7 @@ def collect_lsp_hover(
             detection.command, workspace_root, timeout=timeout
         ) as client:
             client.initialize()
-            client.did_open(
-                abs_file,
-                language,
-                abs_file.read_text(encoding="utf-8", errors="replace"),
-            )
+            client.did_open(abs_file, language, file_text)
             raw = client.hover(abs_file, line_index, character)
         return LspHoverInfo(
             file=file_path,
@@ -1343,7 +1360,7 @@ def collect_lsp_hover(
             contents=_parse_hover_response(raw),
         )
     except Exception:
-        logger.info(
+        logger.warning(
             "LSP hover collection failed for %s:%d", file_path, line, exc_info=True
         )
         return None

@@ -322,10 +322,13 @@ def _run_check_payload(
     resolve_symbols: bool,
     lsp_timeout: float,
     lsp_max_files: int,
+    *,
+    engine: Any = None,
 ) -> dict[str, Any]:
     symbols_map = None
     if resolve_symbols:
-        engine = _scan_engine(project_root, 8000)
+        if engine is None:
+            engine = _scan_engine(project_root, 8000)
         symbols_map = engine.graph.symbols
     checker = RepoMapChecker(project_root, max_issues)
     return checker.check(
@@ -610,8 +613,9 @@ def _print_missed_files_section(
                         )
         if not co_change_found:
             print("\n  (no co-change neighbors found)")
-    except Exception:
+    except Exception as exc:
         logger.warning("Co-change neighbor lookup failed", exc_info=True)
+        print(f"\n  ⚠ Co-change analysis failed: {exc}")
     print("")
 
 
@@ -662,6 +666,7 @@ def run_verify(
                 resolve_symbols=resolve_symbols,
                 lsp_timeout=lsp_timeout,
                 lsp_max_files=lsp_max_files,
+                engine=engine,
             )
             lsp_payload = _verify_lsp_payload(
                 project_root, changed_files, lsp_timeout, lsp_max_files
@@ -832,19 +837,19 @@ def run_orphan(
     try:
         engine = _scan_engine(project, max_files)
         symbol_ids = set(engine.graph.symbols.keys())
-        calls_in: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
-        calls_out: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
+        refs_in: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
+        refs_out: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
         for source_id, edge_list in engine.graph.outgoing.items():
             for edge in edge_list:
-                if edge.kind != "call":
+                if edge.kind not in ("call", "import"):
                     continue
-                calls_out.setdefault(source_id, set()).add(edge.target)
-                calls_in.setdefault(edge.target, set()).add(source_id)
+                refs_out.setdefault(source_id, set()).add(edge.target)
+                refs_in.setdefault(edge.target, set()).add(source_id)
 
         candidates: list[Symbol] = []
         filtered_structural_count = 0
         for sid in symbol_ids:
-            if len(calls_in[sid]) == 0 and len(calls_out[sid]) == 0:
+            if len(refs_in[sid]) == 0 and len(refs_out[sid]) == 0:
                 symbol = engine.graph.symbols[sid]
                 if symbol.name in {"main", "__main__"}:
                     continue
@@ -1016,6 +1021,7 @@ def run_check(
     resolve_symbols: bool,
     lsp_timeout: float = 8.0,
     lsp_max_files: int = 20,
+    as_json: bool = False,
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -1046,7 +1052,12 @@ def run_check(
             lsp_timeout=lsp_timeout,
             lsp_max_files=lsp_max_files,
         )
-        print(_format_check_report(result, max_issues))
+        if as_json:
+            from ..handlers import json_envelope
+
+            print(json_envelope("check", project_root, result))
+        else:
+            print(_format_check_report(result, max_issues))
         status = result.get("status")
         if status == "passed":
             return 0

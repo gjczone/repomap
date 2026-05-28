@@ -266,7 +266,7 @@ class RepoMapEngine:
             value = int(raw)
         except ValueError:
             return DEFAULT_MAX_FILE_BYTES
-        return max(1, value)
+        return max(4096, value)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 扫描主流程

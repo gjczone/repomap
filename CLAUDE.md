@@ -1,5 +1,7 @@
 # RepoMap — Skill + CLI for AI-Agent Repository Intelligence
 
+> **用 repomap 查 repomap，用 repomap 优化 repomap。** 开发和审查本项目时，必须使用 repomap 自身的命令（`overview`、`impact`、`refs`、`call-chain`、`verify`、`orphan`、`check`）来理解代码、评估变更影响、发现死代码和验证修改。这是 dogfooding 原则——自己吃自己的狗粮。
+
 `repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent *when* to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
 **Distribution**: Pure Python skill+CLI tool. Distributed via skill definition (`skills/repomap/`) and CLI binary (`repomap`). Version managed in `pyproject.toml`.
