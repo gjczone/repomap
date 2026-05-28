@@ -7,9 +7,7 @@ issue63# 集成测试。
 from __future__ import annotations
 
 import subprocess
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
