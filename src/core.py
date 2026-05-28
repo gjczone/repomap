@@ -1024,7 +1024,7 @@ class RepoMapEngine:
         """Detect module clusters from the file dependency graph."""
         from .ranking import detect_file_clusters, format_cluster_summary
 
-        clusters = detect_file_clusters(self.graph, project_root=self.project_root)
+        clusters = detect_file_clusters(self.graph, project_root=str(self.project_root))
         return format_cluster_summary(clusters, top_n=limit)
 
     def summary_symbols(
