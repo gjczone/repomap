@@ -782,7 +782,9 @@ class StdioLspClient:
         self, file_paths: list[Path], language: str
     ) -> list[dict[str, Any]]:
         # 过滤掉未打开的文件
-        opened_paths = [path for path in file_paths if str(path.resolve()) in self._opened_files]
+        opened_paths = [
+            path for path in file_paths if str(path.resolve()) in self._opened_files
+        ]
         if not opened_paths:
             return []
 

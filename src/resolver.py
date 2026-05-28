@@ -192,6 +192,7 @@ class ImportResolver:
 
         # 导入解析缓存：(source_file, imp) -> target_files，避免同一模块被反复解析
         from collections import OrderedDict
+
         self._resolve_cache: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
         self._resolve_cache_max = 20000
 

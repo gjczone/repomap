@@ -794,7 +794,8 @@ def detect_file_clusters(
     # 构建 import 模块名到文件路径的映射
     from pathlib import Path
     from .resolver import ImportResolver
-    root = Path(project_root) if project_root else Path('.')
+
+    root = Path(project_root) if project_root else Path(".")
     resolver = ImportResolver(root, graph)
     resolver.build_indices()
 
@@ -812,7 +813,18 @@ def detect_file_clusters(
         # 注意：此启发式方法可能抑制有效的跨文件调用边（假阴性），
         # 特别是对于没有直接 import 关系的常见函数名调用。
         # 对于聚类检测（本质上是近似的），这是可接受的精度/召回权衡。
-        common_names = {"get", "set", "init", "main", "test", "setup", "teardown", "run", "start", "stop"}
+        common_names = {
+            "get",
+            "set",
+            "init",
+            "main",
+            "test",
+            "setup",
+            "teardown",
+            "run",
+            "start",
+            "stop",
+        }
         for called, *_ in graph.file_calls.get(f, []):
             # 如果是常见函数名，只在有 import 关系时才创建边
             if called in common_names:
@@ -821,7 +833,9 @@ def detect_file_clusters(
                 for target_file in name_to_files.get(called, set()):
                     if target_file in neighbors and target_file != f:
                         # 检查是否有 import 边
-                        if target_file in neighbors[f] or f in neighbors.get(target_file, {}):
+                        if target_file in neighbors[f] or f in neighbors.get(
+                            target_file, {}
+                        ):
                             has_import = True
                             break
                 if not has_import:

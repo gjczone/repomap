@@ -189,7 +189,9 @@ class TestP1CacheSaveRaceCondition:
 
             save_incremental_cache(project_root, engine)
         except FileNotFoundError:
-            pytest.fail("save_incremental_cache 应该处理文件删除，而不是抛出 FileNotFoundError")
+            pytest.fail(
+                "save_incremental_cache 应该处理文件删除，而不是抛出 FileNotFoundError"
+            )
 
 
 class TestP2LspOpenedFilesCheck:
