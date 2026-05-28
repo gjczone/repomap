@@ -1394,7 +1394,11 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("helper_11", text)
             # LSP symbol tree section may show all symbols, so only check the main list
             # The main symbol list ends before "## LSP Symbol Tree"
-            main_section = text.split("## LSP Symbol Tree")[0] if "## LSP Symbol Tree" in text else text
+            main_section = (
+                text.split("## LSP Symbol Tree")[0]
+                if "## LSP Symbol Tree" in text
+                else text
+            )
             self.assertNotIn("helper_12", main_section)
 
     def test_file_detail_max_chars_truncates_output(self) -> None:

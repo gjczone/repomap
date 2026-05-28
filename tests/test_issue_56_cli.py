@@ -205,7 +205,6 @@ class TestVerifyNoChangesExitCode(unittest.TestCase):
             types=None,
             max_issues=20,
             resolve_symbols=False,
-            
             lsp_timeout=30,
             lsp_max_files=20,
             with_diff=False,

@@ -270,7 +270,6 @@ class TestP2_12_VerifyOutputMaxChars(unittest.TestCase):
                     types=None,
                     max_issues=50,
                     resolve_symbols=False,
-                    
                     lsp_timeout=8.0,
                     lsp_max_files=20,
                     with_diff=False,
