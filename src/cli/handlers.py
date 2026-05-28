@@ -482,7 +482,7 @@ def _select_symbol_match(
     symbol: str,
     *,
     file_path: str | None = None,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
 ) -> tuple[Any | None, str | None, str | None]:
     """3-tier symbol resolution: LSP → tree-sitter same-file → global fuzzy.
@@ -494,7 +494,7 @@ def _select_symbol_match(
     resolution_tier = "fuzzy"
 
     # Tier 1: LSP definition lookup (highest precision)
-    if with_lsp and matches:
+    if use_lsp and matches:
         from ..lsp import collect_lsp_symbol_evidence
 
         try:

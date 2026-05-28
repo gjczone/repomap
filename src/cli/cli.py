@@ -560,7 +560,7 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
 def _add_lsp_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-lsp",
-        dest="with_lsp",
+        dest="use_lsp",
         action="store_false",
         default=True,
         help="Disable local LSP evidence and diagnostics (enabled by default).",
@@ -637,7 +637,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.symbol,
             args.file_path,
             args.max_chars,
-            args.with_lsp,
+            args.use_lsp,
             args.lsp_timeout,
             args.json,
         )
@@ -672,7 +672,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             types=args.types,
             max_issues=args.max_issues,
             resolve_symbols=not args.no_symbols,
-            with_lsp=args.with_lsp,
+            use_lsp=args.use_lsp,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
             with_diff=args.with_diff,
@@ -687,7 +687,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.file_path,
             args.max_symbols,
             args.max_chars,
-            getattr(args, "with_lsp", True),
+            getattr(args, "use_lsp", True),
             getattr(args, "lsp_timeout", 8.0),
             args.json,
         )
@@ -704,7 +704,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.symbol,
             args.file_path,
             args.json,
-            args.with_lsp,
+            args.use_lsp,
             args.lsp_timeout,
         )
     if command == "orphan":
@@ -719,7 +719,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             since_commit=args.since_commit,
             modified_files=args.modified_files,
             resolve_symbols=not args.no_symbols,
-            with_lsp=args.with_lsp,
+            use_lsp=args.use_lsp,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
         )

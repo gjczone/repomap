@@ -149,7 +149,7 @@ class TestP1_4_CheckUnknownExitCode(unittest.TestCase):
                     since_commit=None,
                     modified_files=None,
                     resolve_symbols=False,
-                    with_lsp=False,
+                    use_lsp=False,
                 )
                 self.assertNotEqual(
                     result,
@@ -179,7 +179,7 @@ class TestP1_5_SelectSymbolMatchLspLogging(unittest.TestCase):
             ),
             patch("src.cli.handlers.logger") as mock_logger,
         ):
-            _select_symbol_match(engine, "foo", with_lsp=True, lsp_timeout=8.0)
+            _select_symbol_match(engine, "foo", use_lsp=True, lsp_timeout=8.0)
             logged_warnings = [call for call in mock_logger.warning.call_args_list]
             self.assertTrue(
                 len(logged_warnings) > 0,

@@ -847,7 +847,7 @@ class RepoMapChecker:
         symbols_map: dict[str, Any] | None = None,
         since_commit: str | None = None,
         modified_files: list[str] | None = None,
-        with_lsp: bool = False,
+        use_lsp: bool = False,
         lsp_timeout: float = 8.0,
         lsp_max_files: int = 20,
         graph: Any = None,
@@ -898,7 +898,7 @@ class RepoMapChecker:
 
         # 运行所有诊断工具
         results = self.runner.run_all(detected_types)
-        if with_lsp:
+        if use_lsp:
             results.extend(
                 self._run_lsp_diagnostics(target_files, lsp_timeout, lsp_max_files)
             )
@@ -1158,7 +1158,7 @@ def check_project(
     symbols_map: dict[str, Any] | None = None,
     since_commit: str | None = None,
     modified_files: list[str] | None = None,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
     lsp_max_files: int = 20,
 ) -> dict[str, Any]:
@@ -1183,7 +1183,7 @@ def check_project(
         symbols_map=symbols_map,
         since_commit=since_commit,
         modified_files=modified_files,
-        with_lsp=with_lsp,
+        use_lsp=use_lsp,
         lsp_timeout=lsp_timeout,
         lsp_max_files=lsp_max_files,
     )

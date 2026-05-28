@@ -320,7 +320,7 @@ def _run_check_payload(
     max_issues: int,
     modified_files: list[str] | None,
     resolve_symbols: bool,
-    with_lsp: bool,
+    use_lsp: bool,
     lsp_timeout: float,
     lsp_max_files: int,
 ) -> dict[str, Any]:
@@ -334,7 +334,7 @@ def _run_check_payload(
         resolve_symbols=resolve_symbols and symbols_map is not None,
         symbols_map=symbols_map,
         modified_files=modified_files,
-        with_lsp=with_lsp,
+        use_lsp=use_lsp,
         lsp_timeout=lsp_timeout,
         lsp_max_files=lsp_max_files,
     )
@@ -626,7 +626,7 @@ def run_verify(
     types: list[str] | None,
     max_issues: int,
     resolve_symbols: bool,
-    with_lsp: bool,
+    use_lsp: bool,
     lsp_timeout: float,
     lsp_max_files: int,
     with_diff: bool,
@@ -666,12 +666,12 @@ def run_verify(
                 max_issues=max_issues,
                 modified_files=changed_files,
                 resolve_symbols=resolve_symbols,
-                with_lsp=with_lsp,
+                use_lsp=use_lsp,
                 lsp_timeout=lsp_timeout,
                 lsp_max_files=lsp_max_files,
             )
             lsp_payload = _verify_lsp_payload(
-                project_root, changed_files, with_lsp, lsp_timeout, lsp_max_files
+                project_root, changed_files, use_lsp, lsp_timeout, lsp_max_files
             )
 
         graph_diff_payload = _verify_graph_diff_payload(
@@ -1021,7 +1021,7 @@ def run_check(
     since_commit: str | None,
     modified_files: list[str] | None,
     resolve_symbols: bool,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
     lsp_max_files: int = 20,
 ) -> int:
@@ -1051,7 +1051,7 @@ def run_check(
             symbols_map=symbols_map,
             since_commit=since_commit,
             modified_files=normalized_modified_files,
-            with_lsp=with_lsp,
+            use_lsp=use_lsp,
             lsp_timeout=lsp_timeout,
             lsp_max_files=lsp_max_files,
         )
