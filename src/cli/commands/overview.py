@@ -13,6 +13,7 @@ from ... import (
 from ...ai import (
     _get_hot_files,
 )
+from ...hints import overview_hint, hotspots_hint
 from ..handlers import (
     CLI_NAME,
     _scan_engine,
@@ -114,6 +115,12 @@ def run_overview(
                 co_change_days=co_change_days,
             )
         )
+        for hint in overview_hint(
+            has_hotspots=len(engine.hotspots(1)) > 0,
+            has_reading_order=len(engine.suggested_reading_order(1)) > 0,
+            has_modules=len(engine.module_summary(1)) > 0,
+        ):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] overview failed: {exc}", file=sys.stderr)
@@ -144,6 +151,8 @@ def run_hotspots(
                 f"{index}. {risk_mark[item['risk']]} `{item['file']}` — **{item['symbol_count']}** symbols"
             )
         print("\n".join(lines))
+        for hint in hotspots_hint(has_hotspots=len(hotspots) > 0):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] hotspots failed: {exc}", file=sys.stderr)

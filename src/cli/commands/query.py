@@ -22,6 +22,7 @@ from ..handlers import (
     _path_matches_prefix,
     _scan_stats_payload,
 )
+from ...hints import query_hint, search_hint
 from ...topic import (
     FileMatch,
     TestMatch,
@@ -250,6 +251,8 @@ def run_query(
                 context_lines=context_lines,
             )
         )
+        for hint in query_hint(file_match_count=len(top_matches)):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
@@ -492,6 +495,8 @@ def run_search(
             if sym.signature:
                 lines.append(f"  - sig: `{sym.signature}`")
         print("\n".join(lines))
+        for hint in search_hint(symbol_match_count=len(results)):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] search failed: {exc}", file=sys.stderr)

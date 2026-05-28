@@ -16,6 +16,7 @@ from ..handlers import (
     _assess_risk,
     save_impact_session,
 )
+from ...hints import impact_hint
 from ...topic import (
     TestMatch,
     find_related_tests,
@@ -369,6 +370,10 @@ def run_impact(
                 if ti.get("note"):
                     print(f"  - {ti['note']}")
                 print("")
+        for hint in impact_hint(
+            risk_level=risk_level, has_suggested_tests=len(tests) > 0
+        ):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
