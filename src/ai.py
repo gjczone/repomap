@@ -982,7 +982,7 @@ def render_impact_report(
             lines.append("- Inspect Likely Affected Files flagged below.")
         if lsp_hint and lsp_hint.get("available"):
             lines.append(
-                "- Local LSP is available; use focused diagnostics or `refs --with-lsp` when exact evidence matters."
+                "- Local LSP is available; focused diagnostics and LSP evidence are enabled by default."
             )
         lines.append("")
         # Edit checklist
@@ -1321,7 +1321,7 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         lines.append("- [ ] Run suggested tests separately.")
     if lsp.get("status") == "skipped":
         lines.append(
-            "- [ ] LSP evidence was skipped; use `--with-lsp` if exact local diagnostics are needed."
+            "- [ ] LSP evidence was skipped; ensure an LSP server is installed or use `lsp setup`."
         )
     if graph_diff.get("enabled") and graph_diff.get("status") == "skipped":
         lines.append(

@@ -107,10 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(
-        query_parser,
-        "Also query local LSP definition/reference evidence for the best match.",
-    )
+    _add_lsp_args(query_parser)
     query_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -221,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip scan-based symbol resolution for diagnostics.",
     )
-    _add_lsp_args(verify_parser, "Include focused LSP diagnostics for changed files.")
+    _add_lsp_args(verify_parser)
     verify_parser.add_argument(
         "--no-incremental",
         action="store_true",
@@ -272,7 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(file_parser, "Include LSP symbol tree in file detail output.")
+    _add_lsp_args(file_parser)
     file_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -334,10 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(
-        refs_parser,
-        "Also query local LSP definition/reference evidence for the selected symbol.",
-    )
+    _add_lsp_args(refs_parser)
     refs_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -396,10 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument(
         "--no-symbols", action="store_true", help="Skip scan-based symbol resolution."
     )
-    _add_lsp_args(
-        check_parser,
-        "Also collect diagnostics from local LSP servers for explicit files.",
-    )
+    _add_lsp_args(check_parser)
     check_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -566,20 +557,13 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_lsp_args(parser: argparse.ArgumentParser, help_text: str) -> None:
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--with-lsp",
-        dest="with_lsp",
-        action="store_true",
-        default=True,
-        help=f"{help_text} Enabled by default.",
-    )
-    group.add_argument(
+def _add_lsp_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
         "--no-lsp",
         dest="with_lsp",
         action="store_false",
-        help="Disable local LSP evidence and diagnostics.",
+        default=True,
+        help="Disable local LSP evidence and diagnostics (enabled by default).",
     )
 
 
