@@ -30,9 +30,11 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "unknown")
         self.assertEqual(report["summary"]["tools_run"], 0)
-        self.assertEqual(report["summary"]["tools_skipped"], 1)
-        self.assertEqual(report["runs"][0]["tool"], "eslint")
-        self.assertEqual(report["runs"][0]["skip_reason"], "eslint config not found")
+        # eslint skipped + LSP may also be skipped when no server available
+        self.assertGreaterEqual(report["summary"]["tools_skipped"], 1)
+        eslint_run = next((r for r in report["runs"] if r["tool"] == "eslint"), None)
+        self.assertIsNotNone(eslint_run)
+        self.assertEqual(eslint_run["skip_reason"], "eslint config not found")
 
     def test_verify_json_outputs_post_edit_evidence(self) -> None:
         from src.cli import main
@@ -390,7 +392,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(payload["command"], "lsp doctor")
             self.assertEqual(payload["servers"][0]["status"], "missing")
 
-    def test_check_use_lsp_skips_when_no_server_available(self) -> None:
+    def test_check_skips_lsp_when_no_server_available(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
@@ -411,7 +413,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertIn(exit_code, {0, 1, 3})
 
-    def test_check_use_lsp_passes_options_to_checker(self) -> None:
+    def test_check_passes_lsp_options_to_checker(self) -> None:
         from src.cli import main
 
         captured = {}
@@ -462,75 +464,10 @@ class RepoMapCliTests(unittest.TestCase):
                     )
 
         self.assertEqual(exit_code, 0)
-        self.assertTrue(captured["use_lsp"])
         self.assertEqual(captured["lsp_timeout"], 1.5)
         self.assertEqual(captured["lsp_max_files"], 3)
 
-    def test_check_enables_lsp_by_default_and_no_lsp_disables_it(self) -> None:
-        from src.cli import main
-
-        captured = []
-
-        def fake_check(self, **kwargs):
-            captured.append(kwargs)
-            return {
-                "timestamp": "2026-01-01T00:00:00+00:00",
-                "project_root": "/tmp/demo",
-                "status": "passed",
-                "types": ["python"],
-                "incremental": {
-                    "enabled": True,
-                    "files_checked": ["main.py"],
-                    "files_count": 1,
-                },
-                "runs": [],
-                "summary": {
-                    "total_errors": 0,
-                    "total_warnings": 0,
-                    "files_with_errors": 0,
-                    "tools_run": 0,
-                    "tools_skipped": 0,
-                    "tool_failures": 0,
-                },
-                "errors_by_file": {},
-            }
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "main.py", "print('hi')\n")
-            with patch.object(RepoMapChecker, "check", fake_check):
-                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    default_code = main(
-                        [
-                            "check",
-                            "--project",
-                            project_root,
-                            "--types",
-                            "python",
-                            "--no-symbols",
-                            "--modified-file",
-                            "main.py",
-                        ]
-                    )
-                    disabled_code = main(
-                        [
-                            "check",
-                            "--project",
-                            project_root,
-                            "--types",
-                            "python",
-                            "--no-symbols",
-                            "--modified-file",
-                            "main.py",
-                            "--no-lsp",
-                        ]
-                    )
-
-        self.assertEqual(default_code, 0)
-        self.assertEqual(disabled_code, 0)
-        self.assertTrue(captured[0]["use_lsp"])
-        self.assertFalse(captured[1]["use_lsp"])
-
-    def test_lsp_aware_commands_enable_lsp_by_default(self) -> None:
+    def test_lsp_commands_receive_lsp_timeout(self) -> None:
         from src.cli import main
 
         captured = {}
@@ -563,69 +500,12 @@ class RepoMapCliTests(unittest.TestCase):
                     main(["refs", "--project", ".", "--symbol", "target"]), 0
                 )
 
-        self.assertTrue(captured["query-symbol"][5])
-        self.assertTrue(captured["file-detail"][5])
-        self.assertTrue(captured["refs"][5])
+        # lsp_timeout is now the 6th positional arg (index 5) for query-symbol and refs
+        self.assertEqual(captured["query-symbol"][5], 8.0)
+        self.assertEqual(captured["file-detail"][5], 8.0)
+        self.assertEqual(captured["refs"][5], 8.0)
 
-    def test_no_lsp_disables_lsp_aware_commands(self) -> None:
-        from src.cli import main
-
-        captured = {}
-
-        def fake_run_query_symbol(*args):
-            captured["query-symbol"] = args
-            return 0
-
-        def fake_run_file_detail(*args):
-            captured["file-detail"] = args
-            return 0
-
-        def fake_run_refs(*args):
-            captured["refs"] = args
-            return 0
-
-        with patch("src.cli.commands.symbol.run_query_symbol", fake_run_query_symbol):
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(
-                    main(
-                        [
-                            "query-symbol",
-                            "--project",
-                            ".",
-                            "--symbol",
-                            "target",
-                            "--no-lsp",
-                        ]
-                    ),
-                    0,
-                )
-        with patch("src.cli.commands.symbol.run_file_detail", fake_run_file_detail):
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(
-                    main(
-                        [
-                            "file-detail",
-                            "--project",
-                            ".",
-                            "--file-path",
-                            "main.py",
-                            "--no-lsp",
-                        ]
-                    ),
-                    0,
-                )
-        with patch("src.cli.commands.symbol.run_refs", fake_run_refs):
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(
-                    main(["refs", "--project", ".", "--symbol", "target", "--no-lsp"]),
-                    0,
-                )
-
-        self.assertFalse(captured["query-symbol"][5])
-        self.assertFalse(captured["file-detail"][5])
-        self.assertFalse(captured["refs"][5])
-
-    def test_verify_enables_lsp_by_default_and_no_lsp_disables_it(self) -> None:
+    def test_verify_passes_lsp_options(self) -> None:
         from src.cli import main
 
         captured = []
@@ -637,10 +517,9 @@ class RepoMapCliTests(unittest.TestCase):
         with patch("src.cli.commands.verify.run_verify", fake_run_verify):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(main(["verify", "--project", "."]), 0)
-                self.assertEqual(main(["verify", "--project", ".", "--no-lsp"]), 0)
 
-        self.assertTrue(captured[0]["use_lsp"])
-        self.assertFalse(captured[1]["use_lsp"])
+        self.assertIn("lsp_timeout", captured[0])
+        self.assertIn("lsp_max_files", captured[0])
 
     def test_python_check_runs_pyright_and_ruff_by_default(self) -> None:
         from src.check import DiagnosticResult, DiagnosticRunner
@@ -1148,7 +1027,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("helper", symbol_stdout.getvalue())
             self.assertIn("caller", chain_stdout.getvalue())
 
-    def test_query_symbol_use_lsp_appends_evidence(self) -> None:
+    def test_query_symbol_lsp_appends_evidence(self) -> None:
         from src.cli import main
 
         fake_run = {
@@ -1197,7 +1076,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("Definitions: 1", output)
             self.assertIn("References: 1", output)
 
-    def test_refs_use_lsp_json_includes_evidence(self) -> None:
+    def test_refs_lsp_json_includes_evidence(self) -> None:
         from src.cli import main
 
         fake_run = {
@@ -1506,7 +1385,6 @@ class RepoMapCliTests(unittest.TestCase):
                         project_root,
                         "--file-path",
                         "main.py",
-                        "--no-lsp",
                     ]
                 )
 
@@ -1514,7 +1392,14 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("Showing first 12 of", text)
             self.assertIn("helper_11", text)
-            self.assertNotIn("helper_12", text)
+            # LSP symbol tree section may show all symbols, so only check the main list
+            # The main symbol list ends before "## LSP Symbol Tree"
+            main_section = (
+                text.split("## LSP Symbol Tree")[0]
+                if "## LSP Symbol Tree" in text
+                else text
+            )
+            self.assertNotIn("helper_12", main_section)
 
     def test_file_detail_max_chars_truncates_output(self) -> None:
         from src.cli import main

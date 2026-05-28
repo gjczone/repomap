@@ -28,7 +28,7 @@ All via `repomap <subcommand> --project <path>`.
 | `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |
 | `call-chain --symbol <name>` | Caller/callee context |
 | `refs --symbol <name>` | Reference discovery |
-| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate with missed-files detection |
+| `verify [--quick] [--with-diff]` | Post-edit evidence gate with missed-files detection |
 | `check` | Compiler/type/lint diagnostics |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory + consumer mapping |
 | `state-map --symbol <name>` | Enum/const state values, writers, and readers |
@@ -115,7 +115,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `diff`, `verify --with-diff`
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
 - **State map**: `src/state_map.py` → `state-map --symbol/--query`
-- **LSP**: `src/lsp.py` → auto-enabled (use `--no-lsp` to disable), affects `query-symbol`, `file-detail`, `verify`, `check`, `doctor --lsp`, `lsp setup`
+- **LSP**: `src/lsp.py` → auto-enabled, affects `query-symbol`, `file-detail`, `verify`, `check`, `doctor --lsp`, `lsp setup`
 - **JSON output**: `src/cli/handlers.py::json_envelope()` → unified `{schema_version, command, project, status, result}` envelope; all commands support `--json`
 
 ## Verification
