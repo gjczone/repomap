@@ -97,7 +97,7 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | JSON | `vscode-json-language-server` | `npm install -g vscode-langservers-extracted` |
 | YAML | `yaml-language-server` | `npm install -g yaml-language-server` |
 
-支持 LSP 的命令会在服务器可用时默认使用本地 LSP。所有命令在没有 LSP 时仍可工作；缺失服务器会显示为 skipped，需要时可用 `--no-lsp` 关闭 LSP 证据。
+支持 LSP 的命令会在服务器可用时自动使用本地 LSP。所有命令在没有 LSP 时仍可工作；缺失服务器会显示为 skipped。
 
 ---
 
@@ -115,10 +115,10 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `refs --symbol <名称>` | 符号的所有引用；默认获取 LSP 精确跨文件结果；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
 | `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
-| `verify [--quick] [--no-lsp] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、漏改检测 |
+| `verify [--quick] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、漏改检测 |
 | `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
-| `check [--no-lsp]` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
+| `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
 | `orphan [--json]` | 死代码候选发现，含置信度分级 |
 | `hotspots` | 按复杂度排名的高密度文件 |
 | `cache save` / `diff` | 图基线保存 + 与基线对比 |

@@ -97,7 +97,7 @@ repomap lsp setup --project .             # install missing servers
 | JSON | `vscode-json-language-server` | `npm install -g vscode-langservers-extracted` |
 | YAML | `yaml-language-server` | `npm install -g yaml-language-server` |
 
-LSP-backed commands use local LSP servers by default when available. All commands still work without LSP; missing servers are reported as skipped, and `--no-lsp` disables LSP evidence when needed.
+LSP-backed commands automatically use local LSP servers when available. All commands work without LSP; missing servers are reported as skipped.
 
 ---
 
@@ -115,8 +115,8 @@ LSP-backed commands use local LSP servers by default when available. All command
 | `refs --symbol <name>` | All references to a symbol; LSP precision by default; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `state-map --symbol <name>` | Enum/const state values, writers, readers |
-| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, missed-files detection |
-| `check [--no-lsp]` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
+| `verify [--quick] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, missed-files detection |
+| `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
 | `orphan [--json]` | Dead-code candidates with confidence tiers |
 | `hotspots` | High-density files ranked by complexity |
 | `cache save` / `diff` | Graph baseline save + comparison against baseline |
