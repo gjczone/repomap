@@ -68,6 +68,20 @@ jobs:
               ./dist/repomap overview --project .
               ./dist/repomap verify --project . --quick || echo "verify --quick returned non-zero (expected in CI with no git changes)"
 
+         - name: Verify binary version matches pyproject.toml
+           shell: bash
+           run: |
+              EXPECTED=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+              ACTUAL=$(./dist/repomap --version | sed 's/repomap //')
+              if [ "$EXPECTED" != "$ACTUAL" ]; then
+                echo "ERROR: binary version mismatch!"
+                echo "  pyproject.toml: $EXPECTED"
+                echo "  binary --version: $ACTUAL"
+                echo "  The binary was built without version embedding. Check build.py."
+                exit 1
+              fi
+              echo "OK: binary version $ACTUAL matches pyproject.toml"
+
          - name: Upload binary artifact
            uses: actions/upload-artifact@v7
            with:

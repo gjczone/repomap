@@ -284,6 +284,12 @@ uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callg
 # 2. Rebuild binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
 
+# 2.5. Verify binary version matches pyproject.toml (MANDATORY)
+#    - If version is wrong, npm will publish a broken package that cannot be overwritten
+#    EXPECTED=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+#    ACTUAL=$(./dist/repomap --version | sed 's/repomap //')
+#    [ "$EXPECTED" = "$ACTUAL" ] || { echo "VERSION MISMATCH: expected=$EXPECTED actual=$ACTUAL"; exit 1; }
+
 # 3. Smoke test (current project)
 repomap doctor --project .
 repomap overview --project .
