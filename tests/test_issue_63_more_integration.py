@@ -80,7 +80,7 @@ class TestTypeInferenceE2E:
         write_file(
             project_root,
             "main.go",
-            'package main\n\nfunc add(a int, b int) int {\n  return a + b\n}\n',
+            "package main\n\nfunc add(a int, b int) int {\n  return a + b\n}\n",
         )
 
         subprocess.run(["git", "add", "main.go"], cwd=project_root, check=True)
@@ -351,6 +351,226 @@ class TestCallGraphIntegration:
         call_targets = [e.target for e in outgoing if e.kind == "call"]
         assert helper_id in call_targets, (
             f"main 应该调用 helper，但调用目标是 {call_targets}"
+        )
+
+
+class TestMoreLanguageTypeInference:
+    """更多语言的类型推断端到端测试。"""
+
+    def test_rust_function_types_preserved(self, project_root):
+        """验证 Rust 函数的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "main.rs",
+            "fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n",
+        )
+
+        subprocess.run(["git", "add", "main.rs"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 add 符号
+        add_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "add":
+                add_symbol = sym
+                break
+
+        assert add_symbol is not None, "add 符号应该存在"
+        assert add_symbol.return_type == "i32", (
+            f"return_type 应该是 'i32'，但得到 '{add_symbol.return_type}'"
+        )
+        assert "a: i32" in add_symbol.params, (
+            f"params 应该包含 'a: i32'，但得到 '{add_symbol.params}'"
+        )
+        assert "b: i32" in add_symbol.params, (
+            f"params 应该包含 'b: i32'，但得到 '{add_symbol.params}'"
+        )
+
+    def test_java_method_types_preserved(self, project_root):
+        """验证 Java 方法的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "Main.java",
+            'public class Main {\n    public String greet(String name) {\n        return "Hello, " + name;\n    }\n}\n',
+        )
+
+        subprocess.run(["git", "add", "Main.java"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 greet 符号
+        greet_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "greet":
+                greet_symbol = sym
+                break
+
+        assert greet_symbol is not None, "greet 符号应该存在"
+        assert greet_symbol.return_type == "String", (
+            f"return_type 应该是 'String'，但得到 '{greet_symbol.return_type}'"
+        )
+        assert "String name" in greet_symbol.params, (
+            f"params 应该包含 'String name'，但得到 '{greet_symbol.params}'"
+        )
+
+    def test_kotlin_function_types_preserved(self, project_root):
+        """验证 Kotlin 函数的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "main.kt",
+            "fun add(a: Int, b: Int): Int {\n    return a + b\n}\n",
+        )
+
+        subprocess.run(["git", "add", "main.kt"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 add 符号
+        add_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "add":
+                add_symbol = sym
+                break
+
+        assert add_symbol is not None, "add 符号应该存在"
+        assert add_symbol.return_type == "Int", (
+            f"return_type 应该是 'Int'，但得到 '{add_symbol.return_type}'"
+        )
+        assert "a: Int" in add_symbol.params, (
+            f"params 应该包含 'a: Int'，但得到 '{add_symbol.params}'"
+        )
+        assert "b: Int" in add_symbol.params, (
+            f"params 应该包含 'b: Int'，但得到 '{add_symbol.params}'"
+        )
+
+    def test_swift_function_types_preserved(self, project_root):
+        """验证 Swift 函数的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "main.swift",
+            "func add(a: Int, b: Int) -> Int {\n    return a + b\n}\n",
+        )
+
+        subprocess.run(["git", "add", "main.swift"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 add 符号
+        add_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "add":
+                add_symbol = sym
+                break
+
+        assert add_symbol is not None, "add 符号应该存在"
+        assert add_symbol.return_type == "Int", (
+            f"return_type 应该是 'Int'，但得到 '{add_symbol.return_type}'"
+        )
+        assert "a: Int" in add_symbol.params, (
+            f"params 应该包含 'a: Int'，但得到 '{add_symbol.params}'"
+        )
+        assert "b: Int" in add_symbol.params, (
+            f"params 应该包含 'b: Int'，但得到 '{add_symbol.params}'"
+        )
+
+    def test_csharp_method_types_preserved(self, project_root):
+        """验证 C# 方法的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "Main.cs",
+            'public class Main {\n    public string Greet(string name) {\n        return "Hello, " + name;\n    }\n}\n',
+        )
+
+        subprocess.run(["git", "add", "Main.cs"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 Greet 符号
+        greet_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "Greet":
+                greet_symbol = sym
+                break
+
+        assert greet_symbol is not None, "Greet 符号应该存在"
+        assert greet_symbol.return_type == "string", (
+            f"return_type 应该是 'string'，但得到 '{greet_symbol.return_type}'"
+        )
+        assert "string name" in greet_symbol.params, (
+            f"params 应该包含 'string name'，但得到 '{greet_symbol.params}'"
+        )
+
+    def test_cpp_function_types_preserved(self, project_root):
+        """验证 C++ 函数的类型信息在完整扫描后保留。"""
+        write_file(
+            project_root,
+            "main.cpp",
+            "int add(int a, int b) {\n    return a + b;\n}\n",
+        )
+
+        subprocess.run(["git", "add", "main.cpp"], cwd=project_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+
+        engine = RepoMapEngine(project_root)
+        engine.scan()
+
+        # 查找 add 符号
+        add_symbol = None
+        for sym_id, sym in engine.graph.symbols.items():
+            if sym.name == "add":
+                add_symbol = sym
+                break
+
+        assert add_symbol is not None, "add 符号应该存在"
+        assert add_symbol.return_type == "int", (
+            f"return_type 应该是 'int'，但得到 '{add_symbol.return_type}'"
+        )
+        assert "int a" in add_symbol.params, (
+            f"params 应该包含 'int a'，但得到 '{add_symbol.params}'"
+        )
+        assert "int b" in add_symbol.params, (
+            f"params 应该包含 'int b'，但得到 '{add_symbol.params}'"
         )
 
 

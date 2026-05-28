@@ -179,9 +179,14 @@ def _extract_java_params(def_node: Any) -> str:
 
 
 def _extract_kotlin_return_type(def_node: Any) -> str:
+    # Kotlin 返回类型在 ":" 后面，可能是 user_type、nullable_type 等
+    found_colon = False
     for child in def_node.children:
-        if child.type == "type":
-            return _node_text(child).lstrip(":").strip()
+        if child.type == ":":
+            found_colon = True
+            continue
+        if found_colon and child.type in ("user_type", "nullable_type", "type"):
+            return _node_text(child).strip()
     return ""
 
 
@@ -200,23 +205,34 @@ def _extract_kotlin_params(def_node: Any) -> str:
 
 
 def _extract_swift_return_type(def_node: Any) -> str:
+    # Swift 返回类型在 "->" 后面
+    found_arrow = False
     for child in def_node.children:
-        if child.type in ("return_type", "type_annotation"):
-            return _node_text(child).lstrip("->").strip()
+        if child.type == "->":
+            found_arrow = True
+            continue
+        if found_arrow and child.type in (
+            "user_type",
+            "type_identifier",
+            "return_type",
+            "type_annotation",
+        ):
+            return _node_text(child).strip()
     return ""
 
 
 def _extract_swift_params(def_node: Any) -> str:
-    params_node = _find_child_by_type(
-        def_node, "parameter_list"
-    ) or _find_child_by_type(def_node, "parameters")
-    if not params_node:
-        return ""
+    # Swift 参数直接在函数声明中，用括号包围
     parts: list[str] = []
-    for child in params_node.children:
-        if child.type in ("(", ")", ",", "comment"):
+    in_params = False
+    for child in def_node.children:
+        if child.type == "(":
+            in_params = True
             continue
-        parts.append(_node_text(child).strip())
+        if child.type == ")":
+            break
+        if in_params and child.type == "parameter":
+            parts.append(_node_text(child).strip())
     return ", ".join(parts) if parts else ""
 
 
@@ -238,6 +254,7 @@ def _extract_c_sharp_return_type(def_node: Any) -> str:
             "generic_type",
             "qualified_name",
             "tuple_type",
+            "predefined_type",
         ):
             return _node_text(child).strip()
     return ""
