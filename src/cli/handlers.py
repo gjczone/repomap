@@ -517,10 +517,10 @@ def _select_symbol_match(
                 for m in candidates_for_lsp:
                     if m.file == lsp_def.file and abs(m.line - lsp_def.line) <= 3:
                         return m, None, "lsp"
-                # LSP found but at a different location; prefer LSP over tree-sitter
-                same_file = [m for m in matches if m.file == lsp_def.file]
-                if same_file:
-                    return same_file[0], None, "lsp"
+                # LSP found but at a different location than candidate;
+                # fall back to the candidate (tree-sitter result) to avoid
+                # returning a wrong symbol from the global matches list.
+                return best_match, None, "treesitter"
         except Exception as exc:
             logger.warning(f"LSP symbol resolution failed for '{symbol}': {exc}")
 
@@ -589,9 +589,9 @@ def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
 def _collect_lsp_evidence_for_symbol(
     engine: RepoMapEngine, symbol: Any, timeout: float
 ) -> dict[str, Any]:
-    from ..lsp import collect_lsp_symbol_evidence, collect_lsp_hover, run_result_to_dict
+    from ..lsp import collect_lsp_full_evidence, run_result_to_dict
 
-    run = collect_lsp_symbol_evidence(
+    run, hover = collect_lsp_full_evidence(
         engine.project_root,
         symbol.file,
         symbol.line,
@@ -599,18 +599,13 @@ def _collect_lsp_evidence_for_symbol(
         timeout=timeout,
     )
     result = run_result_to_dict(run)
-    # 附加 hover 信息
-    if run.status == "ok":
-        hover = collect_lsp_hover(
-            engine.project_root, symbol.file, symbol.line, symbol.name, timeout=timeout
-        )
-        if hover:
-            result["hover"] = {
-                "file": hover.file,
-                "line": hover.line,
-                "col": hover.col,
-                "contents": hover.contents,
-            }
+    if hover:
+        result["hover"] = {
+            "file": hover.file,
+            "line": hover.line,
+            "col": hover.col,
+            "contents": hover.contents,
+        }
     return result
 
 
