@@ -12,6 +12,7 @@ from ...ai import render_verify_report
 from ...check import RepoMapChecker
 from ...core import RepoMapEngine
 from ...git_backend import GitBackend
+from ...hints import verify_hint, orphan_hint, check_hint
 from ..handlers import (
     CLI_NAME,
     EXIT_NO_RESULTS,
@@ -761,6 +762,10 @@ def run_verify(
             return 1
         if status == "warning":
             return EXIT_NO_RESULTS
+        ver_status = str(payload.get("status", "unknown"))
+        has_risks = bool(payload.get("contract_risks"))
+        for hint in verify_hint(status=ver_status, has_contract_risks=has_risks):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
@@ -1005,6 +1010,8 @@ def run_orphan(
                 "5. Never delete solely from `orphan` output; treat it as a starting point for investigation."
             )
         print("\n".join(lines))
+        for hint in orphan_hint(has_high_confidence_candidates=len(high) > 0):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] orphan failed: {exc}", file=sys.stderr)
@@ -1057,6 +1064,9 @@ def run_check(
             print(json_envelope("check", project_root, result))
         else:
             print(_format_check_report(result, max_issues))
+        has_errors = bool(result.get("issues"))
+        for hint in check_hint(has_errors=has_errors):
+            print(hint, file=sys.stderr)
         status = result.get("status")
         if status == "passed":
             return 0

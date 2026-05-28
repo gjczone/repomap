@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 
 from ...ai import render_routes_report
+from ...hints import routes_hint
 from ..handlers import (
     CLI_NAME,
     _scan_engine,
@@ -49,6 +50,9 @@ def run_routes(
             print(render_routes_report(engine, consumers))
         else:
             print(render_routes_report(engine))
+        routes = engine.list_routes()
+        for hint in routes_hint(has_routes=len(routes) > 0):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] routes failed: {exc}", file=sys.stderr)

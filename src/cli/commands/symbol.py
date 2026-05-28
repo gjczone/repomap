@@ -8,6 +8,13 @@ from ... import (
 )
 from ...ai import _truncate_output
 from ...core import RepoMapEngine
+from ...hints import (
+    call_chain_hint,
+    file_detail_hint,
+    query_symbol_hint,
+    refs_hint,
+    state_map_hint,
+)
 from ..handlers import (
     CLI_NAME,
     EXIT_NO_RESULTS,
@@ -131,12 +138,24 @@ def run_call_chain(
             if len(data[direction]) > 50:
                 lines.append(f"\n... and {len(data[direction]) - 50} more")
             print(_truncate_output("\n".join(lines), max_chars))
+            chain = engine.call_chain(selected.id, "both", 1)
+            for hint in call_chain_hint(
+                caller_count=len(chain.get("callers", [])),
+                callee_count=len(chain.get("callees", [])),
+            ):
+                print(hint, file=sys.stderr)
             return 0
         print(
             _truncate_output(
                 _render_selected_call_chain(engine, selected, depth), max_chars
             )
         )
+        chain = engine.call_chain(selected.id, "both", 1)
+        for hint in call_chain_hint(
+            caller_count=len(chain.get("callers", [])),
+            callee_count=len(chain.get("callees", [])),
+        ):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] call-chain failed: {exc}", file=sys.stderr)
@@ -251,6 +270,10 @@ def run_query_symbol(
             )
         )
         print(_truncate_output("\n".join(lines), max_chars))
+        for hint in query_symbol_hint(
+            match_count=len(results), has_file_filter=file_path is not None
+        ):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] query-symbol failed: {exc}", file=sys.stderr)
@@ -341,6 +364,13 @@ def run_file_detail(
                 lsp_symbol_tree=lsp_tree,
             )
         )
+        file_sids = set(engine.graph.file_symbols.get(normalized_file_path, set()))
+        has_symbols = len(file_sids) > 0
+        has_callers = any(
+            len(engine.graph.incoming.get(sid, set())) > 0 for sid in file_sids
+        )
+        for hint in file_detail_hint(has_symbols=has_symbols, has_callers=has_callers):
+            print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] file-detail failed: {exc}", file=sys.stderr)
@@ -423,6 +453,8 @@ def run_refs(
                         )
                 lines.extend(_format_lsp_evidence(payload["lsp"]))
                 print("\n".join(lines))
+                for hint in refs_hint(called_by_count=payload["ref_count"]):
+                    print(hint, file=sys.stderr)
             return 0
 
         entries = [sid for sid in symbol_ids if len(calls_in[sid]) == 0]
@@ -538,6 +570,9 @@ def run_state_map(
             )
         else:
             print("\n".join(lines))
+            has_writers = any(len(d.writers) > 0 for d in defs)
+            for hint in state_map_hint(has_writers=has_writers):
+                print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] state-map failed: {exc}", file=sys.stderr)

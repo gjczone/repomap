@@ -73,7 +73,7 @@ src/                    # Python package (flat)
 │       ├── fix.py          # run_fix, run_ready
 │       ├── doctor.py       # run_doctor, run_lsp_doctor, run_lsp_setup
 │       └── build.py        # run_build_binary
-├── gitignore.py            # GitignoreParser: pathspec-based file filtering
+├── hints.py                 # Runtime hints: context-aware next-step suggestions
 ├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
 ├── parser.py              # TreeSitterAdapter: AST parsing, import/export bindings
@@ -99,7 +99,7 @@ tests/                     # Test suite
 dist/repomap               # Local build output (CI builds Linux x64 only via GitHub Actions)
 ```
 
-**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git).
+**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
 
 ## Change Map
 
@@ -110,6 +110,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run_* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
+- **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
