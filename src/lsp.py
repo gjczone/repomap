@@ -1382,14 +1382,18 @@ def collect_lsp_full_evidence(
     language = language_for_file(file_path)
     if not language:
         empty = LspRunResult(
-            server="lsp", language="unknown", status="skipped",
+            server="lsp",
+            language="unknown",
+            status="skipped",
             reason="unsupported file type",
         )
         return empty, None
     abs_file = (root / file_path).resolve()
     if not abs_file.exists() or not abs_file.is_file():
         empty = LspRunResult(
-            server="lsp", language=language, status="skipped",
+            server="lsp",
+            language=language,
+            status="skipped",
             reason="file not found",
         )
         return empty, None
@@ -1397,7 +1401,9 @@ def collect_lsp_full_evidence(
         file_text = abs_file.read_text(encoding="utf-8", errors="replace")
     except OSError:
         empty = LspRunResult(
-            server="lsp", language=language, status="skipped",
+            server="lsp",
+            language=language,
+            status="skipped",
             reason="file read error",
         )
         return empty, None
@@ -1407,8 +1413,10 @@ def collect_lsp_full_evidence(
     detection = detect_lsp_server(root, language, abs_file)
     if detection.status != "available":
         empty = LspRunResult(
-            server=detection.server_name or language, language=language,
-            status="skipped", workspace_root=detection.workspace_root,
+            server=detection.server_name or language,
+            language=language,
+            status="skipped",
+            workspace_root=detection.workspace_root,
             reason=detection.reason,
         )
         return empty, None
@@ -1431,33 +1439,47 @@ def collect_lsp_full_evidence(
             try:
                 raw_hover = client.hover(abs_file, line_index, character)
                 hover_info = LspHoverInfo(
-                    file=file_path, line=line, col=character + 1,
+                    file=file_path,
+                    line=line,
+                    col=character + 1,
                     contents=_parse_hover_response(raw_hover),
                 )
             except Exception:
                 logger.warning(
                     "LSP hover failed for %s:%d (definition OK)",
-                    file_path, line, exc_info=True,
+                    file_path,
+                    line,
+                    exc_info=True,
                 )
         result = LspRunResult(
-            server=detection.server_name, language=language, status="ok",
-            definitions=definitions, references=references,
-            command=detection.command, workspace_root=detection.workspace_root,
+            server=detection.server_name,
+            language=language,
+            status="ok",
+            definitions=definitions,
+            references=references,
+            command=detection.command,
+            workspace_root=detection.workspace_root,
             duration_ms=int((time.time() - start) * 1000),
         )
         return result, hover_info
     except TimeoutError as exc:
         result = LspRunResult(
-            server=detection.server_name, language=language, status="timeout",
-            command=detection.command, workspace_root=detection.workspace_root,
+            server=detection.server_name,
+            language=language,
+            status="timeout",
+            command=detection.command,
+            workspace_root=detection.workspace_root,
             reason=str(exc),
             duration_ms=int((time.time() - start) * 1000),
         )
         return result, None
     except Exception as exc:
         result = LspRunResult(
-            server=detection.server_name, language=language, status="failed",
-            command=detection.command, workspace_root=detection.workspace_root,
+            server=detection.server_name,
+            language=language,
+            status="failed",
+            command=detection.command,
+            workspace_root=detection.workspace_root,
             reason=str(exc),
             duration_ms=int((time.time() - start) * 1000),
         )
