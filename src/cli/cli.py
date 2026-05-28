@@ -18,14 +18,22 @@ from .. import (
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .. import get_repomap_version
+
     parser = argparse.ArgumentParser(
         prog=CLI_NAME,
         description="RepoMap CLI — repository intelligence for AI agents.",
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_repomap_version()}",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser(
-        "scan", help="Scan a repository and print the scan summary."
+        "scan",
+        help="(deprecated: use `overview --quick`) Scan a repository and print the scan summary.",
     )
     _add_project_args(scan_parser)
     scan_parser.add_argument(
@@ -36,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
         "overview", help="Scan a repository and print the overview report."
     )
     _add_project_args(overview_parser)
+    overview_parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Quick scan: file/symbol counts and entrypoints only (same as `scan`).",
+    )
     overview_parser.add_argument(
         "--max-chars",
         type=int,
@@ -594,6 +607,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "scan":
         return run_scan(args.project, args.max_files, args.json)
     if command == "overview":
+        if getattr(args, "quick", False):
+            return run_scan(args.project, args.max_files, args.json)
         return run_overview(
             args.project,
             args.max_files,

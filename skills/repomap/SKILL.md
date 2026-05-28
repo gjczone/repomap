@@ -45,7 +45,7 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 | Installing LSP servers | `repomap lsp setup --project <project>` | When doctor shows missing servers. Use `--dry-run` first. |
 | Pre-edit baseline | `repomap cache save --project <project>` | Before major edits; enables `verify --with-diff` for contract change detection. |
 | Graph comparison | `repomap diff --project <project>` | Compare current graph against baseline. Prefer `verify --with-diff` for integrated view. |
-| Quick project scan | `repomap scan --project <project>` | When you only need file/symbol counts and entrypoints. Usually `overview` is better. |
+| Quick project scan | `repomap overview --project <project> --quick` | When you only need file/symbol counts and entrypoints. Same as deprecated `scan`. |
 | Binary health check | `repomap doctor --project <project>` | When suspecting stale binary or PATH issues. |
 | Implicit coupling detection | `repomap overview --project <project> --with-co-change` | When changing a cross-module hub file, or when `impact` shows surprisingly few dependents for a heavily-used module. Analyzes git history to find co-changing files (window configurable via `--co-change-days`, default 30 days). Expensive: adds 30-60s and ~100 MB RSS. |
 
