@@ -679,17 +679,21 @@ class EdgeBuilder:
     def _top_symbol_ids(self, file: str, max_count: int = 3) -> list[str]:
         """按语义重要性选文件中最具代表性的符号 ID。"""
         ids = self.graph.file_symbols.get(file, [])
-        if len(ids) <= max_count:
-            return list(ids)
-        scored = []
+        # 过滤悬空符号（sym is None）
+        valid_ids = []
         for sid in ids:
             sym = self.graph.symbols.get(sid)
-            if sym is None:
-                scored.append((0, sid))
-                continue
-            vis = self._VISIBILITY_RANK.get(sym.visibility, 0)
-            kind = self._KIND_RANK.get(sym.kind, 1)
-            scored.append((vis + kind, sid))
+            if sym is not None:
+                valid_ids.append(sid)
+        if len(valid_ids) <= max_count:
+            return valid_ids
+        scored = []
+        for sid in valid_ids:
+            sym = self.graph.symbols.get(sid)
+            if sym is not None:
+                vis = self._VISIBILITY_RANK.get(sym.visibility, 0)
+                kind = self._KIND_RANK.get(sym.kind, 1)
+                scored.append((vis + kind, sid))
         scored.sort(key=lambda x: -x[0])
         return [sid for _, sid in scored[:max_count]]
 
@@ -766,7 +770,7 @@ class EdgeBuilder:
 
 
 def detect_file_clusters(
-    graph: "RepoGraph", max_iterations: int = 20
+    graph: "RepoGraph", max_iterations: int = 20, project_root: str | None = None
 ) -> dict[str, int]:
     """Detect module clusters from the file import/call graph using label propagation.
 
@@ -786,14 +790,42 @@ def detect_file_clusters(
 
     # Build undirected adjacency with edge weights
     neighbors: dict[str, dict[str, float]] = {f: {} for f in files}
+
+    # 构建 import 模块名到文件路径的映射
+    from pathlib import Path
+    from .resolver import ImportResolver
+    root = Path(project_root) if project_root else Path('.')
+    resolver = ImportResolver(root, graph)
+    resolver.build_indices()
+
     for f in files:
-        # Import edges
+        # Import edges — 解析 import 模块名到文件路径
         for imported in graph.file_imports.get(f, []):
-            if imported in neighbors:
-                neighbors[f][imported] = neighbors[f].get(imported, 0) + 1.0
-                neighbors[imported][f] = neighbors[imported].get(f, 0) + 1.0
+            # 使用 resolver 解析 import 路径到目标文件
+            target_files = resolver.resolve_import_targets(f, imported)
+            for target_file in target_files:
+                if target_file in neighbors and target_file != f:
+                    neighbors[f][target_file] = neighbors[f].get(target_file, 0) + 1.0
+                    neighbors[target_file][f] = neighbors[target_file].get(f, 0) + 1.0
         # Call edges — resolve function names to file paths
+        # 过滤常见函数名（如 get, set, init, main）产生的虚假边
+        # 注意：此启发式方法可能抑制有效的跨文件调用边（假阴性），
+        # 特别是对于没有直接 import 关系的常见函数名调用。
+        # 对于聚类检测（本质上是近似的），这是可接受的精度/召回权衡。
+        common_names = {"get", "set", "init", "main", "test", "setup", "teardown", "run", "start", "stop"}
         for called, *_ in graph.file_calls.get(f, []):
+            # 如果是常见函数名，只在有 import 关系时才创建边
+            if called in common_names:
+                # 检查是否有 import 关系到目标文件
+                has_import = False
+                for target_file in name_to_files.get(called, set()):
+                    if target_file in neighbors and target_file != f:
+                        # 检查是否有 import 边
+                        if target_file in neighbors[f] or f in neighbors.get(target_file, {}):
+                            has_import = True
+                            break
+                if not has_import:
+                    continue
             for target_file in name_to_files.get(called, set()):
                 if target_file in neighbors and target_file != f:
                     neighbors[f][target_file] = neighbors[f].get(target_file, 0) + 0.5

@@ -768,6 +768,8 @@ class StdioLspClient:
         return response.get("result")
 
     def document_symbols(self, file_path: Path) -> Any:
+        if str(file_path.resolve()) not in self._opened_files:
+            return None
         response = self.request(
             "textDocument/documentSymbol",
             {"textDocument": {"uri": _path_to_uri(file_path)}},
@@ -779,7 +781,12 @@ class StdioLspClient:
     def collect_diagnostics(
         self, file_paths: list[Path], language: str
     ) -> list[dict[str, Any]]:
-        expected_uris = {_path_to_uri(path) for path in file_paths}
+        # 过滤掉未打开的文件
+        opened_paths = [path for path in file_paths if str(path.resolve()) in self._opened_files]
+        if not opened_paths:
+            return []
+
+        expected_uris = {_path_to_uri(path) for path in opened_paths}
         diagnostics: list[dict[str, Any]] = []
         # 先检查 _notifications 列表中在 request() 期间缓存的诊断
         remaining_notifications: list[dict[str, Any]] = []
@@ -1334,7 +1341,7 @@ def collect_lsp_hover(
             contents=_parse_hover_response(raw),
         )
     except Exception:
-        logger.debug(
+        logger.info(
             "LSP hover collection failed for %s:%d", file_path, line, exc_info=True
         )
         return None

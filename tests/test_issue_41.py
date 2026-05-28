@@ -62,6 +62,7 @@ class TestDiagnosticsCollection(unittest.TestCase):
         from src.lsp import StdioLspClient
 
         client = StdioLspClient(["echo", "hello"], Path("/tmp"))
+        client._opened_files = {"/test.ts"}  # 模拟文件已打开
         client._notifications = [
             {
                 "method": "textDocument/publishDiagnostics",
@@ -70,6 +71,21 @@ class TestDiagnosticsCollection(unittest.TestCase):
         ]
         diagnostics = client.collect_diagnostics([Path("/test.ts")], "typescript")
         self.assertEqual(len(diagnostics), 1)
+
+    def test_collect_diagnostics_filters_unopened_files(self):
+        """验证 collect_diagnostics 过滤未打开的文件。"""
+        from src.lsp import StdioLspClient
+
+        client = StdioLspClient(["echo", "hello"], Path("/tmp"))
+        # _opened_files 为空 -- 文件从未打开
+        client._notifications = [
+            {
+                "method": "textDocument/publishDiagnostics",
+                "params": {"uri": "file:///test.ts", "diagnostics": []},
+            }
+        ]
+        diagnostics = client.collect_diagnostics([Path("/test.ts")], "typescript")
+        self.assertEqual(len(diagnostics), 0)  # 应该被过滤掉
 
 
 class TestIsTestLikeFile(unittest.TestCase):
