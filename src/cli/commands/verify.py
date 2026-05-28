@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ... import json_dumps
 from ... import (
     Symbol,
 )
@@ -23,6 +22,7 @@ from ..handlers import (
     _assess_risk,
     load_impact_session,
     _normalize_project_relative_paths,
+    json_envelope,
 )
 from ...ranking import GraphAnalyzer
 from ...toolkit import diff_project, scan_project
@@ -692,47 +692,46 @@ def run_verify(
         untested = find_untested_symbols(engine.graph) if not quick else []
 
         payload = {
-            "schema_version": "1.0",
-            "command": "verify",
-            "project": str(engine.project_root),
             "scanStats": _scan_stats_payload(engine),
-            "result": {
-                "status": status,
-                "changedFiles": changed_files,
-                "risk": {
-                    "level": evidence["riskLevel"],
-                    "reasons": evidence["riskReasons"],
-                    "missingChecks": evidence["missingChecks"],
-                },
-                "affectedFiles": [
-                    {"file": file_path, "why": why, "confidence": confidence}
-                    for file_path, why, confidence in evidence["affectedList"]
-                ],
-                "tests": [
-                    {
-                        "testFile": test.test_file,
-                        "targetFile": test.target_file,
-                        "confidence": test.confidence,
-                        "reason": test.reason,
-                    }
-                    for test in evidence["tests"]
-                ],
-                "untestedSymbols": untested,
-                "check": {
-                    "status": check_payload.get("status", "unknown"),
-                    "summary": check_payload.get("summary", {}),
-                    "incremental": check_payload.get("incremental", {}),
-                    "runs": check_payload.get("runs", []),
-                    "errorsByFile": check_payload.get("errors_by_file", {}),
-                },
-                "lsp": lsp_payload,
-                "graphDiff": graph_diff_payload,
-                "contractRisks": contract_risks,
-                "impactSession": impact_session_payload,
+            "status": status,
+            "changedFiles": changed_files,
+            "risk": {
+                "level": evidence["riskLevel"],
+                "reasons": evidence["riskReasons"],
+                "missingChecks": evidence["missingChecks"],
             },
+            "affectedFiles": [
+                {"file": file_path, "why": why, "confidence": confidence}
+                for file_path, why, confidence in evidence["affectedList"]
+            ],
+            "tests": [
+                {
+                    "testFile": test.test_file,
+                    "targetFile": test.target_file,
+                    "confidence": test.confidence,
+                    "reason": test.reason,
+                }
+                for test in evidence["tests"]
+            ],
+            "untestedSymbols": untested,
+            "check": {
+                "status": check_payload.get("status", "unknown"),
+                "summary": check_payload.get("summary", {}),
+                "incremental": check_payload.get("incremental", {}),
+                "runs": check_payload.get("runs", []),
+                "errorsByFile": check_payload.get("errors_by_file", {}),
+            },
+            "lsp": lsp_payload,
+            "graphDiff": graph_diff_payload,
+            "contractRisks": contract_risks,
+            "impactSession": impact_session_payload,
         }
         if as_json:
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(
+                json_envelope(
+                    "verify", str(engine.project_root), payload, status=status
+                )
+            )
         else:
             print(render_verify_report(payload, max_chars=max_chars))
 
@@ -921,7 +920,7 @@ def run_orphan(
                 "medium_confidence": [_to_dict(s) for s in medium],
                 "low_confidence": [_to_dict(s) for s in low],
             }
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("orphan", str(engine.project_root), payload))
             return 0
 
         # Text output

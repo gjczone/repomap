@@ -4,7 +4,6 @@ import importlib.util as importlib_util
 import sys
 from pathlib import Path
 
-from ... import json_dumps
 from ..handlers import (
     CLI_NAME,
     _resolve_project,
@@ -18,14 +17,14 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
 
         detections = detect_lsp_servers(project_root)
         payload = {
-            "command": "lsp doctor",
-            "project": project_root,
             "lspClient": "available",
             "bundledServers": [],
             "servers": [detection_to_dict(item) for item in detections],
         }
         if as_json:
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            from ..handlers import json_envelope
+
+            print(json_envelope("lsp doctor", project_root, payload))
             return 0
         lines = ["## LSP Doctor\n"]
         lines.append(f"Project: `{project_root}`")

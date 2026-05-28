@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 
-from ... import json_dumps
 from ... import (
     DEFAULT_OVERVIEW_JSON_HOTSPOTS,
     DEFAULT_OVERVIEW_JSON_MODULES,
@@ -82,6 +81,8 @@ def run_overview(
         engine = _scan_engine(project, max_files)
 
         if as_json:
+            from ..handlers import json_envelope
+
             payload = {
                 "project_root": str(engine.project_root),
                 "scan_stats": _scan_stats_payload(engine),
@@ -102,7 +103,7 @@ def run_overview(
                 if with_heat
                 else [],
             }
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("overview", str(engine.project_root), payload))
             return 0
         print(
             engine.render_overview(

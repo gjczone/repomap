@@ -5,7 +5,6 @@ from collections import defaultdict
 from pathlib import PurePosixPath
 from typing import Any
 
-from ... import json_dumps
 from ... import (
     RepoGraph,
 )
@@ -196,53 +195,48 @@ def run_query(
                 target_files, engine.graph, analysis, str(engine.project_root)
             )
 
-        if as_json:
+            from ..handlers import json_envelope
+
             payload = {
-                "command": "query",
-                "project": str(engine.project_root),
                 "query": query,
                 "scanStats": _scan_stats_payload(engine),
-                "result": {
-                    "filesConsidered": len(candidate_files),
-                    "matchedFiles": len(matches),
-                    "readingOrder": _build_query_reading_order(
-                        top_matches, analysis, max_result_files
-                    ),
-                    "coreFiles": [
-                        {
-                            "path": m.path,
-                            "role": m.role,
-                            "score": m.score,
-                            "reasons": m.reasons,
-                        }
-                        for m in top_matches
-                        if m.score >= 30 and not is_test_like_file(m.path)
-                    ],
-                    "supportingFiles": [
-                        {
-                            "path": m.path,
-                            "role": m.role,
-                            "score": m.score,
-                            "reasons": m.reasons,
-                        }
-                        for m in top_matches
-                        if m.score < 30
-                    ],
-                    "tests": [
-                        {
-                            "testFile": t.test_file,
-                            "targetFile": t.target_file,
-                            "confidence": t.confidence,
-                            "reason": t.reason,
-                        }
-                        for t in tests
-                    ],
-                    "symbols": _query_symbols_json(
-                        engine, top_matches, max_result_symbols
-                    ),
-                },
+                "filesConsidered": len(candidate_files),
+                "matchedFiles": len(matches),
+                "readingOrder": _build_query_reading_order(
+                    top_matches, analysis, max_result_files
+                ),
+                "coreFiles": [
+                    {
+                        "path": m.path,
+                        "role": m.role,
+                        "score": m.score,
+                        "reasons": m.reasons,
+                    }
+                    for m in top_matches
+                    if m.score >= 30 and not is_test_like_file(m.path)
+                ],
+                "supportingFiles": [
+                    {
+                        "path": m.path,
+                        "role": m.role,
+                        "score": m.score,
+                        "reasons": m.reasons,
+                    }
+                    for m in top_matches
+                    if m.score < 30
+                ],
+                "tests": [
+                    {
+                        "testFile": t.test_file,
+                        "targetFile": t.target_file,
+                        "confidence": t.confidence,
+                        "reason": t.reason,
+                    }
+                    for t in tests
+                ],
+                "symbols": _query_symbols_json(engine, top_matches, max_result_symbols),
             }
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("query", str(engine.project_root), payload))
             return 0
 
         print(

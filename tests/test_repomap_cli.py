@@ -390,7 +390,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["command"], "lsp doctor")
-            self.assertEqual(payload["servers"][0]["status"], "missing")
+            self.assertEqual(payload["result"]["servers"][0]["status"], "missing")
 
     def test_check_skips_lsp_when_no_server_available(self) -> None:
         from src.cli import main
@@ -1343,23 +1343,24 @@ class RepoMapCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
+            result = payload["result"]
             self.assertEqual(
-                Path(payload["project_root"]).resolve(), Path(project_root).resolve()
+                Path(result["project_root"]).resolve(), Path(project_root).resolve()
             )
-            self.assertIn("scan_stats", payload)
-            self.assertIn("entry_points", payload)
-            self.assertIn("hotspots", payload)
-            self.assertIn("reading_order", payload)
-            self.assertIn("modules", payload)
-            self.assertIn("summary_symbols", payload)
-            self.assertIn("supporting_files", payload)
-            self.assertGreaterEqual(payload["scan_stats"]["symbol_count"], 2)
-            self.assertLessEqual(len(payload["hotspots"]), 8)
-            self.assertLessEqual(len(payload["reading_order"]), 6)
-            self.assertLessEqual(len(payload["modules"]), 6)
-            self.assertLessEqual(len(payload["summary_symbols"]), 4)
+            self.assertIn("scan_stats", result)
+            self.assertIn("entry_points", result)
+            self.assertIn("hotspots", result)
+            self.assertIn("reading_order", result)
+            self.assertIn("modules", result)
+            self.assertIn("summary_symbols", result)
+            self.assertIn("supporting_files", result)
+            self.assertGreaterEqual(result["scan_stats"]["symbol_count"], 2)
+            self.assertLessEqual(len(result["hotspots"]), 8)
+            self.assertLessEqual(len(result["reading_order"]), 6)
+            self.assertLessEqual(len(result["modules"]), 6)
+            self.assertLessEqual(len(result["summary_symbols"]), 4)
             supporting_paths = {
-                Path(item["file"]) for item in payload["supporting_files"]
+                Path(item["file"]) for item in result["supporting_files"]
             }
             self.assertIn(Path("README.md"), supporting_paths)
             self.assertIn(Path("scripts/check.sh"), supporting_paths)
@@ -1462,11 +1463,10 @@ class RepoMapCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["symbol"]["name"], "helper")
-            self.assertEqual(payload["direction"], "both")
-            self.assertTrue(
-                any(item["name"] == "caller" for item in payload["callers"])
-            )
+            result = payload["result"]
+            self.assertEqual(result["symbol"]["name"], "helper")
+            self.assertEqual(result["direction"], "both")
+            self.assertTrue(any(item["name"] == "caller" for item in result["callers"]))
 
     def test_call_chain_json_respects_direction_filter(self) -> None:
         from src.cli import main
@@ -1496,9 +1496,10 @@ class RepoMapCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["direction"], "callees")
-            self.assertEqual(payload["callers"], [])
-            self.assertEqual(payload["callees"], [])
+            result = payload["result"]
+            self.assertEqual(result["direction"], "callees")
+            self.assertEqual(result["callers"], [])
+            self.assertEqual(result["callees"], [])
 
     def test_scan_cache_reuses_engine_for_identical_project_state(self) -> None:
         import src.cli.cli as cli_mod
@@ -1707,14 +1708,15 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertTrue(session_cache.exists())
+            result = payload["result"]
             self.assertTrue(
                 any(
                     ep.replace("\\", "/") == "src/main.tsx"
-                    for ep in payload["entry_points"]
+                    for ep in result["entry_points"]
                 )
             )
             self.assertEqual(
-                payload["reading_order"][0]["file"].replace("\\", "/"), "src/main.tsx"
+                result["reading_order"][0]["file"].replace("\\", "/"), "src/main.tsx"
             )
 
     def test_scan_cache_invalidates_after_source_change(self) -> None:

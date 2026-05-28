@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from ... import json_dumps
 from ... import (
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
 )
@@ -12,6 +11,7 @@ from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,
     EXIT_NO_RESULTS,
+    json_envelope,
     _scan_engine,
     _normalize_project_relative_path,
     _collect_lsp_evidence_for_symbol,
@@ -120,7 +120,7 @@ def run_call_chain(
                     _format_symbol_ref(engine, item.id) for item in chain["callees"]
                 ],
             }
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("call-chain", str(engine.project_root), payload))
             return 0
         if direction != "both":
             data = engine.call_chain(selected.id, direction, depth)
@@ -160,12 +160,14 @@ def run_query_symbol(
         if not results:
             if as_json:
                 print(
-                    json_dumps(
+                    json_envelope(
+                        "query-symbol",
+                        str(engine.project_root),
                         {"matches": [], "query": symbol, "file_filter": file_path},
-                        ensure_ascii=False,
+                        status="no_results",
                     )
                 )
-                return 0
+                return EXIT_NO_RESULTS
             print(f"> No matches found for `{symbol}`", file=sys.stderr)
             return EXIT_NO_RESULTS
         exact_matches, fuzzy_matches = _group_symbol_matches(results, symbol)
@@ -201,7 +203,7 @@ def run_query_symbol(
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(
                     engine, selected, lsp_timeout
                 )
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("query-symbol", str(engine.project_root), payload))
             return 0
 
         lines = [f"Found {len(results)} matching results.\n"]
@@ -322,7 +324,7 @@ def run_file_detail(
                 payload["lsp_symbol_tree"] = [dc_asdict(item) for item in lsp_tree]
             else:
                 payload["lsp_symbol_tree"] = []
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("file-detail", str(engine.project_root), payload))
             return 0
 
         from ...lsp import collect_lsp_symbol_tree
@@ -396,8 +398,6 @@ def run_refs(
                 engine, target, lsp_timeout
             )
             if as_json:
-                from ..handlers import json_envelope
-
                 print(json_envelope("refs", str(engine.project_root), payload))
             else:
                 lines = [f"## Reference Analysis — `{target.name}`\n"]
@@ -446,7 +446,7 @@ def run_refs(
             ],
         }
         if as_json:
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("refs", str(engine.project_root), payload))
             return 0
         lines = ["## Global Reference Analysis\n"]
         lines.append(f"- Total symbols:  {payload['total_symbols']}")

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 import sys
 
-from ... import json_dumps
 from ..handlers import (
     CLI_NAME,
     _resolve_project,
@@ -54,7 +53,9 @@ def run_diff(project: str, as_json: bool) -> int:
         print(result["error"], file=sys.stderr)
         return 1
     if as_json:
-        print(json_dumps(result, ensure_ascii=False, indent=2))
+        from ..handlers import json_envelope
+
+        print(json_envelope("diff", _resolve_project(project), result))
         return 0
     lines = ["## Change Detection\n"]
     lines.append(
