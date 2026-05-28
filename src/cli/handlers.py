@@ -217,15 +217,17 @@ def _scan_engine(
         os.getenv("REPOMAP_SCAN_LARGE_FILES", "0"),
         incremental,
     )
-    fingerprint = _scan_fingerprint(resolved_project, max_files)
     cached = _SCAN_CACHE.get(cache_key)
-    if cached and cached[0] == fingerprint:
-        return cached[1]
     if cached:
+        fingerprint = _scan_fingerprint(resolved_project, max_files)
+        if cached[0] == fingerprint:
+            return cached[1]
         # 指纹不匹配：源文件已变更，需要重新扫描
         logger.debug(
             f"Scan cache fingerprint mismatch for {resolved_project}, re-scanning"
         )
+    else:
+        fingerprint = _scan_fingerprint(resolved_project, max_files)
 
     session_engine = _load_session_engine(resolved_project, fingerprint)
     if session_engine is not None:

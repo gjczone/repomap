@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 
-from ... import json_dumps
 from ...ai import render_routes_report
 from ..handlers import (
     CLI_NAME,
@@ -18,9 +17,9 @@ def run_routes(
     try:
         engine = _scan_engine(project, max_files)
         if as_json:
+            from ..handlers import json_envelope
+
             payload = {
-                "command": "routes",
-                "project": str(engine.project_root),
                 "scanStats": _scan_stats_payload(engine),
                 "routes": [_route_payload(route) for route in engine.list_routes()],
             }
@@ -41,7 +40,7 @@ def run_routes(
                         for c in clist
                     ]
                 payload["consumers"] = consumer_json
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("routes", str(engine.project_root), payload))
             return 0
         if with_consumers:
             from ...consumers import find_route_consumers

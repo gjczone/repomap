@@ -396,7 +396,9 @@ def run_refs(
                 engine, target, lsp_timeout
             )
             if as_json:
-                print(json_dumps(payload, ensure_ascii=False, indent=2))
+                from ..handlers import json_envelope
+
+                print(json_envelope("refs", str(engine.project_root), payload))
             else:
                 lines = [f"## Reference Analysis — `{target.name}`\n"]
                 lines.append(f"- Referenced by:  {payload['ref_count']}")
@@ -476,9 +478,9 @@ def run_state_map(
         defs = find_state_definitions(engine, query=query, symbol=symbol)
 
         if as_json:
+            from ..handlers import json_envelope
+
             payload = {
-                "command": "state-map",
-                "project": str(engine.project_root),
                 "query": query,
                 "symbol": symbol,
                 "definitions": [
@@ -503,7 +505,7 @@ def run_state_map(
                     for d in defs
                 ],
             }
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+            print(json_envelope("state-map", str(engine.project_root), payload))
             return 0
 
         # Text output

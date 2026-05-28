@@ -411,6 +411,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Maximum explicit files to open through LSP.",
     )
+    check_parser.add_argument(
+        "--json", action="store_true", help="Print raw JSON output."
+    )
     fix_parser = subparsers.add_parser(
         "fix", help="Auto-fix lint issues (ruff --fix, eslint --fix)."
     )
@@ -717,6 +720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             resolve_symbols=not args.no_symbols,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
+            as_json=getattr(args, "json", False),
         )
     if command == "lsp":
         if args.lsp_command == "doctor":
