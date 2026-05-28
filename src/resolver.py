@@ -191,7 +191,9 @@ class ImportResolver:
                 self._project_extensions.add(ext)
 
         # 导入解析缓存：(source_file, imp) -> target_files，避免同一模块被反复解析
-        self._resolve_cache: dict[tuple[str, str], list[str]] = {}
+        from collections import OrderedDict
+
+        self._resolve_cache: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
         self._resolve_cache_max = 20000
 
         self._load_import_configs()
@@ -432,12 +434,18 @@ class ImportResolver:
 
     def _cache_set(self, key: tuple[str, str], value: list[str]) -> None:
         """写入解析缓存，超过上限时 LRU 淘汰 25% 防止内存泄漏。"""
-        if len(self._resolve_cache) >= self._resolve_cache_max:
-            # 淘汰最老的 25% 条目（dict 按插入顺序迭代，前面是最老的）
-            evict_count = self._resolve_cache_max // 4
-            for old_key in list(self._resolve_cache)[:evict_count]:
-                del self._resolve_cache[old_key]
+        is_new = key not in self._resolve_cache
+        if not is_new:
+            # 如果已存在，移到末尾（最近使用）
+            self._resolve_cache.move_to_end(key)
         self._resolve_cache[key] = value
+
+        # 只在新增条目时检查是否需要淘汰
+        if is_new and len(self._resolve_cache) >= self._resolve_cache_max:
+            # 淘汰最老的 25% 条目（OrderedDict 前面是最老的）
+            evict_count = self._resolve_cache_max // 4
+            for _ in range(evict_count):
+                self._resolve_cache.popitem(last=False)
 
     def resolve_import_targets(self, source_file: str, imp: str) -> list[str]:
         """解析 import 路径到目标文件列表。"""

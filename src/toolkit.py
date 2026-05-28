@@ -285,7 +285,12 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
     files: dict[str, dict] = {}
     for file_path in engine.graph.file_symbols:
         full = engine.project_root / file_path
-        full_stat = full.stat()
+        try:
+            full_stat = full.stat()
+        except OSError as exc:
+            # 文件在扫描和保存之间出现问题（删除、权限、符号链接循环等），跳过该文件
+            logger.debug("无法 stat 文件，跳过缓存: %s (%s)", file_path, exc)
+            continue
         mtime = full_stat.st_mtime
         files[file_path] = {
             "mtime": mtime,

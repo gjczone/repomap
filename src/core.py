@@ -645,10 +645,29 @@ class RepoMapEngine:
             logger.warning(
                 "rg --files failed for supporting files, falling back to rglob"
             )
+            # fallback：跳过已知大型目录，与 _list_files 保持一致
+            skip_dirs = {
+                "node_modules",
+                ".git",
+                "__pycache__",
+                ".venv",
+                "venv",
+                "target",
+                "build",
+                "dist",
+                ".next",
+                ".nuxt",
+                ".cache",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".ruff_cache",
+            }
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
-                if p.is_file() and not p.is_symlink()
+                if p.is_file()
+                and not p.is_symlink()
+                and not any(d in p.parts for d in skip_dirs)
             )
         root_context_files = [
             name
@@ -772,20 +791,6 @@ class RepoMapEngine:
         # 收集阶段异常不会影响图状态，写入阶段（dict/set 操作）不会抛异常
         new_symbols = self.ts.extract_symbols(tree, lang, file, content)
 
-        if lang in (
-            "python",
-            "typescript",
-            "tsx",
-            "go",
-            "rust",
-            "java",
-            "kotlin",
-            "swift",
-            "c_sharp",
-            "cpp",
-        ):
-            self._enrich_symbol_types(file, tree, lang)
-
         imports = self.ts.extract_imports(tree, lang)
         import_bindings = self.ts.extract_js_ts_import_bindings(
             content, lang, tree=tree
@@ -804,6 +809,21 @@ class RepoMapEngine:
         for sym in new_symbols:
             self.graph.symbols[sym.id] = sym
             self.graph.file_symbols[file].append(sym.id)
+
+        # 符号已写入图，现在进行类型富化
+        if lang in (
+            "python",
+            "typescript",
+            "tsx",
+            "go",
+            "rust",
+            "java",
+            "kotlin",
+            "swift",
+            "c_sharp",
+            "cpp",
+        ):
+            self._enrich_symbol_types(file, tree, lang)
 
         self.graph.file_imports[file] = new_imports
         self.graph.file_import_bindings[file] = import_bindings
@@ -1004,7 +1024,7 @@ class RepoMapEngine:
         """Detect module clusters from the file dependency graph."""
         from .ranking import detect_file_clusters, format_cluster_summary
 
-        clusters = detect_file_clusters(self.graph)
+        clusters = detect_file_clusters(self.graph, project_root=str(self.project_root))
         return format_cluster_summary(clusters, top_n=limit)
 
     def summary_symbols(
