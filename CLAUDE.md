@@ -183,6 +183,7 @@ The public README files serve different audiences than this document:
 - All commands should support `--json` for machine-parseable output; use `json_envelope()` from `src/cli/handlers.py` for consistent `{schema_version, command, project, status, result}` format.
 - `verify` suggests tests but does not run them. Agents must run tests explicitly.
 - Session cache version in `src/cli/cli.py` must be bumped when scan cache semantics change.
+- **Local binary only — do not `npm install -g repomap-bin` on developer machines.** The `repomap` command is a symlink to `dist/repomap` (local build). npm package `repomap-bin` is for cloud/CI environments only. During release, verify npm version is published and matches `pyproject.toml` version: `npm view repomap-bin version`.
 
 ## Data & State Rules
 
@@ -326,6 +327,12 @@ repomap overview --project .
 #       ...
 #       RELEASE_NOTES
 #       )"
+
+# 10. Verify npm version matches pyproject.toml
+#     - npm version is auto-published by CI; verify it's correct:
+#       npm view repomap-bin version
+#     - Compare with pyproject.toml version; they MUST match
+#     - npm package is for cloud/CI environments only; local dev uses symlink to dist/repomap
 ```
 
 ## Distribution Policies
