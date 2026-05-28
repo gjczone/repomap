@@ -380,7 +380,9 @@ class TestPythonEdgeCases:
         assert "int" in result[0].return_type
 
     def test_union_return_type(self, ts):
-        code = "from typing import Union\ndef foo() -> Union[int, str, None]:\n    pass\n"
+        code = (
+            "from typing import Union\ndef foo() -> Union[int, str, None]:\n    pass\n"
+        )
         sym = Symbol(id="s1", name="foo", kind="function", file="a.py", line=2)
         result = _parse_and_extract(ts, code, "python", [sym])
         assert "Union" in result[0].return_type
@@ -640,7 +642,7 @@ class TestRustEdgeCases:
         assert "Result" in result[0].return_type
 
     def test_option_return_type(self, ts):
-        code = "fn foo() -> Option<String> {\n    Some(\"hi\".to_string())\n}\n"
+        code = 'fn foo() -> Option<String> {\n    Some("hi".to_string())\n}\n'
         sym = Symbol(id="s1", name="foo", kind="function", file="a.rs", line=1)
         result = _parse_and_extract(ts, code, "rust", [sym])
         assert "Option" in result[0].return_type
@@ -708,10 +710,13 @@ class TestCppEdgeCases:
         assert "int" in result[0].return_type
 
     def test_string_param(self, ts):
-        code = '#include <string>\nstd::string foo(const std::string& x) {\n    return x;\n}\n'
+        code = "#include <string>\nstd::string foo(const std::string& x) {\n    return x;\n}\n"
         sym = Symbol(id="s1", name="foo", kind="function", file="a.cpp", line=2)
         result = _parse_and_extract(ts, code, "cpp", [sym])
-        assert "string" in result[0].return_type.lower() or "std" in result[0].return_type.lower()
+        assert (
+            "string" in result[0].return_type.lower()
+            or "std" in result[0].return_type.lower()
+        )
 
     def test_trailing_return_type(self, ts):
         # 尾置返回类型在 tree-sitter-cpp 中 AST 结构特殊，当前实现可能无法提取
