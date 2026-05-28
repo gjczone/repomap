@@ -20,7 +20,7 @@ All via `repomap <subcommand> --project <path>`.
 | Command | Purpose |
 |---|---|
 | `overview` | Project map: modules, entry points, reading order, hotspots, key symbols |
-| `scan` | Quick scan: file/symbol counts and entry points |
+| `scan` | (deprecated: use `overview --quick`) Quick scan: file/symbol counts and entry points |
 | `query --query "keyword"` | Topic/feature discovery with adaptive fallback (never empty) |
 | `search --query "text"` | BM25 semantic symbol search with keyword fallback |
 | `file-detail --file-path <f>` | Symbols and structure of a known file |
