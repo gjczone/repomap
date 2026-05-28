@@ -56,15 +56,26 @@ SESSION_CACHE_VERSION = 7
 
 
 def get_repomap_version() -> str:
+    """获取 repomap 版本号。
+
+    优先级：importlib.metadata（正常安装）→ _version.py（PyInstaller 打包）→ 降级。
+    """
     try:
         from importlib.metadata import version
 
-        return version("repomap")
+        return version("repomap-cli")
     except Exception:
         logger.debug(
             "Failed to resolve repomap version via importlib.metadata", exc_info=True
         )
-        return "0.0.0-dev"
+    # PyInstaller 打包时通过 _version.py 写入版本号
+    try:
+        from src._version import VERSION
+
+        return VERSION
+    except Exception:
+        pass
+    return "0.0.0-dev"
 
 
 DEFAULT_OVERVIEW_MAX_CHARS = 16000
