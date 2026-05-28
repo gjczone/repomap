@@ -28,7 +28,7 @@ All via `repomap <subcommand> --project <path>`.
 | `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |
 | `call-chain --symbol <name>` | Caller/callee context |
 | `refs --symbol <name>` | Reference discovery |
-| `verify [--quick] [--with-lsp] [--with-diff]` | Post-edit evidence gate with missed-files detection |
+| `verify [--quick] [--no-lsp] [--with-diff]` | Post-edit evidence gate with missed-files detection |
 | `check` | Compiler/type/lint diagnostics |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory + consumer mapping |
 | `state-map --symbol <name>` | Enum/const state values, writers, and readers |
@@ -115,7 +115,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `diff`, `verify --with-diff`
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
 - **State map**: `src/state_map.py` → `state-map --symbol/--query`
-- **LSP**: `src/lsp.py` → opt-in, affects `query-symbol --with-lsp`, `file-detail --with-lsp`, `verify --with-lsp`, `check --with-lsp`, `doctor --lsp`, `lsp setup`
+- **LSP**: `src/lsp.py` → auto-enabled (use `--no-lsp` to disable), affects `query-symbol`, `file-detail`, `verify`, `check`, `doctor --lsp`, `lsp setup`
 - **JSON output**: `src/cli/handlers.py::json_envelope()` → unified `{schema_version, command, project, status, result}` envelope; all commands support `--json`
 
 ## Verification
@@ -286,7 +286,7 @@ repomap overview --project .
 
 # 3.5. Smoke test with local projects (MANDATORY before release)
 #    - Test in at least 2-3 local projects of different languages/frameworks
-#    - Verify: overview, query, file-detail --with-lsp, call-chain, refs, verify --quick
+#    - Verify: overview, query, file-detail, call-chain, refs, verify --quick
 #    - Verify: lsp setup --dry-run detects languages correctly
 #    - Verify: doctor --lsp finds available servers
 
@@ -371,7 +371,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 ### Pre-Release Testing
 - **MANDATORY**: smoke test with at least 2-3 local projects before any release commit
 - Test in projects with different language mixes (pure Python, TS+Python, etc.)
-- Key commands to verify: `overview`, `query`, `file-detail --with-lsp`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
+- Key commands to verify: `overview`, `query`, `file-detail`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
 - If any command fails, fix before proceeding with the release
 - If any test, diagnostic, or verify step is skipped/unknown, document why it is acceptable and which non-skipped evidence covers the same risk.
 

@@ -404,7 +404,6 @@ class RepoMapCliTests(unittest.TestCase):
                                 "check",
                                 "--project",
                                 project_root,
-                                "--with-lsp",
                                 "--modified-file",
                                 "main.py",
                             ]
@@ -455,7 +454,6 @@ class RepoMapCliTests(unittest.TestCase):
                             "--no-symbols",
                             "--modified-file",
                             "main.py",
-                            "--with-lsp",
                             "--lsp-timeout",
                             "1.5",
                             "--lsp-max-files",
@@ -1190,7 +1188,6 @@ class RepoMapCliTests(unittest.TestCase):
                             project_root,
                             "--symbol",
                             "helper",
-                            "--with-lsp",
                         ]
                     )
 
@@ -1242,7 +1239,6 @@ class RepoMapCliTests(unittest.TestCase):
                             "helper",
                             "--file-path",
                             "lib.py",
-                            "--with-lsp",
                             "--json",
                         ]
                     )
