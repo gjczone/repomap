@@ -174,7 +174,7 @@ def run_ready(project: str, as_json: bool = False) -> int:
                     types=None,
                     max_issues=50,
                     resolve_symbols=True,
-                    with_lsp=False,
+                    use_lsp=False,
                     lsp_timeout=8.0,
                     lsp_max_files=20,
                     with_diff=False,
@@ -200,7 +200,7 @@ def run_ready(project: str, as_json: bool = False) -> int:
                     since_commit=None,
                     modified_files=None,
                     resolve_symbols=True,
-                    with_lsp=False,
+                    use_lsp=False,
                     lsp_timeout=8.0,
                     lsp_max_files=20,
                 )

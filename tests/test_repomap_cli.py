@@ -390,7 +390,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(payload["command"], "lsp doctor")
             self.assertEqual(payload["servers"][0]["status"], "missing")
 
-    def test_check_with_lsp_skips_when_no_server_available(self) -> None:
+    def test_check_use_lsp_skips_when_no_server_available(self) -> None:
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
@@ -411,7 +411,7 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertIn(exit_code, {0, 1, 3})
 
-    def test_check_with_lsp_passes_options_to_checker(self) -> None:
+    def test_check_use_lsp_passes_options_to_checker(self) -> None:
         from src.cli import main
 
         captured = {}
@@ -462,7 +462,7 @@ class RepoMapCliTests(unittest.TestCase):
                     )
 
         self.assertEqual(exit_code, 0)
-        self.assertTrue(captured["with_lsp"])
+        self.assertTrue(captured["use_lsp"])
         self.assertEqual(captured["lsp_timeout"], 1.5)
         self.assertEqual(captured["lsp_max_files"], 3)
 
@@ -527,8 +527,8 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(default_code, 0)
         self.assertEqual(disabled_code, 0)
-        self.assertTrue(captured[0]["with_lsp"])
-        self.assertFalse(captured[1]["with_lsp"])
+        self.assertTrue(captured[0]["use_lsp"])
+        self.assertFalse(captured[1]["use_lsp"])
 
     def test_lsp_aware_commands_enable_lsp_by_default(self) -> None:
         from src.cli import main
@@ -639,8 +639,8 @@ class RepoMapCliTests(unittest.TestCase):
                 self.assertEqual(main(["verify", "--project", "."]), 0)
                 self.assertEqual(main(["verify", "--project", ".", "--no-lsp"]), 0)
 
-        self.assertTrue(captured[0]["with_lsp"])
-        self.assertFalse(captured[1]["with_lsp"])
+        self.assertTrue(captured[0]["use_lsp"])
+        self.assertFalse(captured[1]["use_lsp"])
 
     def test_python_check_runs_pyright_and_ruff_by_default(self) -> None:
         from src.check import DiagnosticResult, DiagnosticRunner
@@ -1148,7 +1148,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("helper", symbol_stdout.getvalue())
             self.assertIn("caller", chain_stdout.getvalue())
 
-    def test_query_symbol_with_lsp_appends_evidence(self) -> None:
+    def test_query_symbol_use_lsp_appends_evidence(self) -> None:
         from src.cli import main
 
         fake_run = {
@@ -1197,7 +1197,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("Definitions: 1", output)
             self.assertIn("References: 1", output)
 
-    def test_refs_with_lsp_json_includes_evidence(self) -> None:
+    def test_refs_use_lsp_json_includes_evidence(self) -> None:
         from src.cli import main
 
         fake_run = {

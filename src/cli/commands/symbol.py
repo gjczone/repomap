@@ -149,7 +149,7 @@ def run_query_symbol(
     symbol: str,
     file_path: str | None,
     max_chars: int,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
     as_json: bool = False,
 ) -> int:
@@ -197,7 +197,7 @@ def run_query_symbol(
             }
             if file_path:
                 payload["file_filter"] = file_path
-            if with_lsp and (exact_matches or results):
+            if use_lsp and (exact_matches or results):
                 selected = (exact_matches or results)[0]
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(
                     engine, selected, lsp_timeout
@@ -243,7 +243,7 @@ def run_query_symbol(
 
         if len(results) > 10 and (len(exact_matches) > 10 or len(fuzzy_matches) > 10):
             lines.append("\n> Many results; use `--file-path` to narrow.")
-        if with_lsp:
+        if use_lsp:
             selected = (exact_matches or results)[0]
             lines.extend(
                 _format_lsp_evidence(
@@ -263,7 +263,7 @@ def run_file_detail(
     file_path: str,
     max_symbols: int,
     max_chars: int,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
     as_json: bool = False,
 ) -> int:
@@ -315,7 +315,7 @@ def run_file_detail(
                     for c in engine.graph.file_calls.get(normalized_file_path, [])
                 ],
             }
-            if with_lsp:
+            if use_lsp:
                 from dataclasses import asdict as dc_asdict
                 from ...lsp import collect_lsp_symbol_tree
 
@@ -330,7 +330,7 @@ def run_file_detail(
             return 0
 
         lsp_tree: list[Any] | None = None  # type: ignore[no-redef]
-        if with_lsp:
+        if use_lsp:
             from ...lsp import collect_lsp_symbol_tree
 
             lsp_tree = collect_lsp_symbol_tree(
@@ -357,7 +357,7 @@ def run_refs(
     symbol: str | None,
     file_path: str | None,
     as_json: bool,
-    with_lsp: bool = False,
+    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
 ) -> int:
     try:
@@ -399,7 +399,7 @@ def run_refs(
                 "is_entry": len(calls_in[sid]) == 0,
                 "is_leaf": len(calls_out[sid]) == 0,
             }
-            if with_lsp:
+            if use_lsp:
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(
                     engine, target, lsp_timeout
                 )
@@ -427,7 +427,7 @@ def run_refs(
                         lines.append(
                             f"  - `{row['name']}` ({row['file']}:{row['line']})"
                         )
-                if with_lsp:
+                if use_lsp:
                     lines.extend(_format_lsp_evidence(payload["lsp"]))
                 print("\n".join(lines))
             return 0
