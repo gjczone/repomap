@@ -425,7 +425,9 @@ class TestHintFormat(unittest.TestCase):
             "query-symbol": query_symbol_hint(match_count=1, has_file_filter=False),
             "call-chain": call_chain_hint(caller_count=15, callee_count=3),
             "refs": refs_hint(called_by_count=5),
-            "overview": overview_hint(has_hotspots=True, has_reading_order=False, has_modules=False),
+            "overview": overview_hint(
+                has_hotspots=True, has_reading_order=False, has_modules=False
+            ),
             "file-detail": file_detail_hint(has_symbols=True, has_callers=False),
             "impact": impact_hint(risk_level="high", has_suggested_tests=False),
             "verify": verify_hint(status="passed", has_contract_risks=False),
