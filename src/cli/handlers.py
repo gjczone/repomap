@@ -482,7 +482,6 @@ def _select_symbol_match(
     symbol: str,
     *,
     file_path: str | None = None,
-    use_lsp: bool = False,
     lsp_timeout: float = 8.0,
 ) -> tuple[Any | None, str | None, str | None]:
     """3-tier symbol resolution: LSP → tree-sitter same-file → global fuzzy.
@@ -494,11 +493,15 @@ def _select_symbol_match(
     resolution_tier = "fuzzy"
 
     # Tier 1: LSP definition lookup (highest precision)
-    if use_lsp and matches:
+    # Only use LSP when there's exactly one candidate to avoid bypassing ambiguity
+    candidates_for_lsp = matches
+    if file_path:
+        candidates_for_lsp = [m for m in matches if m.file == file_path]
+    if candidates_for_lsp and len(candidates_for_lsp) == 1:
         from ..lsp import collect_lsp_symbol_evidence
 
         try:
-            best_match = matches[0]
+            best_match = candidates_for_lsp[0]
             lsp_result = collect_lsp_symbol_evidence(
                 str(engine.project_root),
                 best_match.file,
@@ -509,7 +512,7 @@ def _select_symbol_match(
             if lsp_result.status == "ok" and lsp_result.definitions:
                 # LSP confirmed the definition location
                 lsp_def = lsp_result.definitions[0]
-                for m in matches:
+                for m in candidates_for_lsp:
                     if m.file == lsp_def.file and abs(m.line - lsp_def.line) <= 3:
                         return m, None, "lsp"
                 # LSP found but at a different location; prefer LSP over tree-sitter

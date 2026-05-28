@@ -107,7 +107,6 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(query_parser)
     query_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -218,7 +217,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip scan-based symbol resolution for diagnostics.",
     )
-    _add_lsp_args(verify_parser)
     verify_parser.add_argument(
         "--no-incremental",
         action="store_true",
@@ -269,7 +267,6 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(file_parser)
     file_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -331,7 +328,6 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument(
         "--json", action="store_true", help="Print raw JSON output."
     )
-    _add_lsp_args(refs_parser)
     refs_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -390,7 +386,6 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument(
         "--no-symbols", action="store_true", help="Skip scan-based symbol resolution."
     )
-    _add_lsp_args(check_parser)
     check_parser.add_argument(
         "--lsp-timeout",
         type=float,
@@ -557,16 +552,6 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_lsp_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--no-lsp",
-        dest="use_lsp",
-        action="store_false",
-        default=True,
-        help="Disable local LSP evidence and diagnostics (enabled by default).",
-    )
-
-
 def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
     if argv is None:
         raw_args = sys.argv[1:]
@@ -637,7 +622,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.symbol,
             args.file_path,
             args.max_chars,
-            args.use_lsp,
             args.lsp_timeout,
             args.json,
         )
@@ -672,7 +656,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             types=args.types,
             max_issues=args.max_issues,
             resolve_symbols=not args.no_symbols,
-            use_lsp=args.use_lsp,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
             with_diff=args.with_diff,
@@ -687,7 +670,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.file_path,
             args.max_symbols,
             args.max_chars,
-            getattr(args, "use_lsp", True),
             getattr(args, "lsp_timeout", 8.0),
             args.json,
         )
@@ -704,7 +686,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.symbol,
             args.file_path,
             args.json,
-            args.use_lsp,
             args.lsp_timeout,
         )
     if command == "orphan":
@@ -719,7 +700,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             since_commit=args.since_commit,
             modified_files=args.modified_files,
             resolve_symbols=not args.no_symbols,
-            use_lsp=args.use_lsp,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
         )
