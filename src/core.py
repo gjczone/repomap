@@ -537,7 +537,9 @@ class RepoMapEngine:
                 logger.warning(f"Skipping malformed route entry: {exc}")
 
         # 更新 mtime 缓存
-        self._cache[file_path] = (entry.mtime, entry.size)
+        # entry.size 可能为 None（旧缓存格式兼容），使用 0 作为默认值
+        size = entry.size if entry.size is not None else 0
+        self._cache[file_path] = (entry.mtime, size)
         self.scan_stats.processed_files += 1
         self.scan_stats.skipped_files += 1
         return True

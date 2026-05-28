@@ -166,6 +166,7 @@ def save_cache(project_path: str, symbols: list[Symbol], edges: list[Edge]) -> P
     )
 
     # 原子写入：先写入临时文件，再原子替换
+    temp_path = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -181,7 +182,7 @@ def save_cache(project_path: str, symbols: list[Symbol], edges: list[Edge]) -> P
         os.replace(temp_path, cache_file)
     except Exception:
         # 清理临时文件（如果存在）
-        if "temp_path" in locals() and os.path.exists(temp_path):
+        if temp_path is not None and os.path.exists(temp_path):
             os.unlink(temp_path)
         raise
 
@@ -326,6 +327,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
                 if len(c) >= 3
                 else {"name": c[0], "line": c[1], "kind": "direct"}
                 for c in engine.graph.file_calls.get(file_path, [])
+                if len(c) >= 2  # 确保tuple至少有name和line两个元素
             ],
             "routes_json": [
                 {
@@ -354,6 +356,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
 
     import tempfile
 
+    temp_path = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -367,7 +370,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
             json_dump(_inc_cache_to_dict(cache), f, indent=2, ensure_ascii=False)
         os.replace(temp_path, cache_path)
     except Exception:
-        if "temp_path" in locals() and os.path.exists(temp_path):
+        if temp_path is not None and os.path.exists(temp_path):
             os.unlink(temp_path)
         raise
 
