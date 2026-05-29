@@ -263,6 +263,7 @@ class ScanStats:
     scan_duration_ms: int = 0  # 扫描耗时（毫秒）
     timeout_triggered: bool = False  # 是否触发超时熔断
     skipped_files: int = 0  # 因 mtime 未变跳过的文件数（增量扫描）
+    git_failed: bool = False  # git 操作是否失败（增量扫描可能使用过期数据）
 
 
 @dataclass

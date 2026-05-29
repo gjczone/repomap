@@ -473,6 +473,7 @@ class RepoMapEngine:
             return sorted(set(modified)), sorted(set(deleted))
         except Exception as e:
             logger.warning(f"Failed to get git changed files: {e}")
+            self.scan_stats.git_failed = True
             return [], []
 
     def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
