@@ -430,6 +430,7 @@ class TestMoreLanguageTypeInference:
 
     def test_kotlin_function_types_preserved(self, project_root):
         """验证 Kotlin 函数的类型信息在完整扫描后保留。"""
+        pytest.importorskip("tree_sitter_kotlin")
         write_file(
             project_root,
             "main.kt",
@@ -467,6 +468,7 @@ class TestMoreLanguageTypeInference:
 
     def test_swift_function_types_preserved(self, project_root):
         """验证 Swift 函数的类型信息在完整扫描后保留。"""
+        pytest.importorskip("tree_sitter_swift")
         write_file(
             project_root,
             "main.swift",
