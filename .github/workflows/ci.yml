@@ -90,3 +90,21 @@ jobs:
 
          - name: Audit Python dependencies
            run: uv run pip-audit
+
+   test-minimal:
+      needs: lint
+      runs-on: ubuntu-latest
+      timeout-minutes: 15
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
+
+         - name: Install uv
+           run: pip install uv
+
+         - name: Install minimal dependencies
+           run: uv sync --group dev
+
+         - name: Run tests with minimal dependencies
+           run: uv run pytest --tb=short -q
