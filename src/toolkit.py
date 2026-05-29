@@ -74,31 +74,6 @@ class SymbolCache:
     _schema_version: int = CACHE_SCHEMA_VERSION
 
 
-@dataclass
-class GitSymbolInfo:
-    """符号的 Git 历史信息"""
-
-    symbol_id: str
-    first_seen: str
-    last_modified: str
-    commit_count: int
-    authors: list[str]
-    recent_commits: list[dict]
-
-
-@dataclass
-class RefCountInfo:
-    """引用计数信息"""
-
-    symbol_id: str
-    called_by: list[str]  # 被谁调用
-    calls: list[str]  # 调用谁
-    ref_count: int  # 被引用次数
-    is_entry: bool  # 是否是入口（不被任何人调用）
-    is_leaf: bool  # 是否是叶子（不调用任何人）
-    is_orphan: bool  # 是否是孤儿（不被调用也不调用别人，且非入口）
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # 核心功能：扫描与缓存
 # ═══════════════════════════════════════════════════════════════════════════════

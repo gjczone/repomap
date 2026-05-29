@@ -55,7 +55,7 @@ NOISE_PATTERNS = [
     ".d.ts",
 ]
 
-# Reuse SKIP_DIR_NAMES from core as additional reference
+# Additional noise path segments for scoring
 NOISE_PATH_SEGMENTS = {
     "monaco-editor",
     "vendor",
