@@ -72,8 +72,10 @@ jobs:
          - name: Smoke test binary (verify)
            shell: bash
            run: |
+              set +e
               ./dist/repomap verify --project . --quick
               EXIT=$?
+              set -e
               if [ $EXIT -eq 3 ]; then
                 echo "verify --quick: no git changes (expected in CI)"
                 exit 0

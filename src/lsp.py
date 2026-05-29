@@ -471,6 +471,7 @@ def _json_rpc_frame(payload: dict[str, Any]) -> bytes:
 # 哨兵对象：区分流 EOF 和消息丢弃
 _STREAM_EOF = object()  # 流正常关闭
 _MESSAGE_SKIPPED = object()  # 消息被丢弃但流仍健康
+_MAX_DISCARD_BYTES = 20 * 1024 * 1024  # 20MB: 丢弃路径的上限保护
 
 
 def _read_lsp_message(stream: Any) -> Any:
@@ -498,13 +499,19 @@ def _read_lsp_message(stream: Any) -> Any:
             length,
             _MAX_CONTENT_LENGTH,
         )
-        # 消费 body 字节，防止级联失败
-        remaining = length
+        # 消费 body 字节，防止级联失败，但有上限保护
+        remaining = min(length, _MAX_DISCARD_BYTES)
         while remaining > 0:
             chunk = stream.read(min(remaining, 65536))
             if not chunk:
                 return _STREAM_EOF
             remaining -= len(chunk)
+        if length > _MAX_DISCARD_BYTES:
+            logger.error(
+                "LSP message too large (%d bytes), disconnecting",
+                length,
+            )
+            return _STREAM_EOF
         return _MESSAGE_SKIPPED
     body = b""
     while len(body) < length:
@@ -581,6 +588,7 @@ class StdioLspClient:
                 if not chunk:
                     break
             except Exception:
+                logger.debug("Stderr drain interrupted", exc_info=True)
                 break
 
     def send_notification(
@@ -856,7 +864,9 @@ class StdioLspClient:
                 try:
                     stream.close()
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Stream close failed during LSP cleanup", exc_info=True
+                    )
             if self._reader is not None and self._reader.is_alive():
                 self._reader.join(timeout=3)
             if self._stderr_reader is not None and self._stderr_reader.is_alive():
@@ -1076,7 +1086,9 @@ def _symbol_position(
             if index >= 0:
                 character = index
     except OSError:
-        pass
+        logger.warning(
+            "Symbol position fallback: cannot read file %s", abs_file, exc_info=True
+        )
     return abs_file, zero_based_line, character
 
 

@@ -503,12 +503,33 @@ def _walk_rust_node(
         arg = node.child_by_field_name("argument")
         if arg:
             use_path = _node_text(arg)
-            parts = use_path.split("::")
-            if parts:
-                local = parts[-1]
-                if local == "{self}" or local == "self":
-                    local = parts[-2] if len(parts) >= 2 else parts[-1]
-                info.imports[local] = use_path
+            # 处理花括号分组导入：use std::collections::{HashMap, HashSet}
+            if "{" in use_path and "}" in use_path:
+                # 提取基础路径和花括号内的项
+                brace_start = use_path.index("{")
+                brace_end = use_path.rindex("}")
+                base_path = use_path[:brace_start].rstrip("::")
+                items_str = use_path[brace_start + 1 : brace_end]
+                items = [item.strip() for item in items_str.split(",")]
+                for item in items:
+                    if item == "self":
+                        # use std::collections::{self} -> std::collections
+                        local = (
+                            base_path.split("::")[-1]
+                            if "::" in base_path
+                            else base_path
+                        )
+                    else:
+                        local = item
+                        full_path = f"{base_path}::{item}" if base_path else item
+                        info.imports[local] = full_path
+            else:
+                parts = use_path.split("::")
+                if parts:
+                    local = parts[-1]
+                    if local == "{self}" or local == "self":
+                        local = parts[-2] if len(parts) >= 2 else parts[-1]
+                    info.imports[local] = use_path
 
     if node.type == "call_expression":
         call_name = _extract_rust_call_name(node)
@@ -653,8 +674,21 @@ def _resolve_call(
         method_name = parts[1]
 
         if obj_name in ("self", "this", "Self") and in_class:
+            # 优先匹配同文件中的类定义（调用方上下文）
+            if in_class in caller_info.classes:
+                cinfo = caller_info.classes[in_class]
+                if method_name in cinfo.methods:
+                    return (
+                        caller_file,
+                        f"{in_class}{sep}{method_name}",
+                        cinfo.methods[method_name],
+                        "method_call",
+                    )
+            # 回退到全局查找
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
+                if cfpath == caller_file:
+                    continue  # 已经检查过同文件
                 if method_name in cinfo.methods:
                     return (
                         cfpath,

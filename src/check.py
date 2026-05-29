@@ -147,8 +147,8 @@ class GitHelper:
     @staticmethod
     def get_modified_files(
         project_root: Path, since_commit: str | None = None
-    ) -> list[str]:
-        """获取变更的文件列表"""
+    ) -> list[str] | None:
+        """获取变更的文件列表，失败时返回 None"""
         try:
             from .git_backend import GitBackend
 
@@ -161,10 +161,10 @@ class GitHelper:
             return sorted(files)
         except Exception:
             logger.warning(
-                "Failed to get modified files from git, returning empty list",
+                "Failed to get modified files from git",
                 exc_info=True,
             )
-            return []
+            return None
 
 
 class DiagnosticRunner:

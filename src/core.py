@@ -366,8 +366,14 @@ class RepoMapEngine:
             summary_parts.append(f", {len(self.scan_stats.failed_files)} failed files")
         if self.scan_stats.timeout_triggered:
             summary_parts.append(", timeout triggered")
+        if self.scan_stats.git_failed:
+            summary_parts.append(", git status failed (using stale cache)")
 
-        if self.scan_stats.failed_files or self.scan_stats.timeout_triggered:
+        if (
+            self.scan_stats.failed_files
+            or self.scan_stats.timeout_triggered
+            or self.scan_stats.git_failed
+        ):
             logger.warning("".join(summary_parts))
         else:
             logger.info("".join(summary_parts))
@@ -737,7 +743,19 @@ class RepoMapEngine:
             self.graph.symbols[sym.id] = sym
             self.graph.file_symbols[file].append(sym.id)
 
-        # 符号已写入图，现在进行类型富化
+        self.graph.file_imports[file] = new_imports
+        self.graph.file_import_bindings[file] = import_bindings
+        self.graph.file_exports[file] = new_exports
+        self._mark_exported_symbols(file)
+        self.graph.file_calls[file] = new_calls
+
+        if new_routes:
+            self.routes.extend(new_routes)
+
+        # 缓存源文件字节，供调用图分析复用，避免二次读取
+        self._source_bytes[file] = content
+
+        # 符号已写入图，现在进行类型富化（在所有图写入完成后，释放 tree 之前）
         if lang in (
             "python",
             "typescript",
@@ -751,18 +769,6 @@ class RepoMapEngine:
             "cpp",
         ):
             self._enrich_symbol_types(file, tree, lang)
-
-        self.graph.file_imports[file] = new_imports
-        self.graph.file_import_bindings[file] = import_bindings
-        self.graph.file_exports[file] = new_exports
-        self._mark_exported_symbols(file)
-        self.graph.file_calls[file] = new_calls
-
-        if new_routes:
-            self.routes.extend(new_routes)
-
-        # 缓存源文件字节，供调用图分析复用，避免二次读取
-        self._source_bytes[file] = content
 
         # 立即释放 tree 对象以避免内存泄漏，只缓存 mtime
         del tree

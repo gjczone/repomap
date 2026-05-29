@@ -48,7 +48,7 @@ def _read_file(project_root: str, file_path: str) -> str | None:
             logger.warning(f"Skipping binary file: {file_path}")
             return None
         result = raw.decode("utf-8", errors="replace")
-        if len(result) > 131072:
+        if len(result) > 524288:
             logger.debug(
                 f"Truncating large file for state map: {file_path} "
                 f"({len(result)} bytes, using first 512KB)"

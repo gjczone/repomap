@@ -438,7 +438,7 @@ class TreeSitterAdapter:
         self.parsers: dict[str, Any] = {}
         # lang -> query_type -> compiled Query
         self._queries: dict[str, dict[str, Any]] = {}
-        self._query_error_logged = False  # 首次查询失败用 warning，后续用 debug
+        self._query_error_logged: dict[str, bool] = {}  # 按语言独立跟踪查询失败日志
         self._fallback_langs: set[str] = set()  # 使用回退解析器的语言
         self._init_parsers()
 
@@ -474,7 +474,7 @@ class TreeSitterAdapter:
                 self.parsers[lang] = Parser(Language(lang_fn()))
                 logger.debug(f"Parser loaded: {lang}")
             except Exception as e:
-                logger.debug(f"Parser unavailable [{lang}]: {e}")
+                logger.warning(f"Parser unavailable [{lang}]: {e}")
 
         # TypeScript / TSX：优先专用绑定，TypeScript 回退到 JavaScript parser，TSX 不回退以避免误解析 JSX。
         try:
@@ -582,7 +582,7 @@ class TreeSitterAdapter:
             logger.warning(f"Parser out of memory for {lang}, skipping file")
             return None
         except Exception as e:
-            logger.debug(f"Parse error [{lang}]: {e}")
+            logger.info(f"Parse error [{lang}]: {e}")
             return None
 
     def extract_symbols(
@@ -604,7 +604,7 @@ class TreeSitterAdapter:
             if not query:
                 continue
 
-            captures = self._run_query(query, root)
+            captures = self._run_query(query, root, lang)
             name_nodes: list[Any] = []
             def_nodes: list[tuple[Any, str]] = []
 
@@ -944,7 +944,7 @@ class TreeSitterAdapter:
             paths_by_line: dict[int, str] = {}
             names_by_line: dict[int, list[str]] = defaultdict(list)
 
-            for cap_name, node in self._run_query(query, tree.root_node):
+            for cap_name, node in self._run_query(query, tree.root_node, lang):
                 text = self._text(node)
                 line = node.start_point[0] + 1
                 if cap_name == "path":
@@ -962,7 +962,7 @@ class TreeSitterAdapter:
                     for name in names_by_line[line]:
                         results.add((name, line))
         else:
-            for cap_name, node in self._run_query(query, tree.root_node):
+            for cap_name, node in self._run_query(query, tree.root_node, lang):
                 if lang in ("javascript", "typescript", "tsx") and cap_name != "source":
                     continue
                 text = self._text(node).strip("\"'")
@@ -1541,7 +1541,7 @@ class TreeSitterAdapter:
         if not query:
             return []
         results = []
-        for cap_name, node in self._run_query(query, tree.root_node):
+        for cap_name, node in self._run_query(query, tree.root_node, lang):
             if cap_name != "name":
                 continue
             name = self._text(node)
@@ -1573,7 +1573,7 @@ class TreeSitterAdapter:
         for q in (route_query, explicit_query):
             if q is None:
                 continue
-            for captures in self._run_query_matches(q, tree.root_node):
+            for captures in self._run_query_matches(q, tree.root_node, lang):
                 route = self._http_route_from_captures(captures, lang, file)
                 if route is not None:
                     routes.append(route)
@@ -1728,7 +1728,9 @@ class TreeSitterAdapter:
             framework=framework,
         )
 
-    def _run_query_matches(self, query: Any, root: Any) -> list[dict[str, list[Any]]]:
+    def _run_query_matches(
+        self, query: Any, root: Any, lang: str = "unknown"
+    ) -> list[dict[str, list[Any]]]:
         """按 tree-sitter match 返回 captures，避免跨匹配错位拼接 route。"""
         try:
             from tree_sitter import QueryCursor  # type: ignore
@@ -1752,11 +1754,11 @@ class TreeSitterAdapter:
                 if results:
                     return results
         except Exception as e:
-            logger.debug(f"Query match run error: {e}")
+            logger.debug(f"Query match run error [{lang}]: {e}")
 
         # 兼容旧 runtime：只能拿到 capture 列表时，按捕获起始行粗分组后再严格校验。
         captures_by_line: dict[int, dict[str, list[Any]]] = {}
-        for cap_name, node in self._run_query(query, root):
+        for cap_name, node in self._run_query(query, root, lang):
             line = node.start_point[0]
             captures_by_line.setdefault(line, {}).setdefault(cap_name, []).append(node)
         return [captures for _, captures in sorted(captures_by_line.items())]
@@ -1789,7 +1791,9 @@ class TreeSitterAdapter:
 
     # ── 内部辅助 ────────────────────────────────────────────────────────────────
 
-    def _run_query(self, query: Any, root: Any) -> list[tuple[str, Any]]:
+    def _run_query(
+        self, query: Any, root: Any, lang: str = "unknown"
+    ) -> list[tuple[str, Any]]:
         """
         执行 tree-sitter query 并返回统一格式 list[(cap_name, Node)]
 
@@ -1816,11 +1820,11 @@ class TreeSitterAdapter:
                         pairs.append((cap_name, node))
             return pairs
         except Exception as e:
-            if not self._query_error_logged:
-                logger.warning(f"Query run error (first occurrence): {e}")
-                self._query_error_logged = True
+            if not self._query_error_logged.get(lang, False):
+                logger.warning(f"Query run error [{lang}] (first occurrence): {e}")
+                self._query_error_logged[lang] = True
             else:
-                logger.debug(f"Query run error: {e}")
+                logger.debug(f"Query run error [{lang}]: {e}")
             return []
 
     @staticmethod
