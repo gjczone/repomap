@@ -322,6 +322,39 @@ while True:
             self.assertEqual(len(result.references), 2)
             self.assertEqual(result.references[1].line, 3)
 
+    def test_send_handles_broken_pipe_error(self) -> None:
+        """验证 _send() 方法正确处理 BrokenPipeError。
+
+        场景：LSP 进程在 poll() 返回存活后、stdin.write() 执行前崩溃，
+        _send() 应该抛出包含 exit code 和诊断信息的 RuntimeError。
+        """
+        from unittest.mock import MagicMock
+        from src.lsp import StdioLspClient
+
+        # 创建一个模拟的 LSP 客户端
+        client = StdioLspClient.__new__(StdioLspClient)
+        client.command = ["fake-lsp"]
+        client._id_lock = MagicMock()
+        client._next_id = 1
+
+        # 创建一个模拟的进程，模拟 BrokenPipeError
+        mock_process = MagicMock()
+        mock_process.poll.return_value = 1  # 进程已退出，exit code 1
+        mock_process.stdin.write.side_effect = BrokenPipeError("Broken pipe")
+        mock_process.stderr.read.return_value = b"LSP server crashed"
+
+        client.process = mock_process
+
+        # 调用 _send()，期望抛出 RuntimeError
+        with self.assertRaises(RuntimeError) as context:
+            client._send({"method": "test"})
+
+        # 验证异常信息包含 exit code 和 stderr
+        error_msg = str(context.exception)
+        self.assertIn("fake-lsp", error_msg)
+        self.assertIn("exit code 1", error_msg)
+        self.assertIn("LSP server crashed", error_msg)
+
 
 if __name__ == "__main__":
     unittest.main()

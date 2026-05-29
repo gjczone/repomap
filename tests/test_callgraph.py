@@ -110,6 +110,29 @@ logger.info("started")
         assert "logging.getLogger" in call_names
         assert "logger.info" in call_names
 
+    def test_nested_function_call_attribution(self):
+        """验证嵌套函数内调用的归属正确。
+
+        场景：outer() 函数内定义了 inner() 函数，
+        inner() 内部的调用应归属于 inner，而不是 outer。
+        """
+        source = """\
+def outer():
+    def inner():
+        print("hello")
+    inner()
+"""
+        v = _parse_py(source)
+        # 验证嵌套函数被注册
+        assert "outer" in v.info.functions
+        assert "inner" in v.info.functions
+        # 验证调用归属：inner 内的 print 调用应归属于 inner
+        inner_calls = [c for c in v.info.calls if c[0] == "print"]
+        assert len(inner_calls) == 1
+        # 验证 inner() 调用归属于 outer
+        outer_calls = [c for c in v.info.calls if c[0] == "inner"]
+        assert len(outer_calls) == 1
+
     def test_nested_classes(self):
         source = """\
 class Outer:
@@ -411,6 +434,37 @@ import f "fmt"
         _walk_go_node(tree.root_node, info, [None])
         assert "f" in info.imports
 
+    def test_method_followed_by_function(self, ts_adapter):
+        """验证方法后紧跟独立函数时，函数调用不被错误关联到类方法。
+
+        场景：Go 方法 Handle() 后紧跟独立函数 processRequest()，
+        processRequest() 内部的调用应归属于 processRequest，
+        而不是 Server.processRequest。
+        """
+        source = b"""\
+package main
+
+func (s *Server) Handle() {
+    s.Start()
+}
+
+func processRequest() {
+    fmt.Println("hello")
+}
+"""
+        tree = ts_adapter.parse(source, "go")
+        info = ModuleInfo("main.go")
+        _walk_go_node(tree.root_node, info, [None])
+        # 验证方法被正确记录
+        assert "Server" in info.classes
+        assert "Handle" in info.classes["Server"].methods
+        # 验证独立函数被正确记录
+        assert "processRequest" in info.functions
+        # 验证调用归属：processRequest 内的调用不应有 receiver
+        process_calls = [c for c in info.calls if c[0] == "fmt.Println"]
+        assert len(process_calls) == 1
+        assert process_calls[0][1] == ""  # receiver 应为空
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rust 调用图测试（基于 tree-sitter）
@@ -470,6 +524,25 @@ use std::collections::HashMap;
         info = ModuleInfo("main.rs")
         _walk_rust_node(tree.root_node, info, [None])
         assert "HashMap" in info.imports
+
+    def test_use_self_import(self, ts_adapter):
+        """验证 Rust {self} 分组导入被正确记录。
+
+        场景：use std::collections::{self, HashMap}，
+        应该导入 collections 和 HashMap。
+        """
+        source = b"""\
+use std::collections::{self, HashMap};
+"""
+        tree = ts_adapter.parse(source, "rust")
+        info = ModuleInfo("main.rs")
+        _walk_rust_node(tree.root_node, info, [None])
+        # 验证 {self} 导入被正确记录
+        assert "collections" in info.imports
+        assert info.imports["collections"] == "std::collections"
+        # 验证普通导入也被正确记录
+        assert "HashMap" in info.imports
+        assert info.imports["HashMap"] == "std::collections::HashMap"
 
     def test_call_expression_simple(self, ts_adapter):
         source = b"""\

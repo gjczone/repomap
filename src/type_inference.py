@@ -18,12 +18,9 @@ from typing import Any
 
 from . import find_child_by_type as _find_child_by_type
 from . import find_children_by_type as _find_children_by_type
+from . import node_text as _node_text
 
 logger = logging.getLogger("repomap.type_inference")
-
-
-def _node_text(node: Any) -> str:
-    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
 
 
 def _extract_python_return_type(def_node: Any) -> str:
