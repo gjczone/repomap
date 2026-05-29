@@ -156,7 +156,12 @@ def find_route_consumers(
 
         # Read file content (bounded)
         try:
-            full_path = f"{project_root}/{file_path}"
+            from pathlib import Path
+
+            full_path = Path(project_root) / file_path
+            # 路径遍历检查
+            if not full_path.resolve().is_relative_to(Path(project_root).resolve()):
+                continue
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read(65536)  # 64KB max
         except (OSError, UnicodeDecodeError):
