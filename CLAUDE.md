@@ -2,7 +2,7 @@
 
 > **用 repomap 查 repomap，用 repomap 优化 repomap。** 开发和审查本项目时，必须使用 repomap 自身的命令（`overview`、`impact`、`refs`、`call-chain`、`verify`、`orphan`、`check`）来理解代码、评估变更影响、发现死代码和验证修改。这是 dogfooding 原则——自己吃自己的狗粮。
 
-`repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent *when* to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
+`repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent _when_ to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
 **Distribution**: Pure Python skill+CLI tool. Distributed via skill definition (`skills/repomap/`) and CLI binary (`repomap`). Version managed in `pyproject.toml`.
 
@@ -19,28 +19,27 @@
 
 All via `repomap <subcommand> --project <path>`.
 
-| Command | Purpose |
-|---|---|
-| `overview` | Project map: modules, entry points, reading order, hotspots, key symbols |
-| `scan` | (deprecated: use `overview --quick`) Quick scan: file/symbol counts and entry points |
-| `query --query "keyword"` | Topic/feature discovery with adaptive fallback (never empty) |
-| `search --query "text"` | BM25 semantic symbol search with keyword fallback |
-| `file-detail --file-path <f>` | Symbols and structure of a known file |
-| `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning |
-| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup |
-| `call-chain --symbol <name>` | Caller/callee context |
-| `refs --symbol <name>` | Reference discovery |
-| `verify [--quick] [--with-diff]` | Post-edit evidence gate with missed-files detection |
-| `check` | Compiler/type/lint diagnostics |
-| `routes [--json] [--with-consumers]` | HTTP/API route inventory + consumer mapping |
-| `state-map --symbol <name>` | Enum/const state values, writers, and readers |
-| `orphan [--json]` | Dead-code candidate discovery |
-| `hotspots` | Dense-file inventory |
-| `cache save` / `diff` | Graph baseline + comparison |
-| `lsp setup` | Auto-install LSP servers for detected languages |
-| `doctor` | Validate runtime + check LSP availability with `--lsp` |
-| `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |
-| `ready` | Pre-commit readiness check (verify + check + format) |
+| Command                                | Purpose                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------ |
+| `overview`                             | Project map: modules, entry points, reading order, hotspots, key symbols |
+| `query --query "keyword"`              | Topic/feature discovery with adaptive fallback (never empty)             |
+| `search --query "text"`                | BM25 semantic symbol search with keyword fallback                        |
+| `file-detail --file-path <f>`          | Symbols and structure of a known file                                    |
+| `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning                                    |
+| `query-symbol --symbol <name>`         | Exact/fuzzy symbol lookup                                                |
+| `call-chain --symbol <name>`           | Caller/callee context                                                    |
+| `refs --symbol <name>`                 | Reference discovery                                                      |
+| `verify [--quick] [--with-diff]`       | Post-edit evidence gate with missed-files detection                      |
+| `check`                                | Compiler/type/lint diagnostics                                           |
+| `routes [--json] [--with-consumers]`   | HTTP/API route inventory + consumer mapping                              |
+| `state-map --symbol <name>`            | Enum/const state values, writers, and readers                            |
+| `orphan [--json]`                      | Dead-code candidate discovery                                            |
+| `hotspots`                             | Dense-file inventory                                                     |
+| `cache save` / `diff`                  | Graph baseline + comparison                                              |
+| `lsp setup`                            | Auto-install LSP servers for detected languages                          |
+| `doctor`                               | Validate runtime + check LSP availability with `--lsp`                   |
+| `fix [--dry-run]`                      | Auto-fix: ruff --fix + eslint --fix                                      |
+| `ready`                                | Pre-commit readiness check (verify + check + format)                     |
 
 ```bash
 # Run from source
@@ -52,6 +51,7 @@ uv run python -m unittest discover -s tests -v
 # Build binary
 uv run --with pyinstaller python -m src.cli build-binary --output dist
 ```
+
 ## Architecture
 
 ```
@@ -104,12 +104,12 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 ## Change Map
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
-- **Graph/ranking**: `src/ranking.py` → `overview`, `scan`, `call-chain`, `query-symbol`, `impact`, `hotspots`
+- **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`, `hotspots`
 - **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter)
 - **Type inference**: `src/type_inference.py` → `query-symbol` return_type/params (11 languages)
 - **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
-- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run_* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
+- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
@@ -123,20 +123,20 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 
 ## Verification
 
-| Scope | Command |
-|---|---|
-| Parser | `uv run python -m unittest discover -s tests -p 'test_repomap_parser_ast.py' -v` |
-| CLI | `uv run python -m unittest discover -s tests -p 'test_repomap_cli.py' -v` |
-| Engine | `uv run python -m unittest discover -s tests -p 'test_repomap_engine.py' -v` |
-| Toolkit | `uv run python -m unittest discover -s tests -p 'test_repomap_toolkit.py' -v` |
-| LSP | `uv run python -m unittest discover -s tests -p 'test_repomap_lsp.py' -v` |
-| Git Backend | `uv run python -m pytest tests/test_git_backend.py -v` |
-| Call Graph | `uv run python -m pytest tests/test_callgraph.py -v` |
-| Type Inference | `uv run python -m pytest tests/test_type_inference.py -v` |
-| Binary E2E | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v` |
-| Full | `uv run python -m unittest discover -s tests -v && uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q` |
-| Smoke | `repomap doctor --project . && repomap overview --project . && repomap verify --project . --quick` |
-| Typecheck | `uv run mypy src/ --ignore-missing-imports --no-error-summary` |
+| Scope          | Command                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parser         | `uv run python -m unittest discover -s tests -p 'test_repomap_parser_ast.py' -v`                                                                                            |
+| CLI            | `uv run python -m unittest discover -s tests -p 'test_repomap_cli.py' -v`                                                                                                   |
+| Engine         | `uv run python -m unittest discover -s tests -p 'test_repomap_engine.py' -v`                                                                                                |
+| Toolkit        | `uv run python -m unittest discover -s tests -p 'test_repomap_toolkit.py' -v`                                                                                               |
+| LSP            | `uv run python -m unittest discover -s tests -p 'test_repomap_lsp.py' -v`                                                                                                   |
+| Git Backend    | `uv run python -m pytest tests/test_git_backend.py -v`                                                                                                                      |
+| Call Graph     | `uv run python -m pytest tests/test_callgraph.py -v`                                                                                                                        |
+| Type Inference | `uv run python -m pytest tests/test_type_inference.py -v`                                                                                                                   |
+| Binary E2E     | `uv run --with pyinstaller python -m unittest discover -s tests -p 'test_repomap_binary_e2e.py' -v`                                                                         |
+| Full           | `uv run python -m unittest discover -s tests -v && uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q` |
+| Smoke          | `repomap doctor --project . && repomap overview --project . && repomap verify --project . --quick`                                                                          |
+| Typecheck      | `uv run mypy src/ --ignore-missing-imports --no-error-summary`                                                                                                              |
 
 ## README Maintenance
 
@@ -144,10 +144,11 @@ The public README files serve different audiences than this document:
 
 - **README.md** (English, primary): user-facing — what, how to install, how to use. Keep concise, answer "what/why/how" within 10 seconds.
 - **README.zh-CN.md** (Chinese): same content and structure — not literal translation but content-equivalent. All sections, commands, tables must exist in both.
-- **SKILL.md** (`skills/repomap/SKILL.md`): AI agent operating procedure. Describes *when and how* to call each command. Distributed to users.
+- **SKILL.md** (`skills/repomap/SKILL.md`): AI agent operating procedure. Describes _when and how_ to call each command. Distributed to users.
 
 **Rules for README changes**:
-- README describes the *product*, not the implementation. No module names, internal architecture, or refactoring details.
+
+- README describes the _product_, not the implementation. No module names, internal architecture, or refactoring details.
 - Binary distribution is via CLI binary (`repomap`), not manual download.
 - Language support list must match `src/parser.py` and `pyproject.toml`.
 - When adding commands, update README.md, README.zh-CN.md, and SKILL.md.
@@ -182,6 +183,7 @@ The public README files serve different audiences than this document:
 **现有语言测试覆盖（8种）**：Python, TypeScript, Go, Rust, Java, Kotlin, Swift, C#, C++
 
 **优先级**：
+
 1. **第一优先级**：Python, Rust, TypeScript — 核心使用场景，必须保证稳定
 2. **第二优先级**：Go, Java, C#, C++ — 常见企业语言
 3. **第三优先级**：Kotlin, Swift — 可选依赖，跳过测试已通过
@@ -221,31 +223,34 @@ The public README files serve different audiences than this document:
 
 **Review History**:
 
-| Round | Issue | Findings | P0 | Primary Dimensions |
-|-------|-------|----------|----|--------------------|
-| 1 | #5 | 3 HIGH + 4 MED + 370 dead lines + 8 dup constants | — | LSP transport / dead code / constant dedup |
-| 2 | #31 | 44 findings | 2 | Full audit: shell injection / type mismatch / systemic silent swallowing |
-| 3 | #33 | 53 findings | 7 | Functional bugs / edge cases |
-| 4 | #36,39,40 | 12+ items | — | scan false-positive status / LSP process leaks / silent swallowing |
-| 5 | #41 | — | — | LSP concurrency / core algorithms / type+route extraction / build+distribution |
-| 6 | #44 | 34+ | — | 5-angle full coverage |
-| 7 | #46 | 94→24 | 3 | LLM interaction / boundaries / algorithms / performance / architecture |
+| Round | Issue     | Findings                                          | P0  | Primary Dimensions                                                             |
+| ----- | --------- | ------------------------------------------------- | --- | ------------------------------------------------------------------------------ |
+| 1     | #5        | 3 HIGH + 4 MED + 370 dead lines + 8 dup constants | —   | LSP transport / dead code / constant dedup                                     |
+| 2     | #31       | 44 findings                                       | 2   | Full audit: shell injection / type mismatch / systemic silent swallowing       |
+| 3     | #33       | 53 findings                                       | 7   | Functional bugs / edge cases                                                   |
+| 4     | #36,39,40 | 12+ items                                         | —   | scan false-positive status / LSP process leaks / silent swallowing             |
+| 5     | #41       | —                                                 | —   | LSP concurrency / core algorithms / type+route extraction / build+distribution |
+| 6     | #44       | 34+                                               | —   | 5-angle full coverage                                                          |
+| 7     | #46       | 94→24                                             | 3   | LLM interaction / boundaries / algorithms / performance / architecture         |
 
 **When to review**: After every non-trivial code change, before merge. Scope = changed files + files reported by `impact --files`.
 
 **Agent configuration**:
+
 - 1–2 files → 1 agent, 3–10 files → 2–3 agents, 10+ files → 4–5 agents
 - Always include an Integrity Audit agent (detects code that looks correct but is actually broken)
 - Assign non-overlapping review dimensions (Bug Hunter / Integrity Audit / Anti-Bloat) to reduce false positives
 - Each agent prompt must state: scope + direction + output format, in ≤3 sentences
 
 **Priority classification**:
+
 - P0 (fix immediately): security vulnerabilities, data loss, crashes, broken contracts
 - P1 (fix now): real bugs, clear functional defects
 - P2 (fix if time): code quality issues, small optimizations
 - P3 (file follow-up issue): too large for one PR, needs independent design
 
 **Known false-positive patterns (skip during review)**:
+
 - `src/resolver.py` import resolution fall-through → intentional, not a bug (ref: #46 B1 false positive)
 - Swift/Kotlin query compile warnings → tree-sitter grammar limitation, expected
 - `except Exception` in top-level CLI handlers → intentional crash guard
@@ -253,18 +258,21 @@ The public README files serve different audiences than this document:
 - Pyright `reportAttributeAccessIssue` on dynamic attributes → correct at runtime
 
 **Systemic weaknesses (high-recurrence areas — check every review)**:
+
 - Silent error swallowing: 15+ historical sites of `except Exception: return []/None/{}` — prevents crashes at the cost of debuggability
 - Unbounded caches: gitignore / topic co-change / LSP notifications caches have no eviction
 - Missing resource caps: file reads, AST walks, rglob, git history queries lack upper bounds
 - Security gaps: shell injection (#31), argument injection, lax path validation concentrated in CLI layer
 
 **Fix discipline**:
+
 - Fixes from review rounds introduce new bugs at ~5–10% rate; always run regression tests after fixing
 - Fixes touching `resolver`/`lsp`/`git` core paths carry the highest risk — validate extra carefully
 - Do not over-engineer a "fix" — if the original code is correct but improvable, file as P3, do not change it now
 - Fix P0/P1 items one at a time in priority order; verify each before moving to the next; never batch-fix
 
 **Diminishing returns**:
+
 - Rounds 1–3: find ~80% of bugs, P0/P1 dense
 - Rounds 4–5: find ~15%, systemic weaknesses (not single-point bugs) dominate
 - Rounds 6–7: find ~5%, false-positive rate rises to 10–15%
@@ -277,6 +285,7 @@ When using `repomap`, AI agents encounter tool boundaries that specs don't cover
 ## Skill Distribution
 
 The open-source skill (`skills/repomap/SKILL.md`) is distributed to users. The local copy (`~/.agents/skills/repomap/SKILL.md`) must be byte-identical to the open-source version. The skill is a single file — no subdirectories. Neither may include:
+
 - Any references to local file paths (e.g., absolute paths on maintainer's machine)
 - Any maintainer-specific workflow or feedback mechanisms
 
@@ -367,6 +376,7 @@ repomap overview --project .
 When the user asks to release a new version, follow this automated flow. **No manual checkpoints — every step completes before the next begins. If a step requires waiting (CI), poll automatically and report progress.**
 
 ### Release Quality Gates
+
 - Treat release as a full contract, not a version bump: local tests, rebuilt binary, CI, GitHub Release page, and npm publish must all be verified.
 - Keep one version chain: Python package version in `pyproject.toml` is the single source of truth.
 - Update the source of truth when behavior or distribution changes: workflow files, README files, CLAUDE.md, and SKILL.md must not describe conflicting release paths.
@@ -375,6 +385,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - Before push or release, confirm clean git status, target remote, branch, tag target commit, and CI target branch.
 
 ### Version Decision
+
 - **docs/README changes only**: patch bump (x.y.Z)
 - **New feature or behavior enhancement**: minor bump (x.Y.z)
 - **Breaking changes or major rework**: major bump (X.y.z)
@@ -391,6 +402,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - Before pushing, run `grep '^version = ' pyproject.toml` to confirm the current version, then write the commit message accordingly
 
 ### Commit Message
+
 - Format: `[release]: vX.Y.Z — English summary of primary change`
 - Version number in message MUST match `pyproject.toml` version exactly.
 - The description should capture the primary change in English (5-10 words).
@@ -398,6 +410,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 - Type tag `[release]` is always in English; the summary after `—` is also in English.
 
 ### Pre-Release Testing
+
 - **MANDATORY**: smoke test with at least 2-3 local projects before any release commit
 - Test in projects with different language mixes (pure Python, TS+Python, etc.)
 - Key commands to verify: `overview`, `query`, `file-detail`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
@@ -428,6 +441,7 @@ RELEASE_NOTES
 - **Bilingual, independent sections**: English first, then Chinese. Two complete, independent sections separated by `---`. Do NOT interleave languages within sections.
 - **Text-only**: No binary attachments. The release notes are the changelog.
 - **Structure**:
+
   ```
   ## What's New
   (English content — complete paragraphs, no Chinese)
@@ -449,9 +463,11 @@ RELEASE_NOTES
   ## 变更文件
   (Chinese file list)
   ```
+
 - **Never use inline bilingual format** like `## What's New / 更新内容`. Each language section stands alone.
 
 ### CI Wait Protocol
+
 1. After `git push`, immediately poll CI status.
 2. If CI is `in_progress` or `queued`: wait 60s, poll again. Report "CI running…" to the user.
 3. If CI completes but `conclusion=failure`: report the failure and stop.
@@ -466,6 +482,7 @@ RELEASE_NOTES
 3. **`install.js` or npm `package.json` changes** → locally verify `npm install -g` produces an executable binary
 
 **Pre-push checks (run before every commit):**
+
 ```bash
 # 1. Confirm smoke test commands match current CLI signature
 grep "repomap " .github/workflows/build-binaries.yml
@@ -491,8 +508,9 @@ grep '"name"' npm/wrapper/package.json npm/platforms/*/package.json
 - If a platform npm publish fails with "version already exists", check for upstream version conflicts; do NOT rely on `|| echo` to silently skip
 
 ### Completion Report
+
 After release is fully done, report:
+
 - Git tag and commit hash
 - GitHub Release URL
 - CI run URL
-
