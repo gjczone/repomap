@@ -550,6 +550,43 @@ class TestLspProcessConsolidation(unittest.TestCase):
         self.assertIn("hover", result)
         self.assertEqual(result["hover"]["contents"], "def foo() -> None")
 
+    def test_impact_json_uses_envelope(self) -> None:
+        """P1-6: impact --json must use json_envelope()."""
+        from src.cli.commands.impact import run_impact
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "dummy.py").write_text("def target(): pass\n")
+            engine = _make_engine(tmpdir)
+            # Mock additional attributes needed by impact
+            engine.scan_stats.processed_files = 1
+            engine.scan_stats.listed_source_files = 1
+            engine.scan_stats.selected_source_files = 1
+            engine.scan_stats.filtered_path_files = 0
+            engine.scan_stats.filtered_large_files = 0
+            engine.scan_stats.truncated_files = 0
+            engine.scan_stats.failed_files = set()
+            engine.scan_stats.scan_duration_ms = 100
+            engine.scan_stats.timeout_triggered = False
+            # Mock graph attributes for impact
+            engine.graph.incoming = {}
+            engine.graph.outgoing = {}
+            engine.entry_points.return_value = []
+            engine.file_analysis.return_value = {}
+            with patch("src.cli.commands.impact._scan_engine", return_value=engine):
+                buf = io.StringIO()
+                with patch("sys.stdout", buf):
+                    rc = run_impact(tmpdir, 100, ["dummy.py"], 100, as_json=True)
+                output = buf.getvalue()
+        self.assertEqual(rc, 0)
+        data = _parse_envelope(self, output)
+        self.assertEqual(data["command"], "impact")
+        # P1-7: project must be resolved path
+        self.assertEqual(data["project"], str(Path(tmpdir).resolve()))
+        # P1-8: scan_stats should be inside result, not top-level
+        self.assertIn("scan_stats", data["result"])
+        self.assertNotIn("scanStats", data)
+        self.assertNotIn("scan_stats", data)
+
 
 if __name__ == "__main__":
     unittest.main()
