@@ -257,7 +257,7 @@ def _engine_to_session_payload(
         "repomap_version": get_repomap_version(),
         "project_root": project_root,
         "fingerprint": fingerprint,
-        "incremental": getattr(engine, '_inc_cache_loaded', False),
+        "incremental": getattr(engine, "_inc_cache_loaded", False),
         "scan_state": engine.scan_state,
         "scan_stats": {
             "listed_source_files": engine.scan_stats.listed_source_files,
@@ -418,7 +418,9 @@ def _restore_engine_from_session_payload(
     return engine
 
 
-def _load_session_engine(project_root: str, fingerprint: str, incremental: bool = False) -> RepoMapEngine | None:
+def _load_session_engine(
+    project_root: str, fingerprint: str, incremental: bool = False
+) -> RepoMapEngine | None:
     cache_path = get_session_cache_path(project_root)
     if not cache_path.exists():
         return None

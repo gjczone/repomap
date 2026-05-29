@@ -509,12 +509,16 @@ def _walk_rust_node(
                 brace_start = use_path.index("{")
                 brace_end = use_path.rindex("}")
                 base_path = use_path[:brace_start].rstrip("::")
-                items_str = use_path[brace_start + 1:brace_end]
+                items_str = use_path[brace_start + 1 : brace_end]
                 items = [item.strip() for item in items_str.split(",")]
                 for item in items:
                     if item == "self":
                         # use std::collections::{self} -> std::collections
-                        local = base_path.split("::")[-1] if "::" in base_path else base_path
+                        local = (
+                            base_path.split("::")[-1]
+                            if "::" in base_path
+                            else base_path
+                        )
                     else:
                         local = item
                         full_path = f"{base_path}::{item}" if base_path else item

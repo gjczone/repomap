@@ -210,7 +210,9 @@ def find_route_consumers(
                 match_type = ""
 
                 # 精确匹配：直接查找
-                route = route_by_literal.get(route_literal) or route_by_normalized.get(route_literal)
+                route = route_by_literal.get(route_literal) or route_by_normalized.get(
+                    route_literal
+                )
                 if route:
                     confidence = "high"
                     match_type = "exact_literal"

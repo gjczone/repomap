@@ -369,7 +369,11 @@ class RepoMapEngine:
         if self.scan_stats.git_failed:
             summary_parts.append(", git status failed (using stale cache)")
 
-        if self.scan_stats.failed_files or self.scan_stats.timeout_triggered or self.scan_stats.git_failed:
+        if (
+            self.scan_stats.failed_files
+            or self.scan_stats.timeout_triggered
+            or self.scan_stats.git_failed
+        ):
             logger.warning("".join(summary_parts))
         else:
             logger.info("".join(summary_parts))

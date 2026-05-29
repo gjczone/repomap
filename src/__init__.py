@@ -74,7 +74,10 @@ def get_repomap_version() -> str:
 
         return VERSION
     except Exception:
-        logger.warning("Failed to load VERSION from _version.py, falling back to 0.0.0-dev", exc_info=True)
+        logger.warning(
+            "Failed to load VERSION from _version.py, falling back to 0.0.0-dev",
+            exc_info=True,
+        )
     return "0.0.0-dev"
 
 

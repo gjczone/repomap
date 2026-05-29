@@ -864,7 +864,9 @@ class StdioLspClient:
                 try:
                     stream.close()
                 except Exception:
-                    logger.debug("Stream close failed during LSP cleanup", exc_info=True)
+                    logger.debug(
+                        "Stream close failed during LSP cleanup", exc_info=True
+                    )
             if self._reader is not None and self._reader.is_alive():
                 self._reader.join(timeout=3)
             if self._stderr_reader is not None and self._stderr_reader.is_alive():
@@ -1084,7 +1086,9 @@ def _symbol_position(
             if index >= 0:
                 character = index
     except OSError:
-        logger.warning("Symbol position fallback: cannot read file %s", abs_file, exc_info=True)
+        logger.warning(
+            "Symbol position fallback: cannot read file %s", abs_file, exc_info=True
+        )
     return abs_file, zero_based_line, character
 
 

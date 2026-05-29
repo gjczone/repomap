@@ -1728,7 +1728,9 @@ class TreeSitterAdapter:
             framework=framework,
         )
 
-    def _run_query_matches(self, query: Any, root: Any, lang: str = "unknown") -> list[dict[str, list[Any]]]:
+    def _run_query_matches(
+        self, query: Any, root: Any, lang: str = "unknown"
+    ) -> list[dict[str, list[Any]]]:
         """按 tree-sitter match 返回 captures，避免跨匹配错位拼接 route。"""
         try:
             from tree_sitter import QueryCursor  # type: ignore
@@ -1789,7 +1791,9 @@ class TreeSitterAdapter:
 
     # ── 内部辅助 ────────────────────────────────────────────────────────────────
 
-    def _run_query(self, query: Any, root: Any, lang: str = "unknown") -> list[tuple[str, Any]]:
+    def _run_query(
+        self, query: Any, root: Any, lang: str = "unknown"
+    ) -> list[tuple[str, Any]]:
         """
         执行 tree-sitter query 并返回统一格式 list[(cap_name, Node)]
 
