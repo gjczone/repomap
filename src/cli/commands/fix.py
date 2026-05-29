@@ -12,6 +12,7 @@ from ..handlers import (
     _resolve_project,
 )
 from .verify import run_verify, run_check
+from src.core import _DEFAULT_SKIP_DIRS
 
 logger = logging.getLogger("repomap")
 
@@ -54,23 +55,7 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
         try:
             eslint_files: list[str] = []
             valid_exts = {".js", ".ts", ".jsx", ".tsx"}
-            skip_parts = {
-                "node_modules",
-                ".git",
-                "dist",
-                "build",
-                "__pycache__",
-                ".venv",
-                "venv",
-                "target",
-                ".next",
-                ".nuxt",
-                ".cache",
-                ".pytest_cache",
-                ".mypy_cache",
-                ".ruff_cache",
-                "coverage",
-            }
+            skip_parts = _DEFAULT_SKIP_DIRS | {"coverage"}
             for dirpath, dirnames, filenames in os.walk(str(project_root)):
                 # 剪枝：跳过不需要遍历的目录
                 dirnames[:] = [d for d in dirnames if d not in skip_parts]

@@ -689,8 +689,30 @@ class StdioLspClient:
     def _send(self, payload: dict[str, Any]) -> None:
         if self.process is None or self.process.stdin is None:
             raise RuntimeError("LSP client not initialized: process or stdin is None")
-        self.process.stdin.write(_json_rpc_frame(payload))
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write(_json_rpc_frame(payload))
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            # TOCTOU 竞态：进程可能在 poll() 返回存活后、stdin.write() 执行前崩溃
+            exit_code = self.process.poll()
+            stderr_tail = ""
+            try:
+                if self.process.stderr is not None:
+                    remaining = self.process.stderr.read()
+                    if remaining:
+                        stderr_tail = remaining.decode(
+                            "utf-8", errors="replace"
+                        ).strip()[-200:]
+            except Exception:
+                logger.debug(
+                    "Failed to read LSP stderr for error diagnostics", exc_info=True
+                )
+            detail = f"exit code {exit_code}"
+            if stderr_tail:
+                detail += f", stderr: {stderr_tail}"
+            raise RuntimeError(
+                f"LSP server {self.command[0]!r} crashed during send ({detail}): {exc}"
+            ) from exc
 
     def initialize(self) -> None:
         response = self.request(

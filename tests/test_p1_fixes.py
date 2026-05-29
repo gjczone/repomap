@@ -131,16 +131,6 @@ class TestP1_9_SignalWeightUnified(unittest.TestCase):
         )
         self.assertEqual(signal_weight_for_symbol("class", "MyClass", "exported"), 1.0)
 
-    def test_topic_delegates_to_shared(self) -> None:
-        """topic.py 的 _signal_weight_for_symbol 应委托给统一实现。"""
-        from src.topic import _signal_weight_for_symbol
-
-        sym = MagicMock()
-        sym.kind = "element"
-        sym.name = "div"
-        sym.visibility = "private"
-        self.assertEqual(_signal_weight_for_symbol(sym), 0.002)
-
 
 class TestP1_10_FindChildByTypeUnified(unittest.TestCase):
     """P1-10: _find_child_by_type 应在 __init__.py 统一定义。"""

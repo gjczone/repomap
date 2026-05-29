@@ -70,7 +70,7 @@ _DEFAULT_SKIP_DIRS = frozenset(
     }
 )
 
-# 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
+# 以下两常量作为 GitignoreParser 的补充——用于精确匹配已知文件名的分类和敏感文件过滤
 SUPPORTING_FILE_NAMES = {
     "AGENTS.md",
     "CLAUDE.md",
@@ -98,14 +98,6 @@ SUPPORTING_FILE_NAMES = {
     "eslint.config.mjs",
     "pytest.ini",
     "tox.ini",
-}
-
-SENSITIVE_SUPPORTING_FILE_NAMES = {
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.production",
-    ".env.test",
 }
 
 
@@ -618,7 +610,7 @@ class RepoMapEngine:
         name_lower = name.lower()
         if self._should_skip_path(file):
             return True
-        if name in SENSITIVE_SUPPORTING_FILE_NAMES or name_lower.startswith(".env."):
+        if name == ".env" or name_lower.startswith(".env."):
             return True
         if name_lower.endswith((".pem", ".key", ".p12", ".pfx")):
             return True

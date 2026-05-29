@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import json_dumps, json_loads
+from . import json_loads
 
 logger = logging.getLogger("repomap")
 
@@ -1165,82 +1165,3 @@ class RepoMapChecker:
                 ]
             ),
         }
-
-
-def check_project(
-    project_root: str,
-    types: list[str] | None = None,
-    max_items: int = 100,
-    symbols_map: dict[str, Any] | None = None,
-    since_commit: str | None = None,
-    modified_files: list[str] | None = None,
-    lsp_timeout: float = 8.0,
-    lsp_max_files: int = 20,
-) -> dict[str, Any]:
-    """
-    便捷函数：检查项目诊断
-
-    Args:
-        project_root: 项目根目录路径
-        types: 指定语言类型，None 则自动检测
-        max_items: 每种工具最多返回的问题数
-        symbols_map: 可选的符号图，用于关联错误到符号
-        since_commit: 检查自某 commit 以来的变更
-        modified_files: 显式指定要检查的文件列表
-
-    Returns:
-        诊断报告字典
-    """
-    checker = RepoMapChecker(project_root, max_items)
-    return checker.check(
-        types=types,
-        resolve_symbols=symbols_map is not None,
-        symbols_map=symbols_map,
-        since_commit=since_commit,
-        modified_files=modified_files,
-        lsp_timeout=lsp_timeout,
-        lsp_max_files=lsp_max_files,
-    )
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        print("Usage: python repomap_check.py <project_root> [types...]")
-        print("       python repomap_check.py <project_root> --since HEAD~1")
-        print("       python repomap_check.py <project_root> --files file1.py file2.py")
-        print("Example: python repomap_check.py ./my-project typescript")
-        sys.exit(1)
-
-    root = sys.argv[1]
-
-    # 解析参数
-    types = None
-    since_commit = None
-    modified_files = None
-
-    i = 2
-    while i < len(sys.argv):
-        if sys.argv[i] == "--since" and i + 1 < len(sys.argv):
-            since_commit = sys.argv[i + 1]
-            i += 2
-        elif sys.argv[i] == "--files":
-            modified_files = []
-            i += 1
-            while i < len(sys.argv) and not sys.argv[i].startswith("--"):
-                modified_files.append(sys.argv[i])
-                i += 1
-        else:
-            if types is None:
-                types = []
-            types.append(sys.argv[i])
-            i += 1
-
-    result = check_project(
-        root,
-        types=types if types else None,
-        since_commit=since_commit,
-        modified_files=modified_files,
-    )
-    print(json_dumps(result, indent=2, ensure_ascii=False))

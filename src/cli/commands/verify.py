@@ -765,7 +765,7 @@ def run_verify(
         if status == "warning":
             return EXIT_NO_RESULTS
         ver_status = str(payload.get("status", "unknown"))
-        has_risks = bool(payload.get("contract_risks"))
+        has_risks = bool(payload.get("contractRisks"))
         for hint in verify_hint(status=ver_status, has_contract_risks=has_risks):
             print(hint, file=sys.stderr)
         return 0

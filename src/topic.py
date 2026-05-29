@@ -12,7 +12,7 @@ import re
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from . import RepoGraph
@@ -651,18 +651,6 @@ def _load_co_change_scores(
 # LOW_SIGNAL_KINDS 已从 __init__.py 统一导入，不再重复定义
 
 
-def _signal_weight_for_symbol(sym: Any) -> float:
-    """独立版符号信号权重，委托给 __init__.py 中的统一实现。"""
-    kind = getattr(sym, "kind", "") if hasattr(sym, "kind") else sym.get("kind", "")
-    name = getattr(sym, "name", "") if hasattr(sym, "name") else sym.get("name", "")
-    visibility = (
-        getattr(sym, "visibility", "")
-        if hasattr(sym, "visibility")
-        else sym.get("visibility", "")
-    )
-    return signal_weight_for_symbol(kind, name, visibility)
-
-
 def find_untested_symbols(
     graph: "RepoGraph",
     min_incoming_calls: int = 2,
@@ -700,7 +688,7 @@ def find_untested_symbols(
         incoming = sum(1 for e in graph.incoming.get(sid, []) if e.kind == "call")
         if incoming < min_incoming_calls:
             continue
-        sw = _signal_weight_for_symbol(sym)
+        sw = signal_weight_for_symbol(sym.kind, sym.name, sym.visibility)
         score = incoming * sw * 5.0
         if score < min_score:
             continue

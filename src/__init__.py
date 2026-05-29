@@ -467,3 +467,11 @@ def compare_graph_snapshots(
             ],
         },
     }
+
+
+def node_text(node: Any) -> str:
+    """从 tree-sitter 节点提取文本内容。
+
+    用于 callgraph.py 和 type_inference.py 中的符号名称提取。
+    """
+    return node.text.decode("utf-8") if getattr(node, "text", None) else ""

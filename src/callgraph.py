@@ -24,12 +24,9 @@ from typing import Any
 
 from . import find_child_by_type as _find_child_by_type
 from . import find_children_by_type as _find_children_by_type
+from . import node_text as _node_text
 
 logger = logging.getLogger("repomap.callgraph")
-
-
-def _node_text(node: Any) -> str:
-    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
 
 
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
@@ -68,7 +65,7 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
     def __init__(self, filepath: str):
         self.info = ModuleInfo(filepath)
         self._current_class: list[str] = []
-        self._in_function: bool = False
+        self._func_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         cls = ClassInfo(node.name)
@@ -83,40 +80,36 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if not self._current_class:
             self.info.functions[node.name] = node.lineno
-        old_in_func = self._in_function
-        self._in_function = True
-        self._visit_calls_in_func(node)
-        self._in_function = old_in_func
+        # 保存旧值，设置新值，递归子节点，恢复旧值
+        self._func_stack.append(node.name)
+        self.generic_visit(node)
+        self._func_stack.pop()
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         if not self._current_class:
             self.info.functions[node.name] = node.lineno
-        old_in_func = self._in_function
-        self._in_function = True
-        self._visit_calls_in_func(node)
-        self._in_function = old_in_func
+        # 保存旧值，设置新值，递归子节点，恢复旧值
+        self._func_stack.append(node.name)
+        self.generic_visit(node)
+        self._func_stack.pop()
 
     def visit_Call(self, node: ast.Call) -> None:
-        if not self._in_function and not self._current_class:
-            call_name = self._extract_call_name(node.func)
-            if call_name:
+        call_name = self._extract_call_name(node.func)
+        if call_name:
+            # 根据函数名栈判断当前函数上下文
+            if self._func_stack:
+                # 在函数内部，记录调用
+                self.info.calls.append(
+                    (
+                        call_name,
+                        self._current_class[-1] if self._current_class else "",
+                        node.lineno,
+                    )
+                )
+            else:
+                # 在模块级别，记录调用
                 self.info.calls.append((call_name, "", node.lineno))
         self.generic_visit(node)
-
-    def _visit_calls_in_func(
-        self, node: ast.FunctionDef | ast.AsyncFunctionDef
-    ) -> None:
-        for child in ast.walk(node):
-            if isinstance(child, ast.Call):
-                call_name = self._extract_call_name(child.func)
-                if call_name:
-                    self.info.calls.append(
-                        (
-                            call_name,
-                            self._current_class[-1] if self._current_class else "",
-                            child.lineno,
-                        )
-                    )
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -336,7 +329,13 @@ def _walk_go_node(
                 if recv_type not in info.classes:
                     info.classes[recv_type] = ClassInfo(recv_type)
                 info.classes[recv_type].methods[method_name] = node.start_point[0] + 1
+                # 保存旧值，设置新值，递归子节点，恢复旧值
+                old = current_receiver[0]
                 current_receiver[0] = recv_type
+                for child in node.children:
+                    _walk_go_node(child, info, current_receiver, depth + 1)
+                current_receiver[0] = old
+                return
 
     if node.type == "import_declaration":
         spec_list = _find_child_by_type(node, "import_spec_list")
@@ -519,6 +518,7 @@ def _walk_rust_node(
                             if "::" in base_path
                             else base_path
                         )
+                        info.imports[local] = base_path
                     else:
                         local = item
                         full_path = f"{base_path}::{item}" if base_path else item
