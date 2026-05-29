@@ -344,7 +344,7 @@ class GraphAnalyzer:
                 ),
                 "exported_count": weighted_exported_count,
                 "public_count": weighted_public_count,
-                "is_test_file": self._is_test_like_file(file_path),
+                "is_test_file": is_test_like_file(file_path),
                 "call_edges": 0,
                 "cross_file_call_edges": 0,
                 "import_edges": 0,
@@ -369,7 +369,7 @@ class GraphAnalyzer:
                     "implementation_score": 0.0,
                     "exported_count": 0,
                     "public_count": 0,
-                    "is_test_file": self._is_test_like_file(source_file),
+                    "is_test_file": is_test_like_file(source_file),
                     "call_edges": 0,
                     "cross_file_call_edges": 0,
                     "import_edges": 0,
@@ -397,7 +397,7 @@ class GraphAnalyzer:
                             "implementation_score": 0.0,
                             "exported_count": 0,
                             "public_count": 0,
-                            "is_test_file": self._is_test_like_file(target_file),
+                            "is_test_file": is_test_like_file(target_file),
                             "call_edges": 0,
                             "cross_file_call_edges": 0,
                             "import_edges": 0,
@@ -636,11 +636,6 @@ class GraphAnalyzer:
         }:
             return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
         return parts[0]
-
-    @staticmethod
-    def _is_test_like_file(file_path: str) -> bool:
-        """判断是否为测试文件。"""
-        return is_test_like_file(file_path)
 
 
 class EdgeBuilder:

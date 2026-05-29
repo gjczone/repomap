@@ -10,7 +10,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-import os
 from typing import TYPE_CHECKING
 
 logger = logging.getLogger("repomap.state_map")
@@ -41,7 +40,7 @@ def _read_file(project_root: str, file_path: str) -> str | None:
     """读取文件内容。返回 None 时通过日志区分原因（安全拦截/二进制/IO异常）。"""
     try:
         resolved = (Path(project_root) / file_path).resolve()
-        if not str(resolved).startswith(str(Path(project_root).resolve()) + os.sep):
+        if not resolved.is_relative_to(Path(project_root).resolve()):
             logger.debug(f"Path traversal blocked: {file_path}")
             return None
         raw = resolved.read_bytes()
