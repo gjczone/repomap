@@ -147,8 +147,8 @@ class GitHelper:
     @staticmethod
     def get_modified_files(
         project_root: Path, since_commit: str | None = None
-    ) -> list[str]:
-        """获取变更的文件列表"""
+    ) -> list[str] | None:
+        """获取变更的文件列表，失败时返回 None"""
         try:
             from .git_backend import GitBackend
 

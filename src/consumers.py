@@ -210,13 +210,13 @@ def find_route_consumers(
                 match_type = ""
 
                 # 精确匹配：直接查找
-                route = route_by_literal.get(route_literal) or route_by_normalized.get(
+                matched_route = route_by_literal.get(route_literal) or route_by_normalized.get(
                     route_literal
                 )
-                if route:
+                if matched_route:
                     confidence = "high"
                     match_type = "exact_literal"
-                    route_key = f"{route.method} {route.path}"
+                    route_key = f"{matched_route.method} {matched_route.path}"
                 else:
                     # 动态匹配：使用正则
                     for route_norm, route in route_by_normalized.items():

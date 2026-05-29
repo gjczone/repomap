@@ -695,7 +695,6 @@ def _resolve_call(
                         f"{in_class}{sep}{method_name}",
                         cinfo.methods[method_name],
                         "method_call",
-                        "method_call",
                     )
 
         if obj_name == "cls" and in_class:
