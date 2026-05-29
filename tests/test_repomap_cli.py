@@ -977,7 +977,6 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         help_text = stdout.getvalue()
         for command in (
-            "scan",
             "overview",
             "call-chain",
             "query-symbol",

@@ -182,17 +182,17 @@ QUERIES: dict[str, dict[str, str]] = {
         """,
         "import": """
             ; 捕获 use crate::module::Item 中的 module 部分
-            (use_declaration 
-                argument: (scoped_identifier 
+            (use_declaration
+                argument: (scoped_identifier
                     path: (identifier) @path
                     name: (identifier) @name))
             ; 捕获 use crate::module::{A, B} 中的 module 部分
-            (use_declaration 
-                argument: (scoped_use_list 
+            (use_declaration
+                argument: (scoped_use_list
                     path: (identifier) @path))
             ; 捕获 use module::Item 中的 module
-            (use_declaration 
-                argument: (scoped_identifier 
+            (use_declaration
+                argument: (scoped_identifier
                     path: (identifier) @path
                     name: (identifier) @name))
             ; 捕获 extern crate name;
@@ -1806,18 +1806,11 @@ class TreeSitterAdapter:
             raw = cursor.captures(root)
 
             pairs: list[tuple[str, Any]] = []
-            if isinstance(raw, dict):
-                # 新版格式: dict[cap_name, list[Node]]
-                for cap_name, nodes in raw.items():
-                    node_list = nodes if isinstance(nodes, list) else [nodes]
-                    for n in node_list:
-                        pairs.append((cap_name, n))
-            else:
-                # 旧版格式: list[(Node, cap_name)]
-                for item in raw:
-                    if isinstance(item, (list, tuple)) and len(item) == 2:
-                        node, cap_name = item
-                        pairs.append((cap_name, node))
+            # tree-sitter >= 0.23.0 保证 captures() 返回 dict[cap_name, list[Node]]
+            for cap_name, nodes in raw.items():
+                node_list = nodes if isinstance(nodes, list) else [nodes]
+                for n in node_list:
+                    pairs.append((cap_name, n))
             return pairs
         except Exception as e:
             if not self._query_error_logged.get(lang, False):

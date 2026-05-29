@@ -32,15 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    scan_parser = subparsers.add_parser(
-        "scan",
-        help="(deprecated: use `overview --quick`) Scan a repository and print the scan summary.",
-    )
-    _add_project_args(scan_parser)
-    scan_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
-
     overview_parser = subparsers.add_parser(
         "overview", help="Scan a repository and print the overview report."
     )
@@ -48,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     overview_parser.add_argument(
         "--quick",
         action="store_true",
-        help="Quick scan: file/symbol counts and entrypoints only (same as `scan`).",
+        help="Quick scan: file/symbol counts and entrypoints only.",
     )
     overview_parser.add_argument(
         "--max-chars",
@@ -611,8 +602,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(exc.code or 0)
 
     command = args.command
-    if command == "scan":
-        return run_scan(args.project, args.max_files, args.json)
     if command == "overview":
         if getattr(args, "quick", False):
             return run_scan(args.project, args.max_files, args.json)
