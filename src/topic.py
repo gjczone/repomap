@@ -673,6 +673,8 @@ def find_untested_symbols(
 
     风险分 = incoming_calls × signal_weight × 5.0
     只返回非测试文件中被调用过但无测试关联的符号。
+
+    当项目没有测试文件时，所有非低信号符号都视为 untested。
     """
     # 收集所有测试文件中的符号 ID
     test_symbol_ids: set[str] = set()
@@ -680,15 +682,13 @@ def find_untested_symbols(
         if is_test_like_file(f):
             test_symbol_ids.update(graph.file_symbols[f])
 
-    if not test_symbol_ids:
-        return []
-
     # BFS 一层：被测试符号直接引用的非测试符号视为"已覆盖"
     covered: set[str] = set()
-    for tsid in test_symbol_ids:
-        for edge in graph.outgoing.get(tsid, []):
-            if edge.target not in test_symbol_ids:
-                covered.add(edge.target)
+    if test_symbol_ids:
+        for tsid in test_symbol_ids:
+            for edge in graph.outgoing.get(tsid, []):
+                if edge.target not in test_symbol_ids:
+                    covered.add(edge.target)
 
     untested = []
     for sid, sym in graph.symbols.items():

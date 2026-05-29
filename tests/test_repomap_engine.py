@@ -1223,6 +1223,102 @@ class RepoMapEngineTests(unittest.TestCase):
             self.assertIn("src/main.tsx", reading_files)
             self.assertIn("src/App.tsx", reading_files)
 
+    def test_git_changed_files_sets_git_failed_on_exception(self) -> None:
+        """P1-5: _git_changed_files should set git_failed=True on exception."""
+        with tempfile.TemporaryDirectory() as project_root:
+            engine = RepoMapEngine(project_root)
+            # Mock git_backend to raise exception
+            with patch(
+                "src.git_backend.GitBackend.changed_files",
+                side_effect=Exception("git error"),
+            ):
+                modified, deleted = engine._git_changed_files()
+
+            self.assertEqual(modified, [])
+            self.assertEqual(deleted, [])
+            self.assertTrue(engine.scan_stats.git_failed)
+
+    def test_git_changed_files_clears_git_failed_on_success(self) -> None:
+        """P1-5: _git_changed_files should set git_failed=False on success."""
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def app():\n    return 1\n")
+            subprocess.run(
+                ["git", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "repomap@example.com"],
+                cwd=project_root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "RepoMap Test"],
+                cwd=project_root,
+                check=True,
+            )
+            subprocess.run(["git", "add", "main.py"], cwd=project_root, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            engine = RepoMapEngine(project_root)
+            modified, deleted = engine._git_changed_files()
+
+            self.assertFalse(engine.scan_stats.git_failed)
+
+
+class FindUntestedSymbolsTests(unittest.TestCase):
+    """P1-1: find_untested_symbols should return all untested symbols when no tests exist."""
+
+    def test_returns_all_untested_when_no_test_files(self) -> None:
+        """When project has no test files, all non-low-signal symbols should be untested."""
+        from src import RepoGraph, Symbol
+        from src.topic import find_untested_symbols
+
+        # Create a graph with no test files
+        graph = RepoGraph()
+        graph.symbols = {
+            "s1": Symbol(id="s1", name="foo", kind="function", file="main.py", line=1),
+            "s2": Symbol(id="s2", name="bar", kind="class", file="main.py", line=5),
+        }
+        graph.file_symbols = {"main.py": ["s1", "s2"]}
+
+        # Should return empty because no incoming calls
+        result = find_untested_symbols(graph, min_incoming_calls=0, min_score=0.0)
+        self.assertEqual(len(result), 2)
+
+    def test_skips_low_signal_symbols(self) -> None:
+        """Low signal symbols should be skipped even when no tests exist."""
+        from src import LOW_SIGNAL_KINDS, RepoGraph, Symbol
+        from src.topic import find_untested_symbols
+
+        graph = RepoGraph()
+        # Use a kind that is in LOW_SIGNAL_KINDS
+        low_signal_kind = next(iter(LOW_SIGNAL_KINDS))
+        graph.symbols = {
+            "s1": Symbol(
+                id="s1",
+                name="foo",
+                kind=low_signal_kind,
+                file="main.py",
+                line=1,
+            ),
+            "s2": Symbol(id="s2", name="bar", kind="function", file="main.py", line=5),
+        }
+        graph.file_symbols = {"main.py": ["s1", "s2"]}
+
+        result = find_untested_symbols(graph, min_incoming_calls=0, min_score=0.0)
+        # Only s2 should be returned (s1 is low signal)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["symbol"], "bar")
+
 
 if __name__ == "__main__":
     unittest.main()

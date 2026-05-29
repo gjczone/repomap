@@ -579,6 +579,7 @@ def _scan_stats_payload(engine: RepoMapEngine) -> dict[str, Any]:
         "failed_files": list(engine.scan_stats.failed_files),
         "scan_duration_ms": engine.scan_stats.scan_duration_ms,
         "timeout_triggered": engine.scan_stats.timeout_triggered,
+        "git_failed": engine.scan_stats.git_failed,
         "symbol_count": len(engine.graph.symbols),
         "edge_count": sum(len(edges) for edges in engine.graph.outgoing.values()),
     }

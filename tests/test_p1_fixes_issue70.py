@@ -54,6 +54,7 @@ def _make_engine(project_root: str) -> MagicMock:
         failed_files=[],
         scan_duration_ms=0,
         timeout_triggered=False,
+        git_failed=False,
     )
     engine.entry_points.return_value = []
     engine.hotspots.return_value = []
@@ -326,6 +327,7 @@ class TestVerifyStatusTopLevel(unittest.TestCase):
                 failed_files=[],
                 scan_duration_ms=0,
                 timeout_triggered=False,
+                git_failed=False,
             )
             with (
                 patch("src.cli.commands.verify._scan_engine", return_value=engine),
