@@ -61,12 +61,26 @@ jobs:
            shell: bash
            run: uv run python -m src.cli build-binary --output dist
 
-         - name: Smoke test binary
+         - name: Smoke test binary (doctor)
+           shell: bash
+           run: ./dist/repomap doctor --project .
+
+         - name: Smoke test binary (overview)
+           shell: bash
+           run: ./dist/repomap overview --project .
+
+         - name: Smoke test binary (verify)
            shell: bash
            run: |
-              ./dist/repomap doctor --project .
-              ./dist/repomap overview --project .
-              ./dist/repomap verify --project . --quick || echo "verify --quick returned non-zero (expected in CI with no git changes)"
+              ./dist/repomap verify --project . --quick
+              EXIT=$?
+              if [ $EXIT -eq 3 ]; then
+                echo "verify --quick: no git changes (expected in CI)"
+                exit 0
+              elif [ $EXIT -ne 0 ]; then
+                echo "verify --quick FAILED with exit code $EXIT"
+                exit $EXIT
+              fi
 
          - name: Verify binary version matches pyproject.toml
            shell: bash
