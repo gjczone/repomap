@@ -24,7 +24,7 @@ def run_cache(project: str, action: str, as_json: bool = False) -> int:
             print(
                 json_envelope(
                     "cache",
-                    project,
+                    project_path,
                     {
                         "action": action,
                         "cache_path": str(cache_path),
