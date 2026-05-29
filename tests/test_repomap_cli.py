@@ -586,10 +586,10 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(dot_code, 0)
             self.assertEqual(abs_code, 0)
             self.assertEqual(
-                json.loads(dot_stdout.getvalue())["result"]["inputFiles"], ["main.py"]
+                json.loads(dot_stdout.getvalue())["result"]["input_files"], ["main.py"]
             )
             self.assertEqual(
-                json.loads(abs_stdout.getvalue())["result"]["inputFiles"], ["main.py"]
+                json.loads(abs_stdout.getvalue())["result"]["input_files"], ["main.py"]
             )
 
     def test_impact_with_symbols_outputs_edit_plan_fields(self) -> None:
@@ -625,14 +625,14 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             result = payload["result"]
-            self.assertEqual(result["inputFiles"], ["main.py"])
+            self.assertEqual(result["input_files"], ["main.py"])
             self.assertTrue(
-                any(item["name"] == "target" for item in result["keySymbols"])
+                any(item["name"] == "target" for item in result["key_symbols"])
             )
-            self.assertEqual(result["readNext"][0]["file"], "main.py")
-            self.assertEqual(result["readNext"][0]["role"], "target")
-            self.assertIn("lspHint", result)
-            self.assertIn("available", result["lspHint"])
+            self.assertEqual(result["read_next"][0]["file"], "main.py")
+            self.assertEqual(result["read_next"][0]["role"], "target")
+            self.assertIn("lsp_hint", result)
+            self.assertIn("available", result["lsp_hint"])
 
     def test_impact_without_symbols_keeps_compatible_json_fields(self) -> None:
         from src.cli import main
@@ -654,11 +654,11 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())["result"]
-            self.assertIn("affectedFiles", result)
+            self.assertIn("affected_files", result)
             self.assertIn("tests", result)
-            self.assertIn("riskLevel", result)
-            self.assertEqual(result["keySymbols"], [])
-            self.assertEqual(result["lspHint"], {})
+            self.assertIn("risk_level", result)
+            self.assertEqual(result["key_symbols"], [])
+            self.assertEqual(result["lsp_hint"], {})
 
     def test_impact_rejects_outside_file_path(self) -> None:
         from src.cli import main
