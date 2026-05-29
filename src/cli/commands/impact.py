@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ... import json_dumps
 from ...ai import render_impact_report
 from ...core import RepoMapEngine
 from ..handlers import (
@@ -306,39 +305,34 @@ def run_impact(
         )
 
         if as_json:
-            payload = {
-                "schema_version": "1.0",
-                "command": "impact",
-                "project": str(engine.project_root),
-                "scanStats": _scan_stats_payload(engine),
-                "result": {
-                    "inputFiles": target_files,
-                    "affectedFiles": [
-                        {"file": f, "why": why, "confidence": conf}
-                        for f, why, conf in affected_list
-                    ],
-                    "tests": [
-                        {
-                            "testFile": t.test_file,
-                            "targetFile": t.target_file,
-                            "confidence": t.confidence,
-                            "reason": t.reason,
-                        }
-                        for t in tests
-                    ],
-                    "riskLevel": risk_level,
-                    "riskNotes": risk_notes,
-                    "keySymbols": key_symbols,
-                    "readNext": read_next,
-                    "lspHint": lsp_hint,
-                    "typeImpacts": type_impacts,
-                },
+            from ..handlers import json_envelope
+
+            result = {
+                "scan_stats": _scan_stats_payload(engine),
+                "input_files": target_files,
+                "affected_files": [
+                    {"file": f, "why": why, "confidence": conf}
+                    for f, why, conf in affected_list
+                ],
+                "tests": [
+                    {
+                        "test_file": t.test_file,
+                        "target_file": t.target_file,
+                        "confidence": t.confidence,
+                        "reason": t.reason,
+                    }
+                    for t in tests
+                ],
+                "risk_level": risk_level,
+                "risk_notes": risk_notes,
+                "key_symbols": key_symbols,
+                "read_next": read_next,
+                "lsp_hint": lsp_hint,
+                "type_impacts": type_impacts,
             }
             if session_warning:
-                result_block = payload["result"]
-                if isinstance(result_block, dict):
-                    result_block["sessionWarning"] = session_warning
-            print(json_dumps(payload, ensure_ascii=False, indent=2))
+                result["session_warning"] = session_warning
+            print(json_envelope("impact", str(engine.project_root), result))
             return 0
 
         print(
