@@ -177,6 +177,19 @@ The public README files serve different audiences than this document:
 - **mypy strict 迁移路径**: 当前使用 `--ignore-missing-imports`，远期目标逐步收紧 → `--strict`。阶段：(1) 当前：基本通过 (2) 下一步：移除 `--ignore-missing-imports`，为所有可选依赖添加 `type: ignore[import-untyped]` (3) 远期：启用 `--strict`。
 - **ruff type-checking**: ruff 目前仅有 annotation 存在性检查（ANN 规则），不支持类型推断。ruff 比 mypy 快 10-100x 但不替代 mypy。可考虑开启 ANN 规则作为补充。
 
+## Language Integration Test Strategy
+
+**现有语言测试覆盖（8种）**：Python, TypeScript, Go, Rust, Java, Kotlin, Swift, C#, C++
+
+**优先级**：
+1. **第一优先级**：Python, Rust, TypeScript — 核心使用场景，必须保证稳定
+2. **第二优先级**：Go, Java, C#, C++ — 常见企业语言
+3. **第三优先级**：Kotlin, Swift — 可选依赖，跳过测试已通过
+
+**暂不扩展**：不为 C, JavaScript, PHP, Ruby, HTML, CSS, JSON 添加新的集成测试。现有覆盖已足够，待用户量增长后再评估。
+
+**性能基准测试**：暂不需要。当前无超大项目场景，用户量较少。待项目获得较多 star/用户后再考虑添加。
+
 ## API / CLI Rules
 
 - `--project` must be absolute when called from AI/Agent contexts.
