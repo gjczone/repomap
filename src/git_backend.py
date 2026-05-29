@@ -444,6 +444,20 @@ class Pygit2Backend:
             return []
 
     @staticmethod
+    def _validate_git_ref(ref: str) -> str | None:
+        """验证 git ref 格式，返回清理后的 ref 或 None（无效时）。"""
+        import re
+
+        # 允许: HEAD, commit hash, branch name, tag, refs/...
+        # 禁止: 以 - 开头, 包含 shell 元字符
+        if not ref or ref.startswith("-"):
+            return None
+        # 基本格式检查: 只允许字母数字、/、.、-、_、~、^、:
+        if not re.match(r"^[a-zA-Z0-9/.\-_~^:]+$", ref):
+            return None
+        return ref
+
+    @staticmethod
     def diff_name_only(project_root: str, since: str | None = None) -> list[str]:
         if since and "days.ago" in since:
             return SubprocessBackend.diff_name_only(project_root, since)
@@ -452,9 +466,13 @@ class Pygit2Backend:
             return []
         try:
             if since and repo.head.target:
-                since_commit = repo.revparse_single(
+                # 验证 git ref 格式
+                validated = Pygit2Backend._validate_git_ref(
                     since.split("..")[0] if ".." in since else since
                 )
+                if not validated:
+                    return []
+                since_commit = repo.revparse_single(validated)
                 head = repo.get(repo.head.target)
                 diff = repo.diff(since_commit.tree, head.tree)
             else:

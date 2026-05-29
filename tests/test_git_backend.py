@@ -682,3 +682,26 @@ class TestContractConsistency:
         assert sub_result is not None and pygit_result is not None
         assert set(sub_result.keys()) == set(pygit_result.keys())
         assert "commit" in sub_result and "commit" in pygit_result
+
+
+class TestGitRefValidation:
+    """P2-13: git ref format validation."""
+
+    def test_validate_git_ref_accepts_valid_refs(self) -> None:
+        """Valid git refs should be accepted."""
+        assert Pygit2Backend._validate_git_ref("HEAD") == "HEAD"
+        assert Pygit2Backend._validate_git_ref("main") == "main"
+        assert Pygit2Backend._validate_git_ref("v1.0.0") == "v1.0.0"
+        assert Pygit2Backend._validate_git_ref("abc123") == "abc123"
+        assert Pygit2Backend._validate_git_ref("refs/heads/main") == "refs/heads/main"
+        assert Pygit2Backend._validate_git_ref("HEAD~3") == "HEAD~3"
+        assert Pygit2Backend._validate_git_ref("HEAD^2") == "HEAD^2"
+
+    def test_validate_git_ref_rejects_dangerous_refs(self) -> None:
+        """Dangerous git refs should be rejected."""
+        assert Pygit2Backend._validate_git_ref("") is None
+        assert Pygit2Backend._validate_git_ref("-f") is None
+        assert Pygit2Backend._validate_git_ref("--force") is None
+        assert Pygit2Backend._validate_git_ref("HEAD; rm -rf /") is None
+        assert Pygit2Backend._validate_git_ref("HEAD$(cmd)") is None
+        assert Pygit2Backend._validate_git_ref("HEAD`cmd`") is None

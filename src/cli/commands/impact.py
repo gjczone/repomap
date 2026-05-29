@@ -111,12 +111,14 @@ def _impact_lsp_hint(
     available = any(server.get("status") == "available" for server in servers)
     suggested: list[str] = []
     if available and target_files:
-        files_arg = " ".join(f'"{f}"' for f in target_files)
+        import shlex
+
+        files_arg = " ".join(shlex.quote(f) for f in target_files)
         suggested.append(
-            f"repomap check --project {project_root} --modified-file {files_arg}"
+            f"repomap check --project {shlex.quote(str(project_root))} --modified-file {files_arg}"
         )
         suggested.append(
-            f"repomap refs --project {project_root} --symbol <symbol> --file-path <file>"
+            f"repomap refs --project {shlex.quote(str(project_root))} --symbol <symbol> --file-path <file>"
         )
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 
