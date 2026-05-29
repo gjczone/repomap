@@ -136,6 +136,18 @@ def find_route_consumers(
 
     consumers: dict[str, list[RouteConsumer]] = {}
 
+    # 预构建路由查找表，将匹配从 O(routes) 降为 O(1)
+    route_by_literal: dict[str, "HttpRoute"] = {}
+    route_by_normalized: dict[str, "HttpRoute"] = {}
+    route_prefixes: list[tuple[str, "HttpRoute"]] = []
+    for route in routes:
+        route_by_literal[route.path] = route
+        route_norm = normalize_route_path(route.path)
+        route_by_normalized[route_norm] = route
+        if "{" in route_norm:
+            prefix = route_norm.rsplit("/{", 1)[0]
+            route_prefixes.append((prefix, route))
+
     # Build extension -> language map
     ext_to_lang: dict[str, str] = {}
     for lang, exts in _LANG_EXTENSIONS.items():
@@ -192,25 +204,20 @@ def find_route_consumers(
                     ctx_line = lines[line_num - 1].strip()
                     context = ctx_line[:80]
 
-                # Match against routes
+                # Match against routes (使用预构建的查找表，O(1) 匹配)
                 route_key = ""
                 confidence = ""
                 match_type = ""
 
-                for route in routes:
-                    route_lit = route.path
-                    route_norm = normalize_route_path(route_lit)
-
-                    # Exact match
-                    if route_literal == route_lit or route_literal == route_norm:
-                        confidence = "high"
-                        match_type = "exact_literal"
-                        route_key = f"{route.method} {route_lit}"
-                        break
-
-                    # Normalized dynamic match
-                    if not route_key:
-                        # Replace dynamic segments in route with wildcards
+                # 精确匹配：直接查找
+                route = route_by_literal.get(route_literal) or route_by_normalized.get(route_literal)
+                if route:
+                    confidence = "high"
+                    match_type = "exact_literal"
+                    route_key = f"{route.method} {route.path}"
+                else:
+                    # 动态匹配：使用正则
+                    for route_norm, route in route_by_normalized.items():
                         route_regex_str = re.escape(route_norm)
                         route_regex_str = re.sub(
                             r"\\\{[^}]+\\\}", r"[^/]+", route_regex_str
@@ -218,18 +225,20 @@ def find_route_consumers(
                         if re.match(f"^{route_regex_str}$", route_literal):
                             confidence = "medium"
                             match_type = "normalized_dynamic"
-                            route_key = f"{route.method} {route_lit}"
+                            route_key = f"{route.method} {route.path}"
+                            break
 
-                    # Prefix match (route literal starts with route path prefix)
-                    if not route_key and "{" in route_norm:
-                        prefix = route_norm.rsplit("/{", 1)[0]
-                        if (
-                            route_literal.startswith(prefix)
-                            and len(route_literal) > len(prefix) + 1
-                        ):
-                            confidence = "low"
-                            match_type = "prefix_concatenation"
-                            route_key = f"{route.method} {route_lit}"
+                    # 前缀匹配
+                    if not route_key:
+                        for prefix, route in route_prefixes:
+                            if (
+                                route_literal.startswith(prefix)
+                                and len(route_literal) > len(prefix) + 1
+                            ):
+                                confidence = "low"
+                                match_type = "prefix_concatenation"
+                                route_key = f"{route.method} {route.path}"
+                                break
 
                 if not route_key:
                     continue

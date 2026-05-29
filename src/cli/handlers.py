@@ -227,7 +227,7 @@ def _scan_engine(
     else:
         fingerprint = _scan_fingerprint(resolved_project, max_files)
 
-    session_engine = _load_session_engine(resolved_project, fingerprint)
+    session_engine = _load_session_engine(resolved_project, fingerprint, incremental)
     if session_engine is not None:
         if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
             _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
@@ -257,6 +257,7 @@ def _engine_to_session_payload(
         "repomap_version": get_repomap_version(),
         "project_root": project_root,
         "fingerprint": fingerprint,
+        "incremental": getattr(engine, '_inc_cache_loaded', False),
         "scan_state": engine.scan_state,
         "scan_stats": {
             "listed_source_files": engine.scan_stats.listed_source_files,
@@ -417,7 +418,7 @@ def _restore_engine_from_session_payload(
     return engine
 
 
-def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine | None:
+def _load_session_engine(project_root: str, fingerprint: str, incremental: bool = False) -> RepoMapEngine | None:
     cache_path = get_session_cache_path(project_root)
     if not cache_path.exists():
         return None
@@ -432,7 +433,7 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
             )
             return None
     except OSError:
-        pass
+        logger.debug("Cannot read session cache %s", cache_path, exc_info=True)
     try:
         payload = json_loads(cache_path.read_text(encoding="utf-8"))
     except Exception:
@@ -443,6 +444,14 @@ def _load_session_engine(project_root: str, fingerprint: str) -> RepoMapEngine |
     if payload.get("project_root") != project_root:
         return None
     if payload.get("fingerprint") != fingerprint:
+        return None
+    # 验证 incremental 标志匹配，防止全量扫描被当作增量缓存返回
+    if payload.get("incremental", False) != incremental:
+        logger.debug(
+            "Session cache incremental mismatch: expected %s, got %s",
+            incremental,
+            payload.get("incremental", False),
+        )
         return None
     return _restore_engine_from_session_payload(payload)
 

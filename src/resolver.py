@@ -285,9 +285,15 @@ class ImportResolver:
         # 解析子包的 package.json（monorepo 场景），跳过依赖和构建目录，避免读取海量无关 package。
         packages_found = 0
         max_packages = 100  # 限制扫描的 package.json 数量，防止大型 monorepo 性能问题
+        max_depth = 20  # 限制目录遍历深度，防止极端嵌套目录导致性能问题
         for root, dir_names, file_names in os.walk(self.project_root):
             if packages_found >= max_packages:
                 break
+            # 检查深度限制
+            depth = len(Path(root).relative_to(self.project_root).parts)
+            if depth > max_depth:
+                dir_names.clear()  # 停止深入遍历
+                continue
             dir_names[:] = [
                 n
                 for n in dir_names

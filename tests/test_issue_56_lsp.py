@@ -23,8 +23,11 @@ class TestStopReaderReset(unittest.TestCase):
         with patch("subprocess.Popen") as mock_popen:
             mock_process = MagicMock()
             mock_process.stdin = MagicMock()
+            # 让 stdout.readline() 返回空字节，表示 EOF，避免无限循环
             mock_process.stdout = MagicMock()
+            mock_process.stdout.readline.return_value = b""
             mock_process.stderr = MagicMock()
+            mock_process.stderr.read.return_value = b""
             mock_process.poll.return_value = None
             mock_popen.return_value = mock_process
 
@@ -83,8 +86,11 @@ class TestNextIdThreadSafety(unittest.TestCase):
         with patch("subprocess.Popen") as mock_popen:
             mock_process = MagicMock()
             mock_process.stdin = MagicMock()
+            # 让 stdout.readline() 返回空字节，表示 EOF，避免无限循环
             mock_process.stdout = MagicMock()
+            mock_process.stdout.readline.return_value = b""
             mock_process.stderr = MagicMock()
+            mock_process.stderr.read.return_value = b""
             mock_process.poll.return_value = None
             mock_popen.return_value = mock_process
 

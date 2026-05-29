@@ -161,10 +161,10 @@ class GitHelper:
             return sorted(files)
         except Exception:
             logger.warning(
-                "Failed to get modified files from git, returning empty list",
+                "Failed to get modified files from git",
                 exc_info=True,
             )
-            return []
+            return None
 
 
 class DiagnosticRunner:
