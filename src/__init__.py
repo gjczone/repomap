@@ -203,7 +203,7 @@ class Symbol:
     line: int
     end_line: int = 0
     col: int = 0
-    visibility: str = "private"
+    visibility: str = "public"
     docstring: str = ""
     signature: str = ""
     return_type: str = ""
