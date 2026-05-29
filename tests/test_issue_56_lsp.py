@@ -165,7 +165,7 @@ class TestDiagnosticNoneGetSafety(unittest.TestCase):
         # the fix is about not crashing, not cosmetic output for None values.
         self.assertEqual(result.message, "None")
         self.assertEqual(result.source, "None")
-        self.assertEqual(result.severity, "info")
+        self.assertEqual(result.severity, "warning")
 
     def test_range_not_a_dict_does_not_crash(self) -> None:
         result = _diagnostic_from_lsp(
