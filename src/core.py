@@ -22,7 +22,6 @@ import logging
 import os
 import subprocess
 import sys
-import warnings
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -72,69 +71,6 @@ _DEFAULT_SKIP_DIRS = frozenset(
 )
 
 # 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
-# 保留仅为向后兼容导出。新增忽略规则请修改 src/gitignore.py 的 BUILTIN_IGNORE_PATTERNS。
-# TODO: 在下一个主版本中移除这些常量
-
-
-def _deprecated_skip_names():
-    warnings.warn(
-        "SKIP_DIR_NAMES and SKIP_FILE_NAMES are deprecated. "
-        "Use GitignoreParser instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
-SKIP_DIR_NAMES = {
-    ".cache",
-    ".git",
-    ".hg",
-    ".idea",
-    ".mypy_cache",
-    ".next",
-    ".nox",
-    ".nuxt",
-    ".parcel-cache",
-    ".pnpm-store",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".svelte-kit",
-    ".tox",
-    ".turbo",
-    ".venv",
-    ".vscode",
-    ".yarn",
-    "__pypackages__",
-    "__pycache__",
-    "build",
-    "coverage",
-    "dist",
-    "env",
-    "ENV",
-    "node_modules",
-    "site-packages",
-    "target",
-    "venv",
-    # 第三方库目录
-    "monaco-editor",
-    "monaco",
-    "vendor",
-    "third_party",
-    "third-party",
-    "libs",
-    "external",
-}
-
-SKIP_FILE_NAMES = {
-    "package-lock.json",
-    "npm-shrinkwrap.json",
-    "bun.lock",
-    "bun.lockb",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "Cargo.lock",
-}
-
 SUPPORTING_FILE_NAMES = {
     "AGENTS.md",
     "CLAUDE.md",
