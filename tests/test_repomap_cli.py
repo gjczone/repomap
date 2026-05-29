@@ -1827,5 +1827,75 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("Referenced by:  1", stdout.getvalue())
 
 
+class DiagnosticWarningTests(unittest.TestCase):
+    """Test that diagnostic tools properly classify warnings vs errors."""
+
+    def test_parse_ruff_output_classifies_warnings(self) -> None:
+        """P1-2: _parse_ruff_output should classify severity='warning' to warnings list."""
+        from src.check import DiagnosticRunner
+
+        checker = DiagnosticRunner(project_root=Path("/tmp/test"), max_items=100)
+
+        # ruff JSON output with mixed severities
+        ruff_output = json.dumps(
+            [
+                {
+                    "code": "E501",
+                    "message": "Line too long",
+                    "filename": "test.py",
+                    "location": {"row": 1, "column": 1},
+                    "severity": "error",
+                },
+                {
+                    "code": "W291",
+                    "message": "Trailing whitespace",
+                    "filename": "test.py",
+                    "location": {"row": 2, "column": 1},
+                    "severity": "warning",
+                },
+            ]
+        )
+
+        errors, warnings = checker._parse_ruff_output(ruff_output)
+
+        self.assertEqual(len(errors), 1, "Should have 1 error")
+        self.assertEqual(len(warnings), 1, "Should have 1 warning")
+        self.assertEqual(errors[0].severity, "error")
+        self.assertEqual(warnings[0].severity, "warning")
+        self.assertEqual(warnings[0].code, "W291")
+
+    def test_parse_go_output_classifies_warnings(self) -> None:
+        """P1-3: _parse_go_output should classify warning patterns to warnings list."""
+        from src.check import DiagnosticRunner
+
+        checker = DiagnosticRunner(project_root=Path("/tmp/test"), max_items=100)
+
+        # Go vet output with warning pattern
+        go_output = "main.go:10:5: unused variable 'x'\nmain.go:20:1: exported function 'Foo' should have comment or be unexported"
+
+        errors, warnings = checker._parse_go_output(go_output)
+
+        # First line is error, second line is warning (starts with "exported" and contains "should")
+        self.assertEqual(len(errors), 1, "Should have 1 error")
+        self.assertEqual(len(warnings), 1, "Should have 1 warning")
+        self.assertIn("unused", errors[0].message)
+        self.assertIn("exported", warnings[0].message)
+
+    def test_severity_name_unknown_maps_to_warning(self) -> None:
+        """P1-4: _severity_name should map unknown severity to 'warning' not 'info'."""
+        from src.lsp import _severity_name
+
+        # Known values should map correctly
+        self.assertEqual(_severity_name(1), "error")
+        self.assertEqual(_severity_name(2), "warning")
+        self.assertEqual(_severity_name(3), "info")
+        self.assertEqual(_severity_name(4), "info")
+
+        # Unknown values should map to "warning" not "info"
+        self.assertEqual(_severity_name(99), "warning")
+        self.assertEqual(_severity_name(0), "warning")
+        self.assertEqual(_severity_name(None), "warning")
+
+
 if __name__ == "__main__":
     unittest.main()

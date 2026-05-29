@@ -876,7 +876,9 @@ def _lsp_language_id(language: str, file_path: Path) -> str:
 
 
 def _severity_name(value: int | None) -> str:
-    return {1: "error", 2: "warning", 3: "info", 4: "info"}.get(value or 3, "info")
+    if value is None or value == 0:
+        return "warning"
+    return {1: "error", 2: "warning", 3: "info", 4: "info"}.get(value, "warning")
 
 
 def _diagnostic_from_lsp(

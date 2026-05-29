@@ -682,6 +682,7 @@ class DiagnosticRunner:
     ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 ruff JSON 输出，尝试获取修复建议"""
         errors = []
+        warnings = []
         try:
             data = json_loads(output) if output.strip() else []
             for item in data:
@@ -705,11 +706,16 @@ class DiagnosticRunner:
                     message=item.get("message", ""),
                     suggested_fix=suggested_fix,
                 )
-                errors.append(issue)
+
+                # 根据 severity 字段分类到 errors/warnings
+                if issue.severity == "warning":
+                    warnings.append(issue)
+                else:
+                    errors.append(issue)
         except ValueError:
             logger.warning("Failed to parse ruff output as JSON")
 
-        return errors, []
+        return errors, warnings
 
     def _run_go_vet(self) -> DiagnosticResult:
         """运行 go vet"""
@@ -811,24 +817,36 @@ class DiagnosticRunner:
     ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
         """解析 go vet/build 输出"""
         errors = []
+        warnings = []
         # 匹配: file.go:42:8: message
         pattern = re.compile(r"^(.+\.go):(\d+):(\d+):\s+(.+)$")
 
         for line in output.split("\n"):
             match = pattern.match(line)
             if match:
+                message = match.group(4)
+
+                # Go vet warning 模式: "exported ... should have comment"
+                is_warning = (
+                    message.startswith("exported ") and "should have comment" in message
+                )
+
                 issue = DiagnosticIssue(
                     tool="go",
                     file=match.group(1),
                     line=int(match.group(2)),
                     col=int(match.group(3)),
-                    severity="error",
+                    severity="warning" if is_warning else "error",
                     code="go",
-                    message=match.group(4),
+                    message=message,
                 )
-                errors.append(issue)
 
-        return errors, []
+                if is_warning:
+                    warnings.append(issue)
+                else:
+                    errors.append(issue)
+
+        return errors, warnings
 
 
 class RepoMapChecker:
