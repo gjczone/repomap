@@ -196,6 +196,7 @@ def run_query(
                 target_files, engine.graph, analysis, str(engine.project_root)
             )
 
+        if as_json:
             from ..handlers import json_envelope
 
             payload = {

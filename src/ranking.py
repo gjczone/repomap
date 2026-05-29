@@ -21,8 +21,6 @@ from pathlib import PurePosixPath
 from typing import Any, TYPE_CHECKING
 
 from . import (
-    BOILERPLATE_NAMES,
-    LOW_SIGNAL_KINDS,
     Edge,
     RepoGraph,
     Symbol,
@@ -41,10 +39,6 @@ class GraphAnalyzer:
     """
     图分析器：执行 PageRank 和各种图查询。
     """
-
-    # 引用 __init__.py 中的统一定义，保持与 topic.py 同步
-    LOW_SIGNAL_KINDS = LOW_SIGNAL_KINDS
-    BOILERPLATE_NAMES = BOILERPLATE_NAMES
 
     def __init__(self, graph: RepoGraph) -> None:
         self.graph = graph

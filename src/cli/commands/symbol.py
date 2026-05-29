@@ -17,6 +17,7 @@ from ...hints import (
 )
 from ..handlers import (
     CLI_NAME,
+    DEFAULT_LSP_TIMEOUT,
     EXIT_NO_RESULTS,
     json_envelope,
     _scan_engine,
@@ -168,7 +169,7 @@ def run_query_symbol(
     symbol: str,
     file_path: str | None,
     max_chars: int,
-    lsp_timeout: float = 8.0,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
     as_json: bool = False,
 ) -> int:
     try:
@@ -286,7 +287,7 @@ def run_file_detail(
     file_path: str,
     max_symbols: int,
     max_chars: int,
-    lsp_timeout: float = 8.0,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
     as_json: bool = False,
 ) -> int:
     try:
@@ -383,7 +384,7 @@ def run_refs(
     symbol: str | None,
     file_path: str | None,
     as_json: bool,
-    lsp_timeout: float = 8.0,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)

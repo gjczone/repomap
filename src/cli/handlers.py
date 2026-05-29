@@ -65,10 +65,8 @@ def clear_scan_cache() -> int:
     return count
 
 
-EXIT_SUCCESS = 0
-EXIT_ERROR = 1
-EXIT_INVALID_ARGS = 2
 EXIT_NO_RESULTS = 3
+DEFAULT_LSP_TIMEOUT = 8.0
 
 
 def json_envelope(command: str, project: str, result: dict, status: str = "ok") -> str:
@@ -484,7 +482,7 @@ def _select_symbol_match(
     symbol: str,
     *,
     file_path: str | None = None,
-    lsp_timeout: float = 8.0,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
 ) -> tuple[Any | None, str | None, str | None]:
     """3-tier symbol resolution: LSP → tree-sitter same-file → global fuzzy.
 

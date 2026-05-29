@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..handlers import (
     CLI_NAME,
+    DEFAULT_LSP_TIMEOUT,
     _resolve_project,
 )
 from .verify import run_verify, run_check
@@ -174,7 +175,7 @@ def run_ready(project: str, as_json: bool = False) -> int:
                     types=None,
                     max_issues=50,
                     resolve_symbols=True,
-                    lsp_timeout=8.0,
+                    lsp_timeout=DEFAULT_LSP_TIMEOUT,
                     lsp_max_files=20,
                     with_diff=False,
                     quick=True,
@@ -199,7 +200,7 @@ def run_ready(project: str, as_json: bool = False) -> int:
                     since_commit=None,
                     modified_files=None,
                     resolve_symbols=True,
-                    lsp_timeout=8.0,
+                    lsp_timeout=DEFAULT_LSP_TIMEOUT,
                     lsp_max_files=20,
                 )
                 if check_rc != 0:

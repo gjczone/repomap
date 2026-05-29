@@ -512,7 +512,7 @@ def _read_lsp_message(stream: Any) -> Any:
         if not chunk:
             return _STREAM_EOF
         body += chunk
-    return json_loads(body.decode("utf-8"))
+    return json_loads(body.decode("utf-8", errors="replace"))
 
 
 class StdioLspClient:

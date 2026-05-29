@@ -13,8 +13,10 @@ from ...check import RepoMapChecker
 from ...core import RepoMapEngine
 from ...git_backend import GitBackend
 from ...hints import verify_hint, orphan_hint, check_hint
+from ...core import DEFAULT_MAX_FILES
 from ..handlers import (
     CLI_NAME,
+    DEFAULT_LSP_TIMEOUT,
     EXIT_NO_RESULTS,
     _resolve_project,
     _scan_engine,
@@ -329,7 +331,7 @@ def _run_check_payload(
     symbols_map = None
     if resolve_symbols:
         if engine is None:
-            engine = _scan_engine(project_root, 8000)
+            engine = _scan_engine(project_root, DEFAULT_MAX_FILES)
         symbols_map = engine.graph.symbols
     checker = RepoMapChecker(project_root, max_issues)
     return checker.check(
@@ -640,7 +642,7 @@ def run_verify(
             print(f"[{CLI_NAME}] verify failed: {error}", file=sys.stderr)
             return 1
 
-        engine = _scan_engine(project_root, 8000, incremental=incremental)
+        engine = _scan_engine(project_root, DEFAULT_MAX_FILES, incremental=incremental)
         evidence = _diff_risk_evidence(engine, changed_files)
         contract_risks = _detect_contract_risks(engine, changed_files)
 
@@ -1025,7 +1027,7 @@ def run_check(
     since_commit: str | None,
     modified_files: list[str] | None,
     resolve_symbols: bool,
-    lsp_timeout: float = 8.0,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
     lsp_max_files: int = 20,
     as_json: bool = False,
 ) -> int:
@@ -1045,7 +1047,7 @@ def run_check(
                 return 1
         symbols_map = None
         if resolve_symbols:
-            engine = _scan_engine(project_root, 8000)
+            engine = _scan_engine(project_root, DEFAULT_MAX_FILES)
             symbols_map = engine.graph.symbols
 
         checker = RepoMapChecker(project_root, max_issues)
@@ -1064,7 +1066,7 @@ def run_check(
             print(json_envelope("check", project_root, result))
         else:
             print(_format_check_report(result, max_issues))
-        has_errors = bool(result.get("issues"))
+        has_errors = bool(result.get("errors_by_file"))
         for hint in check_hint(has_errors=has_errors):
             print(hint, file=sys.stderr)
         status = result.get("status")

@@ -104,10 +104,12 @@ class TestP1_8_LowSignalKindsUnified(unittest.TestCase):
         self.assertIn("json_key", LOW_SIGNAL_KINDS)
 
     def test_ranking_uses_shared_constant(self) -> None:
+        # LOW_SIGNAL_KINDS 仅在需要它的模块中导入（如 topic.py），
+        # 不再通过 ranking.py 的类属性重新导出。
         from src import LOW_SIGNAL_KINDS as shared
-        from src.ranking import GraphAnalyzer
+        from src.topic import LOW_SIGNAL_KINDS as topic_copy
 
-        self.assertIs(GraphAnalyzer.LOW_SIGNAL_KINDS, shared)
+        self.assertIs(topic_copy, shared)
 
     def test_topic_uses_shared_constant(self) -> None:
         from src import LOW_SIGNAL_KINDS as shared

@@ -51,6 +51,25 @@ logging.basicConfig(
 logger = logging.getLogger("repomap")
 
 DEFAULT_MAX_FILE_BYTES = 512 * 1024
+DEFAULT_MAX_FILES = 8000
+_DEFAULT_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "target",
+        "build",
+        "dist",
+        ".next",
+        ".nuxt",
+        ".cache",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+)
 
 # 以下两常量已弃用——实际文件过滤完全委托给 GitignoreParser。
 # 保留仅为向后兼容导出。新增忽略规则请修改 src/gitignore.py 的 BUILTIN_IGNORE_PATTERNS。
@@ -240,9 +259,6 @@ class RepoMapEngine:
       4. 调用链（某函数被谁调、调了谁）
     """
 
-    IMPORT_WEIGHT = 0.35
-    CALL_WEIGHT = 0.50
-
     def __init__(self, project_root: str) -> None:
         self.project_root = Path(project_root).resolve()
         self.ts = TreeSitterAdapter()
@@ -274,7 +290,7 @@ class RepoMapEngine:
 
     def scan(
         self,
-        max_files: int = 8000,
+        max_files: int = DEFAULT_MAX_FILES,
         max_scan_time: float = 300.0,
         incremental: bool = False,
     ) -> None:
@@ -365,6 +381,7 @@ class RepoMapEngine:
             elapsed = time.time() - start_time
             if elapsed > max_scan_time:
                 self.scan_stats.timeout_triggered = True
+                self._source_bytes.clear()  # 超时跳过边构建，释放源文件缓存
                 logger.warning(
                     f"Scan timeout before edge building: {elapsed:.1f}s, limit {max_scan_time}s"
                 )
@@ -461,16 +478,19 @@ class RepoMapEngine:
     def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
         """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""
         full = self.project_root / file_path
-        if not full.exists():
-            return False
-        actual_mtime = full.stat().st_mtime
-        if not _mtime_matches(actual_mtime, entry.mtime):
-            return False
-        # 同时验证文件大小，防止内容替换后 mtime 不变的场景
-        if hasattr(entry, "size") and entry.size is not None:
-            actual_size = full.stat().st_size
-            if actual_size != entry.size:
+        try:
+            if not full.exists():
                 return False
+            actual_mtime = full.stat().st_mtime
+            if not _mtime_matches(actual_mtime, entry.mtime):
+                return False
+            # 同时验证文件大小，防止内容替换后 mtime 不变的场景
+            if hasattr(entry, "size") and entry.size is not None:
+                actual_size = full.stat().st_size
+                if actual_size != entry.size:
+                    return False
+        except OSError:
+            return False
 
         # 还原符号
         self.graph.file_symbols.setdefault(file_path, [])
@@ -570,29 +590,13 @@ class RepoMapEngine:
             )
             # fallback：一次遍历过滤扩展名，跳过已知大型目录
             valid_exts = set(EXT_TO_LANG)
-            skip_dirs = {
-                "node_modules",
-                ".git",
-                "__pycache__",
-                ".venv",
-                "venv",
-                "target",
-                "build",
-                "dist",
-                ".next",
-                ".nuxt",
-                ".cache",
-                ".pytest_cache",
-                ".mypy_cache",
-                ".ruff_cache",
-            }
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
                 if p.is_file()
                 and not p.is_symlink()
                 and p.suffix.lower() in valid_exts
-                and not any(d in p.parts for d in skip_dirs)
+                and not any(d in p.parts for d in _DEFAULT_SKIP_DIRS)
             )
 
         filtered_files: list[str] = []
@@ -648,28 +652,12 @@ class RepoMapEngine:
                 "rg --files failed for supporting files, falling back to rglob"
             )
             # fallback：跳过已知大型目录，与 _list_files 保持一致
-            skip_dirs = {
-                "node_modules",
-                ".git",
-                "__pycache__",
-                ".venv",
-                "venv",
-                "target",
-                "build",
-                "dist",
-                ".next",
-                ".nuxt",
-                ".cache",
-                ".pytest_cache",
-                ".mypy_cache",
-                ".ruff_cache",
-            }
             candidates = sorted(
                 str(p.relative_to(self.project_root))
                 for p in self.project_root.rglob("*")
                 if p.is_file()
                 and not p.is_symlink()
-                and not any(d in p.parts for d in skip_dirs)
+                and not any(d in p.parts for d in _DEFAULT_SKIP_DIRS)
             )
         root_context_files = [
             name
@@ -1116,9 +1104,9 @@ class RepoMapEngine:
 
 __all__ = [
     "DEFAULT_MAX_FILE_BYTES",
+    "DEFAULT_MAX_FILES",
     "EXT_TO_LANG",
     "QUERIES",
     "RepoMapEngine",
     "TreeSitterAdapter",
-    "logger",
 ]

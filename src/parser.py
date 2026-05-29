@@ -567,9 +567,10 @@ class TreeSitterAdapter:
                     f"Extreme nesting detected ({max_nesting} levels), skipping file to prevent parser crash"
                 )
                 return None
-        except Exception:
+        except (UnicodeDecodeError, ValueError):
             logger.debug(
-                "Nesting depth check failed, proceeding to parse", exc_info=True
+                "Nesting depth check failed (encoding), proceeding to parse",
+                exc_info=True,
             )
 
         try:
@@ -1526,7 +1527,7 @@ class TreeSitterAdapter:
         return None
 
     def _walk_tree(self, root: Any, max_nodes: int = 500_000) -> list[Any]:
-        """BFS 遍历 AST 节点，限制最大节点数防止 OOM。"""
+        """前序 DFS 遍历 AST 节点，限制最大节点数防止 OOM。"""
         nodes = [root]
         result: list[Any] = []
         while nodes and len(result) < max_nodes:

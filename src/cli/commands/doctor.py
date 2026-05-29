@@ -9,6 +9,8 @@ from ..handlers import (
     _resolve_project,
 )
 
+from ... import get_repomap_version
+
 
 def run_lsp_doctor(project: str, as_json: bool = False) -> int:
     try:
@@ -157,7 +159,7 @@ def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> i
     repomap_cli_origin = _module_origin("repomap_cli")
     if repomap_cli_origin != "not found":
         result["repomap_cli_origin"] = repomap_cli_origin
-    result["repomap_version"] = _module_origin("repomap_cli")
+    result["repomap_version"] = get_repomap_version()
 
     if show_lsp:
         from ...lsp import detect_lsp_servers

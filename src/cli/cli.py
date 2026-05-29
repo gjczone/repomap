@@ -4,7 +4,8 @@ import argparse
 import sys
 from typing import Sequence
 
-from .handlers import CLI_NAME
+from .handlers import CLI_NAME, DEFAULT_LSP_TIMEOUT
+from ..core import DEFAULT_MAX_FILES
 
 
 from .. import (
@@ -123,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--lsp-timeout",
         type=float,
-        default=8.0,
+        default=DEFAULT_LSP_TIMEOUT,
         help="Seconds to wait for LSP responses.",
     )
 
@@ -238,7 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument(
         "--lsp-timeout",
         type=float,
-        default=8.0,
+        default=DEFAULT_LSP_TIMEOUT,
         help="Seconds to wait for LSP responses.",
     )
     verify_parser.add_argument(
@@ -283,7 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser.add_argument(
         "--lsp-timeout",
         type=float,
-        default=8.0,
+        default=DEFAULT_LSP_TIMEOUT,
         help="Seconds to wait for LSP responses.",
     )
 
@@ -344,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument(
         "--lsp-timeout",
         type=float,
-        default=8.0,
+        default=DEFAULT_LSP_TIMEOUT,
         help="Seconds to wait for LSP responses.",
     )
 
@@ -402,7 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument(
         "--lsp-timeout",
         type=float,
-        default=8.0,
+        default=DEFAULT_LSP_TIMEOUT,
         help="Seconds to wait for LSP responses.",
     )
     check_parser.add_argument(
@@ -564,7 +565,10 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
         help="Project root path (absolute path recommended).",
     )
     parser.add_argument(
-        "--max-files", type=int, default=8000, help="Maximum number of files to scan."
+        "--max-files",
+        type=int,
+        default=DEFAULT_MAX_FILES,
+        help="Maximum number of files to scan.",
     )
 
 
@@ -646,7 +650,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "query":
         return run_query(
             args.project,
-            8000,
+            DEFAULT_MAX_FILES,
             args.query,
             getattr(args, "max_result_files", 20),
             getattr(args, "max_symbols", 40),
@@ -659,7 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "impact":
         return run_impact(
             args.project,
-            8000,
+            DEFAULT_MAX_FILES,
             args.files,
             getattr(args, "max_files", 20),
             args.json,
@@ -688,7 +692,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.file_path,
             args.max_symbols,
             args.max_chars,
-            getattr(args, "lsp_timeout", 8.0),
+            getattr(args, "lsp_timeout", DEFAULT_LSP_TIMEOUT),
             args.json,
         )
     if command == "hotspots":
@@ -755,8 +759,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-# Re-exports for external consumers (tests, __init__.py)
-from ..core import RepoMapEngine  # noqa: E402, F401
-from .handlers import _resolve_project  # noqa: E402, F401
-from .handlers import _scan_engine  # noqa: E402, F401
-from .handlers import clear_scan_cache  # noqa: E402, F401
+# Re-exports for test compatibility
+from ..core import RepoMapEngine  # noqa: E402, F401  # re-exported for tests
+from .handlers import _resolve_project, _scan_engine, clear_scan_cache  # noqa: E402, F401  # re-exported for tests

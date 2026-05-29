@@ -48,7 +48,13 @@ def _read_file(project_root: str, file_path: str) -> str | None:
         if b"\x00" in raw[:8192]:
             logger.warning(f"Skipping binary file: {file_path}")
             return None
-        return raw.decode("utf-8", errors="replace")[:131072]
+        result = raw.decode("utf-8", errors="replace")
+        if len(result) > 131072:
+            logger.debug(
+                f"Truncating large file for state map: {file_path} "
+                f"({len(result)} bytes, using first 512KB)"
+            )
+        return result[:524288]
     except OSError as exc:
         logger.warning(f"Failed to read {file_path}: {exc}")
         return None
@@ -135,8 +141,17 @@ def _scan_rust_state(
                         )
                 continue
             continue
+        in_string = False
+        escaped = False
         for ch in line:
-            if ch == "{":
+            if in_string:
+                if ch == '"' and not escaped:
+                    in_string = False
+                escaped = ch == "\\" and not escaped
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
                 brace_depth += 1
             elif ch == "}":
                 brace_depth -= 1

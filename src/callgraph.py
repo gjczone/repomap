@@ -35,8 +35,8 @@ def _node_text(node: Any) -> str:
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
     try:
         return ast.parse(source, filename)
-    except SyntaxError:
-        logger.debug("Syntax error in %s, skipping call graph analysis", filename)
+    except (SyntaxError, RecursionError):
+        logger.debug("Parse error in %s, skipping call graph analysis", filename)
         return None
 
 

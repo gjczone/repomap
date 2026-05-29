@@ -130,12 +130,13 @@ class PackageJsonExports:
 class BundlerAliasConfig:
     """解析各种 bundler 的 alias 配置。
 
-    NOTE: 当前实现仅作为占位符，实际 bundler alias 解析依赖于：
-    1. tsconfig.json / jsconfig.json 的 paths 配置（由 ImportResolver 主逻辑处理）
-    2. 项目特定的构建配置通常应由用户通过其他方式提供
+    通过 _parse_bundler_alias_strings() 对 Vite/Webpack 配置文件
+    中的 alias 声明进行字符串级解析（非 AST 解析），避免正则解析
+    JS 配置的脆弱性。解析结果在 _detect_vite_alias() 和
+    _detect_webpack_alias() 中使用。
 
-    正则解析 JS 配置文件极易出错，已移除。如需支持特定 bundler，
-    建议通过显式的配置文件映射而非解析代码实现。
+    主路径解析（tsconfig paths / package.json exports）由
+    ImportResolver 主逻辑处理。
     """
 
     def __init__(self, project_root: Path) -> None:
@@ -540,9 +541,8 @@ class ImportResolver:
                                     else:
                                         result = matches[:3]
 
-        # 缓存非相对路径的解析结果（相对路径取决于源文件位置，不宜缓存）
-        if not imp.startswith("."):
-            self._cache_set(cache_key, result)
+        # 缓存解析结果（cache_key 已包含 source_file，相对路径也可安全缓存）
+        self._cache_set(cache_key, result)
         if not result:
             # 所有解析策略均未命中，记录 debug 日志以便排查依赖图不完整的原因
             logger.debug(
