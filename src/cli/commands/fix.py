@@ -17,6 +17,13 @@ from ...core import _DEFAULT_SKIP_DIRS
 logger = logging.getLogger("repomap")
 
 
+def _run_subprocess(
+    args: list[str], timeout: int = 60
+) -> subprocess.CompletedProcess[str]:
+    """Run a subprocess command with capture_output=True, text=True, timeout."""
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
 def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
     """Auto-fix: ruff --fix, eslint --fix, etc."""
     try:
@@ -33,12 +40,7 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
                 if dry_run
                 else ["ruff", "check", "--fix", str(project_root)]
             )
-            result = subprocess.run(
-                ruff_args,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
+            result = _run_subprocess(ruff_args)
             if result.returncode == 0:
                 if dry_run:
                     dry_run_actions.append("ruff (would fix issues)")
@@ -72,21 +74,11 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
                     break
             if eslint_files:
                 if dry_run:
-                    result = subprocess.run(
-                        ["eslint", "--", *eslint_files],
-                        capture_output=True,
-                        text=True,
-                        timeout=60,
-                    )
+                    result = _run_subprocess(["eslint", "--", *eslint_files])
                     if result.stdout.strip():
                         dry_run_actions.append("eslint (would fix issues)")
                 else:
-                    result = subprocess.run(
-                        ["eslint", "--fix", "--", *eslint_files],
-                        capture_output=True,
-                        text=True,
-                        timeout=60,
-                    )
+                    result = _run_subprocess(["eslint", "--fix", "--", *eslint_files])
                     if result.returncode == 0:
                         fixes_applied.append("eslint --fix")
         except FileNotFoundError:
@@ -199,11 +191,8 @@ def run_ready(project: str, as_json: bool = False) -> int:
                 print("\n--- Step 3: ruff format --check ---")
             format_ok: bool | None = True
             try:
-                result = subprocess.run(
-                    ["ruff", "format", "--check", str(project_root)],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
+                result = _run_subprocess(
+                    ["ruff", "format", "--check", str(project_root)]
                 )
                 if result.returncode == 0:
                     if not as_json:

@@ -354,6 +354,8 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
+    # IMPORTANT: If new action='append' arguments are added to build_parser(),
+    # they MUST be handled here to convert "--flag value" to "--flag=value".
     if argv is None:
         raw_args = sys.argv[1:]
     else:

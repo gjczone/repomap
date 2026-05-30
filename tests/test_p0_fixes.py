@@ -23,12 +23,11 @@ class P0_1_OrjsonEnsureAscii(unittest.TestCase):
 
     def test_ensure_ascii_false_does_not_set_non_str_keys(self) -> None:
         """ensure_ascii=False 不应设置 OPT_NON_STR_KEYS。"""
-        from src import HAS_ORJSON
-
-        if not HAS_ORJSON:
+        try:
+            import orjson  # noqa: F811
+        except ImportError:
             self.skipTest("orjson not installed")
-
-        import orjson
+            return
 
         captured_options: list[int] = []
         original_dumps = orjson.dumps

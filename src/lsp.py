@@ -5,6 +5,7 @@ import os
 import queue
 import shutil
 import subprocess
+import select
 import threading
 import time
 from dataclasses import dataclass, field
@@ -571,6 +572,13 @@ class StdioLspClient:
             return
         while not self._stop_event.is_set():
             try:
+                fd = self.process.stdout.fileno()
+                ready, _, _ = select.select([fd], [], [], 30.0)
+                if not ready:
+                    logger.warning("LSP stdout idle for 30s, checking stop event")
+                    if self._stop_event.is_set():
+                        return
+                    continue
                 message = _read_lsp_message(self.process.stdout)
             except Exception as exc:
                 if self._stop_event.is_set():
