@@ -48,9 +48,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum overview size for AI-friendly output.",
     )
     overview_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
-    overview_parser.add_argument(
         "--with-heat",
         action="store_true",
         default=False,
@@ -91,9 +88,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CALL_CHAIN_MAX_CHARS,
         help="Maximum text output size.",
     )
-    chain_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
 
     query_parser = subparsers.add_parser(
         "query-symbol", help="Scan a repository and query matching symbols."
@@ -110,9 +104,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum text output size.",
     )
     query_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
-    query_parser.add_argument(
         "--lsp-timeout",
         type=float,
         default=DEFAULT_LSP_TIMEOUT,
@@ -123,12 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     topic_query_parser = subparsers.add_parser(
         "query", help="Search repository by topic keyword."
     )
-    topic_query_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
+    _add_project_args(topic_query_parser)
     topic_query_parser.add_argument(
         "--query", "-q", required=True, help="Topic keyword."
     )
@@ -142,7 +128,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-symbols", type=int, default=40, help="Max result symbols (default 40)."
     )
     topic_query_parser.add_argument("--no-tests", action="store_true")
-    topic_query_parser.add_argument("--json", action="store_true")
     topic_query_parser.add_argument(
         "--paths", help="Limit search to comma-separated directories."
     )
@@ -160,18 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
     impact_parser = subparsers.add_parser(
         "impact", help="Analyze file-level change impact."
     )
-    impact_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
+    _add_project_args(impact_parser)
     impact_parser.add_argument(
         "--files", required=True, nargs="+", help="Files to analyze (one or more)."
-    )
-    impact_parser.add_argument("--json", action="store_true")
-    impact_parser.add_argument(
-        "--max-files", type=int, default=20, help="Max affected files to show."
     )
     impact_parser.add_argument(
         "--with-symbols",
@@ -193,15 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser = subparsers.add_parser(
         "verify", help="Aggregate post-edit evidence before final handoff."
     )
-    verify_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
-    verify_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
+    _add_project_args(verify_parser)
     verify_parser.add_argument(
         "--max-chars",
         type=int,
@@ -270,9 +238,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum text output size.",
     )
     file_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
-    file_parser.add_argument(
         "--lsp-timeout",
         type=float,
         default=DEFAULT_LSP_TIMEOUT,
@@ -286,9 +251,6 @@ def build_parser() -> argparse.ArgumentParser:
     hotspots_parser.add_argument(
         "--limit", type=int, default=15, help="Number of files to print."
     )
-    hotspots_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
 
     cache_parser = subparsers.add_parser(
         "cache", help="Prepare a graph baseline before the target edits."
@@ -298,29 +260,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["save"],
         help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.",
     )
-    cache_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
-    cache_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
+    _add_project_args(cache_parser)
 
     diff_parser = subparsers.add_parser(
         "diff",
         help="Advanced graph-only comparison against a baseline saved before the target edits.",
     )
-    diff_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
-    diff_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
+    _add_project_args(diff_parser)
 
     refs_parser = subparsers.add_parser(
         "refs", help="Scan a repository and analyze references."
@@ -329,9 +275,6 @@ def build_parser() -> argparse.ArgumentParser:
     refs_parser.add_argument("--symbol", help="Optional symbol name.")
     refs_parser.add_argument(
         "--file-path", help="Disambiguate symbol analysis by relative file path."
-    )
-    refs_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
     )
     refs_parser.add_argument(
         "--lsp-timeout",
@@ -344,9 +287,6 @@ def build_parser() -> argparse.ArgumentParser:
         "orphan", help="Scan a repository and find orphaned symbols."
     )
     _add_project_args(orphan_parser)
-    orphan_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
     orphan_parser.add_argument(
         "--limit",
         type=int,
@@ -363,12 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser = subparsers.add_parser(
         "check", help="Run compiler/static analysis diagnostics."
     )
-    check_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
+    _add_project_args(check_parser)
     check_parser.add_argument(
         "--types",
         nargs="*",
@@ -403,9 +338,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Maximum explicit files to open through LSP.",
     )
-    check_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
     fix_parser = subparsers.add_parser(
         "fix", help="Auto-fix lint issues (ruff --fix, eslint --fix)."
     )
@@ -420,22 +352,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show what would be fixed without applying changes.",
     )
-    fix_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
 
     ready_parser = subparsers.add_parser(
         "ready", help="Quick readiness check: verify --quick + check + format."
     )
-    ready_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
-    ready_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
+    _add_project_args(ready_parser)
 
     lsp_parser = subparsers.add_parser(
         "lsp", help="Inspect local LSP server availability."
@@ -444,25 +365,12 @@ def build_parser() -> argparse.ArgumentParser:
     lsp_doctor_parser = lsp_subparsers.add_parser(
         "doctor", help="Detect local LSP servers without starting analysis."
     )
-    lsp_doctor_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
-    lsp_doctor_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
+    _add_project_args(lsp_doctor_parser)
     lsp_setup_parser = lsp_subparsers.add_parser(
         "setup",
         help="Auto-install recommended LSP servers for detected project languages.",
     )
-    lsp_setup_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
+    _add_project_args(lsp_setup_parser)
     lsp_setup_parser.add_argument(
         "--languages",
         nargs="*",
@@ -480,9 +388,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_project_args(routes_parser)
     routes_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
-    )
-    routes_parser.add_argument(
         "--with-consumers",
         action="store_true",
         help="Scan for frontend/client consumers of each route.",
@@ -491,19 +396,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser(
         "doctor", help="Validate runtime, prerequisites, and LSP server availability."
     )
-    doctor_parser.add_argument(
-        "--project",
-        "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
-    )
+    _add_project_args(doctor_parser)
     doctor_parser.add_argument(
         "--lsp",
         action="store_true",
         help="Also check LSP server availability and suggest install commands.",
-    )
-    doctor_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
     )
 
     state_map_parser = subparsers.add_parser(
@@ -515,9 +412,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     state_map_parser.add_argument(
         "--query", default=None, help="Keywords to find relevant state definitions."
-    )
-    state_map_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
     )
 
     search_parser = subparsers.add_parser(
@@ -532,9 +426,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     search_parser.add_argument(
         "--top-k", type=int, default=20, help="Maximum results (default 20)."
-    )
-    search_parser.add_argument(
-        "--json", action="store_true", help="Print raw JSON output."
     )
 
     build_parser_cmd = subparsers.add_parser(
@@ -560,6 +451,18 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=DEFAULT_MAX_FILES,
         help="Maximum number of files to scan.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=True,
+        help="Print raw JSON output (default: True).",
+    )
+    parser.add_argument(
+        "--no-json",
+        action="store_true",
+        default=False,
+        help="Print human-readable text output instead of JSON.",
     )
 
 
@@ -601,6 +504,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code or 0)
 
+    # 处理 --no-json 参数：如果指定了 --no-json，则覆盖 --json 的默认值
+    if getattr(args, "no_json", False):
+        args.json = False
+
     command = args.command
     if command == "overview":
         if getattr(args, "quick", False):
@@ -639,7 +546,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "query":
         return run_query(
             args.project,
-            DEFAULT_MAX_FILES,
+            args.max_files,
             args.query,
             getattr(args, "max_result_files", 20),
             getattr(args, "max_symbols", 40),
@@ -652,7 +559,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "impact":
         return run_impact(
             args.project,
-            DEFAULT_MAX_FILES,
+            args.max_files,
             args.files,
             getattr(args, "max_files", 20),
             args.json,

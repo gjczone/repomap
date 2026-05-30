@@ -66,7 +66,10 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("tree-sitter parsers", result.stdout)
+        # 默认输出 JSON 格式
+        import json
+        data = json.loads(result.stdout)
+        self.assertIn("python", data["result"]["parsers"])
 
     def test_binary_query_symbol_runs_on_real_project(self) -> None:
         with tempfile.TemporaryDirectory() as project_root:

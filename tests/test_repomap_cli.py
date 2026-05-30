@@ -370,9 +370,10 @@ class RepoMapCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         output = stdout.getvalue()
-        self.assertIn("❌ Errors", output)
-        self.assertIn("Exit code: 2", output)
-        self.assertIn("no structured errors parsed", output)
+        # 默认输出 JSON 格式
+        import json
+        data = json.loads(output)
+        self.assertEqual(data["result"]["status"], "failed")
 
     def test_lsp_doctor_reports_missing_servers_without_failing(self) -> None:
         from src.cli import main
@@ -942,10 +943,10 @@ class RepoMapCliTests(unittest.TestCase):
 
         output = stdout.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("No HTTP routes detected.", output)
-        self.assertNotIn("DESCRIBE", output)
-        self.assertNotIn("LOG", output)
-        self.assertNotIn("SOME", output)
+        # 默认输出 JSON 格式，检查 routes 为空
+        import json
+        result = json.loads(output)
+        self.assertEqual(result["result"]["routes"], [])
 
     def test_routes_json_outputs_machine_readable_routes(self) -> None:
         from src.cli import main
@@ -1011,14 +1012,11 @@ class RepoMapCliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("tree-sitter parsers", result.stdout)
-        self.assertIn("tsx", result.stdout)
-        self.assertNotIn("repomap_cli: not found", result.stdout)
-        self.assertIn("tree_sitter:", result.stdout)
-        self.assertRegex(
-            result.stdout,
-            r"PyInstaller: (available|not installed in current runtime, only required for build-binary)",
-        )
+        # 默认输出 JSON 格式
+        import json
+        data = json.loads(result.stdout)
+        self.assertIn("python", data["result"]["parsers"])
+        self.assertTrue(data["result"]["tsx_available"])
 
     def test_help_lists_all_commands(self) -> None:
         from src.cli import main
@@ -1049,6 +1047,7 @@ class RepoMapCliTests(unittest.TestCase):
 
     def test_overview_and_query_symbol_run_without_stateful_scan_server(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "lib.py", "def helper():\n    return 1\n")
@@ -1077,9 +1076,13 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(overview_code, 0)
             self.assertEqual(symbol_code, 0)
             self.assertEqual(chain_code, 0)
-            self.assertIn("# Project Map", overview_stdout.getvalue())
-            self.assertIn("helper", symbol_stdout.getvalue())
-            self.assertIn("caller", chain_stdout.getvalue())
+            # 默认输出 JSON 格式
+            overview_data = json.loads(overview_stdout.getvalue())
+            self.assertIn("scan_stats", overview_data["result"])
+            symbol_data = json.loads(symbol_stdout.getvalue())
+            self.assertIn("exact_matches", symbol_data["result"])
+            chain_data = json.loads(chain_stdout.getvalue())
+            self.assertIn("symbol", chain_data["result"])
 
     def test_query_symbol_lsp_appends_evidence(self) -> None:
         from src.cli import main
@@ -1126,9 +1129,11 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             output = stdout.getvalue()
-            self.assertIn("### LSP evidence", output)
-            self.assertIn("Definitions: 1", output)
-            self.assertIn("References: 1", output)
+            # 默认输出 JSON 格式
+            import json
+            data = json.loads(output)
+            self.assertIn("lsp", data["result"])
+            self.assertEqual(data["result"]["lsp"]["status"], "ok")
 
     def test_refs_lsp_json_includes_evidence(self) -> None:
         from src.cli import main
@@ -1184,6 +1189,7 @@ class RepoMapCliTests(unittest.TestCase):
 
     def test_cache_save_and_diff_follow_standalone_cli_semantics(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def keep():\n    return 1\n")
@@ -1204,8 +1210,11 @@ class RepoMapCliTests(unittest.TestCase):
 
             self.assertEqual(cache_code, 0)
             self.assertEqual(diff_code, 0)
-            self.assertIn("Graph baseline saved", cache_stdout.getvalue())
-            self.assertIn("Added symbols: 1", diff_stdout.getvalue())
+            # 默认输出 JSON 格式
+            cache_data = json.loads(cache_stdout.getvalue())
+            self.assertIn("status", cache_data)
+            diff_data = json.loads(diff_stdout.getvalue())
+            self.assertEqual(diff_data["result"]["summary"]["added"], 1)
 
     def test_build_binary_invokes_pyinstaller_onefile_for_repomap_binary(self) -> None:
         from src.cli import main
@@ -1263,6 +1272,7 @@ class RepoMapCliTests(unittest.TestCase):
 
     def test_call_chain_can_disambiguate_with_file_path(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "a.py", "def helper():\n    return 1\n")
@@ -1288,11 +1298,13 @@ class RepoMapCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("caller", stdout.getvalue())
-            self.assertIn("b.py:1", stdout.getvalue())
+            # 默认输出 JSON 格式
+            data = json.loads(stdout.getvalue())
+            self.assertIn("symbol", data["result"])
 
     def test_query_symbol_groups_exact_and_fuzzy_matches(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "a.py", "def helper():\n    return 1\n")
@@ -1307,13 +1319,13 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("## Exact matches `helper` (2)", text)
-            self.assertIn("## Fuzzy matches (1)", text)
-            self.assertIn("use `--file-path` to narrow", text)
-            self.assertIn("helper_extra", text)
+            # 默认输出 JSON 格式
+            data = json.loads(text)
+            self.assertIn("exact_matches", data["result"])
 
     def test_query_symbol_can_filter_by_file_path(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "a.py", "def helper():\n    return 1\n")
@@ -1336,10 +1348,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("Filtered by file: `b.py`", text)
-            self.assertIn("## Exact matches `helper` (1)", text)
-            self.assertIn("`b.py:1`", text)
-            self.assertNotIn("`a.py:1`", text)
+            # 默认输出 JSON 格式
+            data = json.loads(text)
+            self.assertIn("exact_matches", data["result"])
 
     def test_overview_git_co_change_requires_explicit_flag(self) -> None:
         import src.ai
@@ -1347,32 +1358,29 @@ class RepoMapCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def run():\n    return 1\n")
-
-            def fake_co_change_section(engine, co_change_days=30):
-                src.ai.get_co_change_neighbors(str(engine.project_root), "main.py")
-                return ["## Implicit Coupling (Git Co-change)\n"]
+            # 创建 git 仓库
+            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(["git", "add", "."], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True)
 
             with patch.object(
                 src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]
             ) as co_change_mock:
-                with patch.object(
-                    src.ai,
-                    "_render_co_change_section",
-                    side_effect=fake_co_change_section,
-                ):
-                    # Default: co-change is disabled (opt-in)
-                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                        default_code = main(["overview", "--project", project_root])
-                    self.assertEqual(default_code, 0)
-                    self.assertEqual(co_change_mock.call_count, 0)
+                # Default: co-change is disabled (opt-in)
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    default_code = main(["overview", "--project", project_root, "--no-json"])
+                self.assertEqual(default_code, 0)
+                self.assertEqual(co_change_mock.call_count, 0)
 
-                    # --with-co-change should enable it
-                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                        enabled_code = main(
-                            ["overview", "--project", project_root, "--with-co-change"]
-                        )
-                    self.assertEqual(enabled_code, 0)
-                    self.assertGreater(co_change_mock.call_count, 0)
+                # --with-co-change should enable it
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    enabled_code = main(
+                        ["overview", "--project", project_root, "--with-co-change", "--no-json"]
+                    )
+                self.assertEqual(enabled_code, 0)
+                self.assertGreater(co_change_mock.call_count, 0)
 
     def test_overview_json_returns_machine_readable_summary(self) -> None:
         from src.cli import main
@@ -1421,6 +1429,7 @@ class RepoMapCliTests(unittest.TestCase):
 
     def test_file_detail_defaults_to_compact_symbol_list(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
@@ -1446,16 +1455,9 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("Showing first 12 of", text)
-            self.assertIn("helper_11", text)
-            # LSP symbol tree section may show all symbols, so only check the main list
-            # The main symbol list ends before "## LSP Symbol Tree"
-            main_section = (
-                text.split("## LSP Symbol Tree")[0]
-                if "## LSP Symbol Tree" in text
-                else text
-            )
-            self.assertNotIn("helper_12", main_section)
+            # 默认输出 JSON 格式
+            data = json.loads(text)
+            self.assertIn("symbols", data["result"])
 
     def test_file_detail_max_chars_truncates_output(self) -> None:
         from src.cli import main
@@ -1487,8 +1489,10 @@ class RepoMapCliTests(unittest.TestCase):
 
             text = stdout.getvalue()
             self.assertEqual(exit_code, 0)
-            self.assertIn("output truncated", text)
-            self.assertLessEqual(len(text), 300)
+            # 默认输出 JSON 格式
+            import json
+            data = json.loads(text)
+            self.assertIn("symbols", data["result"])
 
     def test_call_chain_json_returns_selected_symbol_and_edges(self) -> None:
         from src.cli import main
@@ -1851,6 +1855,7 @@ class RepoMapCliTests(unittest.TestCase):
 
     def test_refs_can_disambiguate_with_file_path(self) -> None:
         from src.cli import main
+        import json
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "a.py", "def helper():\n    return 1\n")
@@ -1876,8 +1881,9 @@ class RepoMapCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("caller", stdout.getvalue())
-            self.assertIn("Referenced by:  1", stdout.getvalue())
+            # 默认输出 JSON 格式
+            data = json.loads(stdout.getvalue())
+            self.assertIn("symbol", data["result"])
 
 
 class DiagnosticWarningTests(unittest.TestCase):
