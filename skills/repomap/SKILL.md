@@ -7,17 +7,17 @@ description: "MUST invoke this skill for ANY task that touches code — before r
 
 `repomap` is a CLI binary on `PATH` that builds a codebase graph (tree-sitter AST → symbols → dependencies → PageRank) and answers structural questions faster than grep + raw reads. It also runs linters, compilers, and LSP diagnostics through `check` and `verify`. It does not replace project tests — run those separately.
 
-`--project` is a **required** argument for every command (except `build-binary`). Always pass it as an absolute path. Do not rely on the subprocess cwd — it may be the user's home directory.
+`--project` is an optional argument for every command (except `build-binary`). If not specified, repomap will automatically detect the git root directory. Always pass it as an absolute path when specified explicitly.
 
 ## Core rules
 
-- **Repomap first, grep later.** Before running `grep`, `find`, `rg`, `ls`, or reading a file you haven't seen before, ask: can a repomap command answer this faster and with more context? `query` beats grep for topic search. `query-symbol` beats grep for symbol lookup. `file-detail` beats `cat` for understanding a file's structure. `refs` beats grep for finding all callers. The answer is almost always yes.
+- **Repomap first, grep later.** Before running `grep`, `find`, `rg`, `ls`, or reading a file you haven't seen before, ask: can a repomap command answer this faster and with more context? `query` beats grep for topic search. `query-symbol` beats grep for symbol lookup. `file-detail` beats `cat` for understanding a file's structure. `call-chain` beats grep for finding all callers. The answer is almost always yes.
 - **TIMEOUT: 120 SECONDS MINIMUM — NON-NEGOTIABLE.** Every `bash` command invoking repomap **MUST** use a `timeout` of **at least 120 seconds**. A 15s or 30s timeout WILL cause the command to be SIGKILL'd mid-flight, producing truncated output and unreliable decisions. **This is a HARD RULE. You WILL use 120s. There is NO exception. Any violation — even once — means you are operating on incomplete data and the resulting analysis is untrustworthy. DO NOT compromise on this.**
-- **LSP is automatic.** Run `repomap doctor --lsp --project <project>` early in every project. `query-symbol`, `refs`, `file-detail`, `verify`, and `check` automatically use LSP when a server is available. It is the highest-precision signal repomap can provide.
+- **LSP is automatic.** Run `repomap doctor --lsp --project <project>` early in every project. `query-symbol`, `call-chain`, `file-detail`, `verify`, and `check` automatically use LSP when a server is available. It is the highest-precision signal repomap can provide.
 - **Read files before editing.** RepoMap output tells you which files matter — it does not replace reading them.
 - **`verify` is the default post-edit gate.** Run it after every non-trivial code change. It aggregates changed-files, risk, contract warnings, and diagnostics. It does not run project tests — run those separately.
 - **`impact` before editing, not after.** For any edit that touches more than a few lines, run `impact --files <file> --with-symbols` first. It tells you what else might break.
-- **Orphan is a candidate list, not a deletion license.** Verify every high-confidence (≥70) candidate with `refs` before deleting. Check for dynamic references the graph cannot see: string dispatch, reflection, macros, config-driven routing.
+- **Orphan is a candidate list, not a deletion license.** verify automatically outputs high-confidence (≥70) candidates. Check for dynamic references the graph cannot see: string dispatch, reflection, macros, config-driven routing.
 
 ## Command selection
 
@@ -28,7 +28,7 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 | First repository overview          | `repomap overview --project <project>`                                | ALWAYS at the start of any project. Gives you modules, entrypoints, reading order, hotspots. Co-change analysis is OFF by default (opt-in via `--with-co-change`, window configurable with `--co-change-days`).                                                            |
 | Reading a file for the first time  | `repomap file-detail --project <project> --file-path <file>`          | ALWAYS before opening a file you haven't read. Shows symbols, signatures, called-by, and LSP tree.                                                                                                                                                                         |
 | Finding where something is defined | `repomap query-symbol --project <project> --symbol <name>`            | ALWAYS instead of grep for symbol lookup. LSP precision by default. Add `--file-path` to narrow.                                                                                                                                                                           |
-| Finding all callers of a function  | `repomap refs --project <project> --symbol <name>`                    | ALWAYS before changing a function signature or behavior. Shows every reference.                                                                                                                                                                                            |
+| Finding all callers of a function  | `repomap call-chain --project <project> --symbol <name>`              | ALWAYS before changing a function signature or behavior. Shows callers, callees, and references.                                                                                                                                                                           |
 | Understanding call flow            | `repomap call-chain --project <project> --symbol <name>`              | ALWAYS before changing logic in a function. Shows callers AND callees. `--direction callers`/`callees` to filter.                                                                                                                                                          |
 | Topic/feature search               | `repomap query --project <project> --query <keyword>`                 | When you know the business domain but not the exact files. Like grep but with synonym expansion and relevance ranking.                                                                                                                                                     |
 | Symbol search (BM25)               | `repomap search --project <project> --query <text>`                   | When you have a natural-language description of what you're looking for.                                                                                                                                                                                                   |
@@ -38,10 +38,10 @@ Every row is a situation you WILL encounter. Use the command. Do not default to 
 | Auto-fix lint                      | `repomap fix --project <project>`                                     | After making changes, before committing — auto-fixes ruff and eslint issues.                                                                                                                                                                                               |
 | Pre-commit readiness               | `repomap ready --project <project>`                                   | One command to verify + check + format before committing. Use right before `git commit`.                                                                                                                                                                                   |
 | Compiler/lint diagnostics          | `repomap check --project <project>`                                   | When you need to know if the code compiles or has lint errors. Use `--modified-file` for focused checks.                                                                                                                                                                   |
-| Before deleting anything           | `repomap orphan --project <project>`                                  | ALWAYS before deleting code. Finds dead-code candidates. Verify ≥70 confidence with `refs` first.                                                                                                                                                                          |
+| Before deleting anything           | `repomap verify --project <project>`                                  | verify automatically outputs high-confidence orphan symbols (≥70). Check these before deleting code.                                                                                                                                                                       |
 | Finding API routes                 | `repomap routes --project <project> --json`                           | When working with HTTP/API endpoints. Add `--with-consumers` to find frontend callers.                                                                                                                                                                                     |
-| Changing state/enum logic          | `repomap state-map --project <project> --symbol <EnumName>`           | ALWAYS before modifying enums, constants, or state machines. Shows all values, writers, and readers.                                                                                                                                                                       |
-| Identifying complex files          | `repomap hotspots --project <project>`                                | When you need to know which files are the densest/most complex.                                                                                                                                                                                                            |
+| Changing state/enum logic          | `repomap query-symbol --project <project> --symbol <EnumName>`        | ALWAYS before modifying enums, constants, or state machines. query-symbol automatically outputs state map (values, writers, readers) for enum/const symbols.                                                                                                               |
+| Identifying complex files          | `repomap overview --project <project>`                                | overview automatically includes hotspot files in the output. No need for a separate command.                                                                                                                                                                                |
 | Checking LSP availability          | `repomap doctor --lsp --project <project>`                            | Early in every project. Shows installed LSP servers and install suggestions.                                                                                                                                                                                               |
 | Installing LSP servers             | `repomap lsp setup --project <project>`                               | When doctor shows missing servers. Use `--dry-run` first.                                                                                                                                                                                                                  |
 | Pre-edit baseline                  | `repomap cache save --project <project>`                              | Before major edits; enables `verify --with-diff` for contract change detection.                                                                                                                                                                                            |
@@ -75,11 +75,10 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 
 **Known symbol, changing behavior:**
 
-1. `query-symbol --symbol <name>` → find definition
-2. `call-chain --symbol <name>` → understand call flow
-3. `refs --symbol <name>` → all references
-4. Edit
-5. `verify`
+1. `query-symbol --symbol <name>` → find definition + state map (if enum/const)
+2. `call-chain --symbol <name>` → understand call flow + references
+3. Edit
+4. `verify`
 
 **Bug investigation:**
 
@@ -93,24 +92,21 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 1. `routes --json` → full route inventory
 2. `routes --with-consumers` → frontend callers
 3. `impact --files <route-file> --with-symbols` before editing
-4. `refs --symbol <handler>` → all references
+4. `call-chain --symbol <handler>` → all references
 5. Edit
 6. `verify`
 
 **State/lifecycle change:**
 
-1. `state-map --symbol <EnumName>` → values, writers, readers
-2. `refs --symbol <EnumName>` → all references
-3. Edit
-4. Re-run `state-map` to confirm coverage
+1. `query-symbol --symbol <EnumName>` → find definition + state map (values, writers, readers)
+2. Edit
+3. Re-run `query-symbol` to confirm coverage
 
 **Dead-code check before deletion:**
 
-1. `orphan` → scan candidates
-2. Focus on ≥70 confidence
-3. `refs --symbol <candidate>` → verify each one
-4. Check for dynamic references (string dispatch, reflection, macros)
-5. Only then delete
+1. `verify` → automatically outputs high-confidence orphan symbols (≥70)
+2. Check for dynamic references (string dispatch, reflection, macros)
+3. Only then delete
 
 **PR review / assessing someone else's changes:**
 
@@ -130,7 +126,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 - Instead of `grep -r "functionName"` → `query-symbol --symbol functionName`
 - Instead of `grep -r "keyword" src/` → `query --query "keyword"`
 - Instead of `cat file.py | head` → `file-detail --file-path file.py`
-- Instead of `grep -r "caller of X"` → `refs --symbol X`
+- Instead of `grep -r "caller of X"` → `call-chain --symbol X`
 
 ## Critical traps
 
@@ -139,7 +135,7 @@ Pick the recipe that matches your situation. Commands are shown without `--proje
 - **`verify --quick` shows no changed files** → cannot assess risk. Stage or commit changes, then use full `verify`.
 - **`verify` says "SKIPPED"** → state the limitation explicitly in your completion report — do not treat as passing.
 - **`verify` reports contract risk warnings** → address each one before claiming completion. They flag API/signature/state mismatches the graph detected.
-- **Orphan high-confidence (≥70)** → still requires `refs` verification. The graph cannot see string dispatch, reflection, macros, or config-driven routing.
+- **Orphan high-confidence (≥70)** → verify automatically outputs these. The graph cannot see string dispatch, reflection, macros, or config-driven routing.
 - **`cache save` must run _before_ target edits** — `diff`/`verify --with-diff` need a pre-edit baseline. Missing baseline is not proof of safety.
 - **`--with-co-change` is opt-in, not default** → adds 30-60s and reads git history. Window configurable with `--co-change-days` (default 30 days). Only use it when: (a) changing a file with many cross-module callers, (b) `impact` shows fewer dependents than expected, or (c) working in a module where history suggests hidden coupling. Never use on first contact or routine edits.
 - **Skipping repomap for "simple" tasks** → a "simple read" becomes a "simple edit" becomes a multi-file change. `file-detail` + `impact` cost seconds and prevent hours of debugging. When in doubt, run it.

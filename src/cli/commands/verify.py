@@ -623,14 +623,14 @@ def _print_missed_files_section(
 
 
 def run_verify(
-    project: str,
-    as_json: bool,
-    types: list[str] | None,
-    max_issues: int,
-    resolve_symbols: bool,
-    lsp_timeout: float,
-    lsp_max_files: int,
-    with_diff: bool,
+    project: str | None = None,
+    as_json: bool = True,
+    types: list[str] | None = None,
+    max_issues: int = 50,
+    resolve_symbols: bool = True,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
+    lsp_max_files: int = 20,
+    with_diff: bool = False,
     quick: bool = False,
     incremental: bool = False,
     max_chars: int = 16000,
@@ -694,6 +694,9 @@ def run_verify(
         )
         untested = find_untested_symbols(engine.graph) if not quick else []
 
+        # 获取孤儿符号信息（高置信度 ≥70）
+        orphan_symbols = _collect_orphan_symbols(engine) if not quick else []
+
         payload = {
             "scanStats": _scan_stats_payload(engine),
             "status": status,
@@ -717,6 +720,7 @@ def run_verify(
                 for test in evidence["tests"]
             ],
             "untestedSymbols": untested,
+            "orphanSymbols": orphan_symbols,
             "check": {
                 "status": check_payload.get("status", "unknown"),
                 "summary": check_payload.get("summary", {}),
@@ -833,6 +837,58 @@ def _orphan_note(symbol: Symbol) -> str:
     if not reasons:
         reasons.append("no callers or callees")
     return "; ".join(reasons)
+
+
+def _collect_orphan_symbols(
+    engine: RepoMapEngine, min_confidence: int = 70
+) -> list[dict]:
+    """收集高置信度的孤儿符号信息，用于 verify 报告。"""
+    symbol_ids = set(engine.graph.symbols.keys())
+    refs_in: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
+    refs_out: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
+    for source_id, edge_list in engine.graph.outgoing.items():
+        for edge in edge_list:
+            if edge.kind not in ("call", "import"):
+                continue
+            refs_out.setdefault(source_id, set()).add(edge.target)
+            refs_in.setdefault(edge.target, set()).add(source_id)
+
+    candidates: list[Symbol] = []
+    for sid in symbol_ids:
+        if len(refs_in[sid]) == 0 and len(refs_out[sid]) == 0:
+            symbol = engine.graph.symbols[sid]
+            if symbol.name in {"main", "__main__"}:
+                continue
+            if symbol.visibility == "exported":
+                continue
+            if symbol.kind in _ORPHAN_EXCLUDED_KINDS:
+                continue
+            if any(
+                symbol.file.lower().endswith(ext) for ext in _ORPHAN_EXCLUDED_EXTENSIONS
+            ):
+                continue
+            candidates.append(symbol)
+
+    # Build orphan name set for struct/impl pairing heuristic
+    orphan_names: set[str] = {s.name for s in candidates}
+
+    # Compute confidence for each candidate
+    scored: list[dict] = []
+    for symbol in candidates:
+        conf = _orphan_confidence(symbol, orphan_names)
+        if conf >= min_confidence:
+            scored.append(
+                {
+                    "name": symbol.name,
+                    "kind": symbol.kind,
+                    "file": symbol.file,
+                    "line": symbol.line,
+                    "confidence": conf,
+                }
+            )
+
+    scored.sort(key=lambda x: (-x["confidence"], x["file"], x["line"], x["name"]))
+    return scored
 
 
 def run_orphan(

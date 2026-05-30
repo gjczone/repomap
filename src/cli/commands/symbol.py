@@ -4,8 +4,11 @@ import sys
 from typing import Any
 
 from ... import (
+    DEFAULT_CALL_CHAIN_MAX_CHARS,
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
+    DEFAULT_QUERY_SYMBOL_MAX_CHARS,
 )
+from ...core import DEFAULT_MAX_FILES
 from ...ai import _truncate_output
 from ...core import RepoMapEngine
 from ...hints import (
@@ -28,6 +31,58 @@ from ..handlers import (
     _select_symbol_match,
 )
 from ...state_map import find_state_definitions
+
+
+def _collect_references_for_symbol(engine: RepoMapEngine, symbol: Any) -> list[dict]:
+    """收集符号的引用信息，用于 call-chain 报告。"""
+    references = []
+    # 查找所有引用该符号的边
+    for source_id, edge_list in engine.graph.outgoing.items():
+        for edge in edge_list:
+            if edge.target == symbol.id:
+                source_symbol = engine.graph.symbols.get(source_id)
+                if source_symbol:
+                    references.append(
+                        {
+                            "file": source_symbol.file,
+                            "line": source_symbol.line,
+                            "type": edge.kind,
+                            "name": source_symbol.name,
+                        }
+                    )
+    # 按文件和行号排序
+    references.sort(key=lambda x: (x["file"], x["line"]))
+    return references[:50]  # 限制返回数量
+
+
+def _collect_state_map_for_symbol(
+    engine: RepoMapEngine, symbol_name: str
+) -> list[dict] | None:
+    """收集符号的状态映射信息，用于 query-symbol 报告。"""
+    try:
+        defs = find_state_definitions(engine, symbol=symbol_name)
+        if not defs:
+            return None
+        return [
+            {
+                "symbol_name": d.symbol_name,
+                "file": d.file,
+                "line": d.line,
+                "kind": d.kind,
+                "values": [
+                    {"name": v.name, "file": v.file, "line": v.line} for v in d.values
+                ],
+                "writers": [
+                    {"name": w.name, "file": w.file, "line": w.line} for w in d.writers
+                ],
+                "readers": [
+                    {"name": r.name, "file": r.file, "line": r.line} for r in d.readers
+                ],
+            }
+            for d in defs
+        ]
+    except Exception:
+        return None
 
 
 def _group_symbol_matches(
@@ -81,14 +136,14 @@ _CALL_CHAIN_MAX_DEPTH = 10
 
 
 def run_call_chain(
-    project: str,
-    max_files: int,
-    symbol: str,
-    file_path: str | None,
-    direction: str,
-    depth: int,
-    max_chars: int,
-    as_json: bool,
+    project: str | None = None,
+    max_files: int = DEFAULT_MAX_FILES,
+    symbol: str = "",
+    file_path: str | None = None,
+    direction: str = "both",
+    depth: int = 3,
+    max_chars: int = DEFAULT_CALL_CHAIN_MAX_CHARS,
+    as_json: bool = True,
 ) -> int:
     if depth > _CALL_CHAIN_MAX_DEPTH:
         print(
@@ -109,6 +164,9 @@ def run_call_chain(
             return 1
         if as_json:
             chain = engine.call_chain(selected.id, direction, depth)
+            # 收集引用信息
+            references = _collect_references_for_symbol(engine, selected)
+
             payload = {
                 "symbol": {
                     "id": selected.id,
@@ -127,6 +185,7 @@ def run_call_chain(
                 "callees": [
                     _format_symbol_ref(engine, item.id) for item in chain["callees"]
                 ],
+                "references": references,
             }
             print(json_envelope("call-chain", str(engine.project_root), payload))
             return 0
@@ -164,13 +223,13 @@ def run_call_chain(
 
 
 def run_query_symbol(
-    project: str,
-    max_files: int,
-    symbol: str,
-    file_path: str | None,
-    max_chars: int,
+    project: str | None = None,
+    max_files: int = DEFAULT_MAX_FILES,
+    symbol: str = "",
+    file_path: str | None = None,
+    max_chars: int = DEFAULT_QUERY_SYMBOL_MAX_CHARS,
     lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
-    as_json: bool = False,
+    as_json: bool = True,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -223,6 +282,10 @@ def run_query_symbol(
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(
                     engine, selected, lsp_timeout
                 )
+                # 自动收集状态映射信息（枚举/常量时）
+                state_map = _collect_state_map_for_symbol(engine, symbol)
+                if state_map:
+                    payload["stateMap"] = state_map
             print(json_envelope("query-symbol", str(engine.project_root), payload))
             return 0
 

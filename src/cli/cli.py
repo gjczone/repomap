@@ -244,14 +244,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait for LSP responses.",
     )
 
-    hotspots_parser = subparsers.add_parser(
-        "hotspots", help="Scan a repository and print hotspot files."
-    )
-    _add_project_args(hotspots_parser)
-    hotspots_parser.add_argument(
-        "--limit", type=int, default=15, help="Number of files to print."
-    )
-
     cache_parser = subparsers.add_parser(
         "cache", help="Prepare a graph baseline before the target edits."
     )
@@ -267,38 +259,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Advanced graph-only comparison against a baseline saved before the target edits.",
     )
     _add_project_args(diff_parser)
-
-    refs_parser = subparsers.add_parser(
-        "refs", help="Scan a repository and analyze references."
-    )
-    _add_project_args(refs_parser)
-    refs_parser.add_argument("--symbol", help="Optional symbol name.")
-    refs_parser.add_argument(
-        "--file-path", help="Disambiguate symbol analysis by relative file path."
-    )
-    refs_parser.add_argument(
-        "--lsp-timeout",
-        type=float,
-        default=DEFAULT_LSP_TIMEOUT,
-        help="Seconds to wait for LSP responses.",
-    )
-
-    orphan_parser = subparsers.add_parser(
-        "orphan", help="Scan a repository and find orphaned symbols."
-    )
-    _add_project_args(orphan_parser)
-    orphan_parser.add_argument(
-        "--limit",
-        type=int,
-        default=20,
-        help="Max candidates per confidence tier in text mode (default 20).",
-    )
-    orphan_parser.add_argument(
-        "--min-confidence",
-        type=int,
-        default=0,
-        help="Minimum confidence score 0-100 to include in output (default 0).",
-    )
 
     check_parser = subparsers.add_parser(
         "check", help="Run compiler/static analysis diagnostics."
@@ -403,17 +363,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also check LSP server availability and suggest install commands.",
     )
 
-    state_map_parser = subparsers.add_parser(
-        "state-map", help="Map state values, writers, and readers for an enum/type."
-    )
-    _add_project_args(state_map_parser)
-    state_map_parser.add_argument(
-        "--symbol", default=None, help="Symbol name (e.g. TaskStatus)."
-    )
-    state_map_parser.add_argument(
-        "--query", default=None, help="Keywords to find relevant state definitions."
-    )
-
     search_parser = subparsers.add_parser(
         "search", help="BM25 symbol search by natural language query."
     )
@@ -443,8 +392,9 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--project",
         "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
+        required=False,
+        default=None,
+        help="Project root path (absolute path recommended). Auto-detected from git if not specified.",
     )
     parser.add_argument(
         "--max-files",
@@ -486,12 +436,11 @@ def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     from .commands.overview import run_overview, run_scan  # noqa: PLC0415
-    from .commands.overview import run_hotspots  # noqa: PLC0415
     from .commands.symbol import run_call_chain, run_query_symbol  # noqa: PLC0415
-    from .commands.symbol import run_file_detail, run_refs, run_state_map  # noqa: PLC0415
+    from .commands.symbol import run_file_detail  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
-    from .commands.verify import run_verify, run_check, run_orphan  # noqa: PLC0415
+    from .commands.verify import run_verify, run_check  # noqa: PLC0415
     from .commands.cache import run_cache, run_diff  # noqa: PLC0415
     from .commands.routes import run_routes  # noqa: PLC0415
     from .commands.fix import run_fix, run_ready  # noqa: PLC0415
@@ -591,25 +540,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             getattr(args, "lsp_timeout", DEFAULT_LSP_TIMEOUT),
             args.json,
         )
-    if command == "hotspots":
-        return run_hotspots(args.project, args.max_files, args.limit, args.json)
     if command == "cache":
         return run_cache(args.project, args.action, getattr(args, "json", False))
     if command == "diff":
         return run_diff(args.project, args.json)
-    if command == "refs":
-        return run_refs(
-            args.project,
-            args.max_files,
-            args.symbol,
-            args.file_path,
-            args.json,
-            args.lsp_timeout,
-        )
-    if command == "orphan":
-        return run_orphan(
-            args.project, args.max_files, args.json, args.limit, args.min_confidence
-        )
     if command == "check":
         return run_check(
             project=args.project,
@@ -634,10 +568,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "doctor":
         return run_doctor(
             args.project, getattr(args, "lsp", False), getattr(args, "json", False)
-        )
-    if command == "state-map":
-        return run_state_map(
-            args.project, args.max_files, args.symbol, args.query, args.json
         )
     if command == "search":
         return run_search(
