@@ -884,6 +884,8 @@ def _collect_orphan_symbols(
                     "file": symbol.file,
                     "line": symbol.line,
                     "confidence": conf,
+                    "visibility": symbol.visibility,
+                    "note": _orphan_note(symbol),
                 }
             )
 
@@ -900,57 +902,17 @@ def run_orphan(
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
-        symbol_ids = set(engine.graph.symbols.keys())
-        refs_in: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
-        refs_out: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
-        for source_id, edge_list in engine.graph.outgoing.items():
-            for edge in edge_list:
-                if edge.kind not in ("call", "import"):
-                    continue
-                refs_out.setdefault(source_id, set()).add(edge.target)
-                refs_in.setdefault(edge.target, set()).add(source_id)
+        scored = _collect_orphan_symbols(engine, min_confidence=0)
+        total_candidates = len(scored)
 
-        candidates: list[Symbol] = []
-        filtered_structural_count = 0
-        for sid in symbol_ids:
-            if len(refs_in[sid]) == 0 and len(refs_out[sid]) == 0:
-                symbol = engine.graph.symbols[sid]
-                if symbol.name in {"main", "__main__"}:
-                    continue
-                if symbol.visibility == "exported":
-                    continue
-                if symbol.kind in _ORPHAN_EXCLUDED_KINDS:
-                    filtered_structural_count += 1
-                    continue
-                if any(
-                    symbol.file.lower().endswith(ext)
-                    for ext in _ORPHAN_EXCLUDED_EXTENSIONS
-                ):
-                    filtered_structural_count += 1
-                    continue
-                candidates.append(symbol)
-
-        # Build orphan name set for struct/impl pairing heuristic
-        orphan_names: set[str] = {s.name for s in candidates}
-
-        # Compute confidence for each candidate
-        scored: list[dict] = []
-        for symbol in candidates:
-            conf = _orphan_confidence(symbol, orphan_names)
-            scored.append(
-                {
-                    "symbol": symbol,
-                    "confidence": conf,
-                    "note": _orphan_note(symbol),
-                }
-            )
-
-        scored.sort(
-            key=lambda x: (
-                -x["confidence"],
-                x["symbol"].file,
-                x["symbol"].line,
-                x["symbol"].name,
+        # Count structurally filtered symbols
+        filtered_structural_count = sum(
+            1
+            for sid in engine.graph.symbols
+            if engine.graph.symbols[sid].kind in _ORPHAN_EXCLUDED_KINDS
+            or any(
+                engine.graph.symbols[sid].file.lower().endswith(ext)
+                for ext in _ORPHAN_EXCLUDED_EXTENSIONS
             )
         )
 
@@ -966,20 +928,19 @@ def run_orphan(
         if as_json:
 
             def _to_dict(item):
-                sym = item["symbol"]
                 return {
-                    "name": sym.name,
-                    "kind": sym.kind,
-                    "file": sym.file,
-                    "line": sym.line,
+                    "name": item["name"],
+                    "kind": item["kind"],
+                    "file": item["file"],
+                    "line": item["line"],
                     "confidence": item["confidence"],
                     "note": item["note"],
-                    "visibility": sym.visibility,
+                    "visibility": item["visibility"],
                 }
 
             payload = {
                 "project_root": str(engine.project_root),
-                "total_candidates": len(candidates),
+                "total_candidates": total_candidates,
                 "filtered_structural": filtered_structural_count,
                 "high_confidence": [_to_dict(s) for s in high],
                 "medium_confidence": [_to_dict(s) for s in medium],
@@ -991,7 +952,7 @@ def run_orphan(
         # Text output
         lines = ["## Dead Code Analysis\n"]
         lines.append(
-            f"Total {len(candidates)} candidates ({filtered_structural_count} structural elements filtered)"
+            f"Total {total_candidates} candidates ({filtered_structural_count} structural elements filtered)"
         )
         if min_confidence > 0:
             lines.append(

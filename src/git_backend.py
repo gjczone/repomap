@@ -363,13 +363,17 @@ class Pygit2Backend:
             return None
         try:
             return pygit2.Repository(project_root)
-        except Exception:
+        except Exception as exc1:
             try:
                 tl = Pygit2Backend.show_toplevel(project_root)
                 if tl:
                     return pygit2.Repository(tl)
             except Exception:
-                logger.debug("pygit2 _repo fallback also failed", exc_info=True)
+                logger.debug(
+                    "pygit2 _repo fallback also failed; original: %s",
+                    repr(exc1),
+                    exc_info=True,
+                )
             return None
 
     @staticmethod
@@ -392,8 +396,8 @@ class Pygit2Backend:
             if repo:
                 return str(Path(repo).parent)
         except Exception:
-            logger.debug("pygit2 show_toplevel failed", exc_info=True)
-            pass
+            logger.warning("pygit2 show_toplevel failed", exc_info=True)
+            return None
         return None
 
     @staticmethod
@@ -688,8 +692,16 @@ class Pygit2Backend:
             return []
         try:
             commits: list[dict[str, str]] = []
+            max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
-            for commit in walker:
+            for i, commit in enumerate(walker):
+                if i >= max_commits:
+                    logger.warning(
+                        "log_file_commits: hit max_commits=%d limit for %s",
+                        max_commits,
+                        file_path,
+                    )
+                    break
                 if len(commits) >= limit:
                     break
                 if not commit.parents:
@@ -805,6 +817,16 @@ class GitBackend:
         self._backend = SubprocessBackend
         logger.debug("Using subprocess backend for %s", project_root)
 
+    def changed_files(self) -> list[str]:
+        try:
+            return self._backend.changed_files(self.project_root)
+        except Exception:
+            logger.warning(
+                "pygit2 changed_files failed, falling back to subprocess",
+                exc_info=True,
+            )
+            return SubprocessBackend.changed_files(self.project_root)
+
     @property
     def backend_name(self) -> str:
         return "pygit2" if self._backend is Pygit2Backend else "subprocess"
@@ -815,14 +837,18 @@ class GitBackend:
     def show_toplevel(self) -> str | None:
         return self._backend.show_toplevel(self.project_root)
 
-    def changed_files(self) -> list[str]:
-        return self._backend.changed_files(self.project_root)
+    def diff_name_only(self, since: str | None = None) -> list[str]:
+        try:
+            return self._backend.diff_name_only(self.project_root, since)
+        except Exception:
+            logger.warning(
+                "pygit2 diff_name_only failed, falling back to subprocess",
+                exc_info=True,
+            )
+            return SubprocessBackend.diff_name_only(self.project_root, since)
 
     def deleted_files(self) -> list[str]:
         return self._backend.deleted_files(self.project_root)
-
-    def diff_name_only(self, since: str | None = None) -> list[str]:
-        return self._backend.diff_name_only(self.project_root, since)
 
     def diff_cached_name_only(self) -> list[str]:
         return self._backend.diff_cached_name_only(self.project_root)

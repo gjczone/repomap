@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import logging
 from typing import Any
 
 from ... import (
@@ -81,7 +82,9 @@ def _collect_state_map_for_symbol(
             }
             for d in defs
         ]
-    except Exception:
+    except Exception as exc:
+        logger = logging.getLogger(__name__)
+        logger.warning("Failed to collect symbol definitions: %s", exc, exc_info=True)
         return None
 
 

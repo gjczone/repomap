@@ -980,6 +980,10 @@ class ImportResolver:
     def _discover_import_config_paths(self) -> list[Path]:
         found: list[Path] = []
         for root, dir_names, file_names in os.walk(self.project_root):
+            rel_root = Path(root).relative_to(self.project_root)
+            depth = len(rel_root.parts) if rel_root != Path(".") else 0
+            if depth >= 30:
+                dir_names.clear()
             dir_names[:] = [
                 n
                 for n in dir_names

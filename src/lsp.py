@@ -554,10 +554,17 @@ class StdioLspClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
-        self._reader.start()
-        self._stderr_reader = threading.Thread(target=self._drain_stderr, daemon=True)
-        self._stderr_reader.start()
+        try:
+            self._reader = threading.Thread(target=self._read_loop, daemon=True)
+            self._reader.start()
+            self._stderr_reader = threading.Thread(
+                target=self._drain_stderr, daemon=True
+            )
+            self._stderr_reader.start()
+        except Exception:
+            self.process.kill()
+            self.process.wait()
+            raise
 
     def _read_loop(self) -> None:
         if self.process is None or self.process.stdout is None:
@@ -593,6 +600,7 @@ class StdioLspClient:
                 if self._stop_event.is_set():
                     return  # close() 触发的异常，正常退出
                 logger.debug("Stderr drain interrupted", exc_info=True)
+                logger.warning("Stderr drain failed unexpectedly", exc_info=True)
                 break
 
     def send_notification(

@@ -12,7 +12,7 @@ from ..handlers import (
     _resolve_project,
 )
 from .verify import run_verify, run_check
-from src.core import _DEFAULT_SKIP_DIRS
+from ...core import _DEFAULT_SKIP_DIRS
 
 logger = logging.getLogger("repomap")
 
