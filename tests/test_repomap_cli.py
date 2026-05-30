@@ -1132,12 +1132,22 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             # Initialize git repo for verify command
             subprocess.run(["git", "init"], cwd=project_root, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=project_root, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test"], cwd=project_root, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=project_root,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=project_root,
+                capture_output=True,
+            )
 
             write_file(project_root, "main.py", "def keep():\n    return 1\n")
             subprocess.run(["git", "add", "."], cwd=project_root, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"], cwd=project_root, capture_output=True
+            )
 
             cache_stdout = io.StringIO()
             with redirect_stdout(cache_stdout), redirect_stderr(io.StringIO()):

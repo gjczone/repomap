@@ -91,23 +91,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── query: 统一查询入口（主题搜索 + 符号查询 + BM25 搜索 + 文件详情）──
     topic_query_parser = subparsers.add_parser(
-        "query", help="Unified query: topic search, symbol lookup, BM25 search, or file detail."
+        "query",
+        help="Unified query: topic search, symbol lookup, BM25 search, or file detail.",
     )
     _add_project_args(topic_query_parser)
     # 四种查询模式（互斥）
     query_mode = topic_query_parser.add_mutually_exclusive_group()
+    query_mode.add_argument("--query", "-q", help="Topic keyword search.")
     query_mode.add_argument(
-        "--query", "-q", help="Topic keyword search."
+        "--symbol",
+        help="Symbol name lookup (exact + fuzzy match, state map, references).",
     )
-    query_mode.add_argument(
-        "--symbol", help="Symbol name lookup (exact + fuzzy match, state map, references)."
-    )
-    query_mode.add_argument(
-        "--search", help="BM25 symbol search by natural language."
-    )
-    query_mode.add_argument(
-        "--file", help="File detail: symbols, signatures, callers."
-    )
+    query_mode.add_argument("--search", help="BM25 symbol search by natural language.")
+    query_mode.add_argument("--file", help="File detail: symbols, signatures, callers.")
     topic_query_parser.add_argument(
         "--max-result-files",
         type=int,
@@ -456,7 +452,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         # 主题搜索模式（原有 --query）
         if not args.query:
-            print("[repomap] error: one of --query, --symbol, --search, or --file is required", file=sys.stderr)
+            print(
+                "[repomap] error: one of --query, --symbol, --search, or --file is required",
+                file=sys.stderr,
+            )
             return 2
         return run_query(
             args.project,
@@ -520,7 +519,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_routes(args.project, args.max_files, args.json, args.with_consumers)
     if command == "doctor":
         return run_doctor(
-            args.project, not getattr(args, "no_lsp", False), getattr(args, "json", False)
+            args.project,
+            not getattr(args, "no_lsp", False),
+            getattr(args, "json", False),
         )
     if command == "fix":
         return run_fix(
