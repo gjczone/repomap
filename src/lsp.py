@@ -4,7 +4,6 @@ import logging
 import os
 import queue
 import shutil
-import select
 import subprocess
 import threading
 import time
@@ -479,14 +478,6 @@ def _read_lsp_message(stream: Any) -> Any:
     """Read a single LSP message from the stream. Returns dict, _STREAM_EOF, or _MESSAGE_SKIPPED."""
     headers: dict[str, str] = {}
     while True:
-        try:
-            fd = stream.fileno()
-        except (OSError, AttributeError):
-            fd = None
-        if fd is not None:
-            ready, _, _ = select.select([fd], [], [], 30.0)
-            if not ready:
-                return _STREAM_EOF
         line = stream.readline()
         if not line:
             return _STREAM_EOF
