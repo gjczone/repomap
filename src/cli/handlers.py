@@ -236,7 +236,8 @@ def _scan_engine(
 
     engine = RepoMapEngine(resolved_project)
     engine.scan(max_files=max_files, incremental=incremental)
-    _save_session_engine(resolved_project, fingerprint, engine)
+    if not _save_session_engine(resolved_project, fingerprint, engine):
+        logger.warning("Session cache save failed, --with-diff will be unavailable")
     if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
         _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
     _SCAN_CACHE[cache_key] = (fingerprint, engine)
@@ -460,9 +461,9 @@ def _load_session_engine(
 
 def _save_session_engine(
     project_root: str, fingerprint: str, engine: RepoMapEngine
-) -> None:
+) -> bool:
     if engine.scan_state not in ("scanned", "partial"):
-        return
+        return False
     cache_path = get_session_cache_path(project_root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = _engine_to_session_payload(project_root, fingerprint, engine)
@@ -479,6 +480,7 @@ def _save_session_engine(
             json_dump(payload, handle, ensure_ascii=False, indent=2)
             tmp_path = Path(handle.name)
         tmp_path.replace(cache_path)
+        return True
     except Exception:
         logger.warning("Failed to save session cache", exc_info=True)
         try:
@@ -486,6 +488,7 @@ def _save_session_engine(
                 tmp_path.unlink()
         except OSError:
             pass
+        return False
 
 
 def _select_symbol_match(

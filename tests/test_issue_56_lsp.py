@@ -17,9 +17,9 @@ from src.lsp import (
 
 
 class TestStopReaderReset(unittest.TestCase):
-    """L1: _stop_reader reset — verify start() resets _stop_reader = False."""
+    """L1: _stop_event reset — verify start() resets _stop_event."""
 
-    def test_start_resets_stop_reader(self) -> None:
+    def test_start_resets_stop_event(self) -> None:
         with patch("subprocess.Popen") as mock_popen:
             mock_process = MagicMock()
             mock_process.stdin = MagicMock()
@@ -32,17 +32,17 @@ class TestStopReaderReset(unittest.TestCase):
             mock_popen.return_value = mock_process
 
             client = StdioLspClient(command=["fake-lsp"], workspace_root=Path("/tmp"))
-            # Simulate a prior stop: set _stop_reader to True
-            client._stop_reader = True
-            self.assertTrue(client._stop_reader)
+            # Simulate a prior stop: set _stop_event
+            client._stop_event.set()
+            self.assertTrue(client._stop_event.is_set())
 
             client.start()
 
-            # After start(), _stop_reader must be False so reader threads can run
-            self.assertFalse(client._stop_reader)
+            # After start(), _stop_event must be cleared so reader threads can run
+            self.assertFalse(client._stop_event.is_set())
 
-            # Clean up: set _stop_reader so mocked threads would exit, then close
-            client._stop_reader = True
+            # Clean up: set _stop_event so mocked threads would exit, then close
+            client._stop_event.set()
             client.close()
 
 
@@ -96,7 +96,7 @@ class TestNextIdThreadSafety(unittest.TestCase):
 
             client = StdioLspClient(command=["fake-lsp"], workspace_root=Path("/tmp"))
             client.start()
-            client._stop_reader = True  # prevent read loop from blocking
+            client._stop_event.set()  # prevent read loop from blocking
             client.close()
             # client now has _id_lock and _next_id initialized
 

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import defaultdict
 from typing import Any
 
 from . import JSImportBinding, JSExportBinding, Symbol
@@ -181,20 +180,12 @@ QUERIES: dict[str, dict[str, str]] = {
             (mod_item name: (identifier) @name) @definition.module
         """,
         "import": """
-            ; 捕获 use crate::module::Item 中的 module 部分
+            ; 捕获完整 scoped_identifier（支持多段 use a::b::C）
             (use_declaration
-                argument: (scoped_identifier
-                    path: (identifier) @path
-                    name: (identifier) @name))
-            ; 捕获 use crate::module::{A, B} 中的 module 部分
+                argument: (scoped_identifier) @full_path)
+            ; 捕获 use crate::module::{A, B} 中的 scoped_use_list
             (use_declaration
-                argument: (scoped_use_list
-                    path: (identifier) @path))
-            ; 捕获 use module::Item 中的 module
-            (use_declaration
-                argument: (scoped_identifier
-                    path: (identifier) @path
-                    name: (identifier) @name))
+                argument: (scoped_use_list) @full_path)
             ; 捕获 extern crate name;
             (extern_crate_declaration name: (identifier) @name)
             ; 捕获 use module;
@@ -551,7 +542,7 @@ class TreeSitterAdapter:
         # 检测异常内容模式（可能导致解析器崩溃）
         try:
             # 检查是否包含可能导致解析器栈溢出的极端嵌套模式
-            content_str = content.decode("utf-8", errors="ignore")
+            content_str = content.decode("utf-8", errors="replace")
             # 检测极端深度的括号嵌套（可能导致递归溢出）
             max_nesting = 0
             current_nesting = 0
@@ -939,28 +930,22 @@ class TreeSitterAdapter:
             return []
         results = set()
 
-        # 对于Rust，需要特殊处理：优先使用path而不是name
+        # 对于Rust，需要特殊处理：捕获完整路径文本
         if lang == "rust":
-            paths_by_line: dict[int, str] = {}
-            names_by_line: dict[int, list[str]] = defaultdict(list)
-
             for cap_name, node in self._run_query(query, tree.root_node, lang):
                 text = self._text(node)
                 line = node.start_point[0] + 1
-                if cap_name == "path":
-                    paths_by_line[line] = text
+                if cap_name == "full_path":
+                    # 对于 scoped_use_list，提取路径前缀
+                    if node.type == "scoped_use_list":
+                        path_node = node.child_by_field_name("path")
+                        if path_node:
+                            results.add((self._text(path_node), line))
+                    else:
+                        # 对于 scoped_identifier，使用完整文本
+                        results.add((text, line))
                 elif cap_name == "name":
-                    names_by_line[line].append(text)
-
-            # 优先使用path（模块名），其次使用name
-            for line in sorted(
-                set(list(paths_by_line.keys()) + list(names_by_line.keys()))
-            ):
-                if line in paths_by_line:
-                    results.add((paths_by_line[line], line))
-                else:
-                    for name in names_by_line[line]:
-                        results.add((name, line))
+                    results.add((text, line))
         else:
             for cap_name, node in self._run_query(query, tree.root_node, lang):
                 if lang in ("javascript", "typescript", "tsx") and cap_name != "source":
@@ -1259,6 +1244,16 @@ class TreeSitterAdapter:
                 if source_name and local_name:
                     self._add_import_binding(
                         bindings, local_name, source_name, module, line, "named"
+                    )
+            elif child.type == "rest_pattern":
+                # 处理 const { a, ...rest } = require('foo') 中的 ...rest
+                rest_id = child.child_by_field_name("argument") or (
+                    child.children[0] if child.children else None
+                )
+                if rest_id and rest_id.type == "identifier":
+                    name = rest_id.text.decode("utf-8", errors="replace")
+                    self._add_import_binding(
+                        bindings, name, name, module, line, "named"
                     )
 
     def _collect_es_export_bindings(
@@ -1857,7 +1852,14 @@ class TreeSitterAdapter:
         if not node:
             return ""
         try:
-            first_line = self._text(node).split("\n")[0]
+            # 对于 decorated_definition，找到 function_definition 子节点
+            target_node = node
+            if node.type == "decorated_definition":
+                for child in node.children:
+                    if child.type == "function_definition":
+                        target_node = child
+                        break
+            first_line = self._text(target_node).split("\n")[0]
             patterns = {
                 "python": r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
                 "javascript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)",

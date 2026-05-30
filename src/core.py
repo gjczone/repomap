@@ -249,34 +249,42 @@ class RepoMapEngine:
 
         # 尝试加载增量缓存
         inc_cache = None
+        files_to_scan: list[str] = []
         if incremental:
             inc_cache = self._load_incremental_cache_if_valid()
         if inc_cache:
             changed_files, deleted_files = self._git_changed_files()
-            all_candidate_files = self._list_files(max_files)
-            changed_set = set(changed_files) & set(all_candidate_files)
-            unchanged_set = (
-                set(inc_cache.files.keys()) - changed_set - set(deleted_files)
-            )
-            files_to_scan = [f for f in all_candidate_files if f in changed_set]
-            stale_cached_files: list[str] = []
-            for f in sorted(unchanged_set):
-                if f in all_candidate_files:
-                    if not self._restore_from_inc_cache(f, inc_cache.files[f]):
-                        stale_cached_files.append(f)
-            if stale_cached_files:
-                stale_set = set(stale_cached_files)
-                files_to_scan.extend(
-                    f
-                    for f in all_candidate_files
-                    if f in stale_set and f not in changed_set
+            # git 失败时降级为全量扫描
+            if changed_files is None or deleted_files is None:
+                inc_cache = None
+                logger.warning(
+                    "Git changed files unavailable, falling back to full scan"
                 )
-            logger.info(
-                f"Incremental scan: {len(files_to_scan)} changed/stale, "
-                f"{len(unchanged_set) - len(stale_cached_files)} restored, {len(deleted_files)} deleted"
-            )
-            self._inc_cache_loaded = True
-        else:
+            else:
+                all_candidate_files = self._list_files(max_files)
+                changed_set = set(changed_files) & set(all_candidate_files)
+                unchanged_set = (
+                    set(inc_cache.files.keys()) - changed_set - set(deleted_files)
+                )
+                files_to_scan = [f for f in all_candidate_files if f in changed_set]
+                stale_cached_files: list[str] = []
+                for f in sorted(unchanged_set):
+                    if f in all_candidate_files:
+                        if not self._restore_from_inc_cache(f, inc_cache.files[f]):
+                            stale_cached_files.append(f)
+                if stale_cached_files:
+                    stale_set = set(stale_cached_files)
+                    files_to_scan.extend(
+                        f
+                        for f in all_candidate_files
+                        if f in stale_set and f not in changed_set
+                    )
+                logger.info(
+                    f"Incremental scan: {len(files_to_scan)} changed/stale, "
+                    f"{len(unchanged_set) - len(stale_cached_files)} restored, {len(deleted_files)} deleted"
+                )
+                self._inc_cache_loaded = True
+        if not inc_cache:
             files_to_scan = self._list_files(max_files)
             logger.info(f"Found {len(files_to_scan)} source files")
 
@@ -396,8 +404,8 @@ class RepoMapEngine:
             logger.warning(f"Incremental cache load failed: {e}")
             return None
 
-    def _git_changed_files(self) -> tuple[list[str], list[str]]:
-        """返回 (modified_files, deleted_files)，相对于项目根目录。"""
+    def _git_changed_files(self) -> tuple[list[str] | None, list[str] | None]:
+        """返回 (modified_files, deleted_files)，相对于项目根目录。失败时返回 (None, None)。"""
         try:
             from .git_backend import GitBackend
 
@@ -408,7 +416,7 @@ class RepoMapEngine:
         except Exception as e:
             logger.warning(f"Failed to get git changed files: {e}")
             self.scan_stats.git_failed = True
-            return [], []
+            return None, None
 
     def _restore_from_inc_cache(self, file_path: str, entry: Any) -> bool:
         """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""

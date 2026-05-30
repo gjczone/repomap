@@ -505,6 +505,60 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(captured["file-detail"][5], 8.0)
         self.assertEqual(captured["refs"][5], 8.0)
 
+    def test_verify_text_output_shows_actual_status(self) -> None:
+        """P0: verify 文本报告应显示实际状态而非 UNKNOWN。"""
+        from src.cli import main
+
+        def fake_git_show_toplevel(self):
+            return project_root
+
+        def fake_git_status_porcelain(self):
+            return [" M main.py"]
+
+        def fake_check(self, **kwargs):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "project_root": "/tmp/repo",
+                "status": "passed",
+                "types": ["python"],
+                "incremental": {
+                    "enabled": True,
+                    "files_checked": ["main.py"],
+                    "files_count": 1,
+                },
+                "runs": [],
+                "summary": {
+                    "total_errors": 0,
+                    "total_warnings": 0,
+                    "files_with_errors": 0,
+                    "tools_run": 0,
+                    "tools_skipped": 0,
+                    "tool_failures": 0,
+                },
+                "errors_by_file": {},
+            }
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "main.py", "def target():\n    return 1\n")
+            stdout = io.StringIO()
+            with patch(
+                "src.git_backend.GitBackend.show_toplevel", fake_git_show_toplevel
+            ):
+                with patch(
+                    "src.git_backend.GitBackend.status_porcelain",
+                    fake_git_status_porcelain,
+                ):
+                    with patch.object(RepoMapChecker, "check", fake_check):
+                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                            main(["verify", "--project", project_root])
+
+            output = stdout.getvalue()
+            # 应显示实际状态 PASS，而非 UNKNOWN
+            self.assertIn("PASS", output)
+            self.assertNotIn("UNKNOWN", output)
+            # 应显示变更文件
+            self.assertIn("main.py", output)
+
     def test_verify_passes_lsp_options(self) -> None:
         from src.cli import main
 

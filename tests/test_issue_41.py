@@ -9,27 +9,27 @@ from pathlib import Path
 
 
 class TestLspStopReaderReset(unittest.TestCase):
-    """L1: _stop_reader must be reset to False on start()."""
+    """L1: _stop_event must be reset on start()."""
 
-    def test_start_resets_stop_reader(self):
+    def test_start_resets_stop_event(self):
         from src.lsp import StdioLspClient
 
         client = StdioLspClient(["echo", "hello"], Path("/tmp"))
-        client._stop_reader = True
+        client._stop_event.set()
         client.process = None
-        client._stop_reader = False
-        self.assertFalse(client._stop_reader)
+        client._stop_event.clear()
+        self.assertFalse(client._stop_event.is_set())
 
     def test_multiple_start_close_cycles(self):
         from src.lsp import StdioLspClient
 
         client = StdioLspClient(["echo", "hello"], Path("/tmp"))
-        client._stop_reader = True
-        client._stop_reader = False
-        self.assertFalse(client._stop_reader)
-        client._stop_reader = True
-        client._stop_reader = False
-        self.assertFalse(client._stop_reader)
+        client._stop_event.set()
+        client._stop_event.clear()
+        self.assertFalse(client._stop_event.is_set())
+        client._stop_event.set()
+        client._stop_event.clear()
+        self.assertFalse(client._stop_event.is_set())
 
 
 class TestContentLengthLimit(unittest.TestCase):
@@ -162,13 +162,13 @@ class TestRequestThreadSafety(unittest.TestCase):
 
 
 class TestStopReaderOrder(unittest.TestCase):
-    """L7: _stop_reader must be set AFTER shutdown, not before."""
+    """L7: _stop_event must be set AFTER shutdown, not before."""
 
-    def test_stop_reader_timing(self):
+    def test_stop_event_timing(self):
         from src.lsp import StdioLspClient
 
         client = StdioLspClient(["echo", "hello"], Path("/tmp"))
-        self.assertTrue(hasattr(client, "_stop_reader"))
+        self.assertTrue(hasattr(client, "_stop_event"))
 
 
 class TestStubFileExclusion(unittest.TestCase):

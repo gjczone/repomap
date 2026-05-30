@@ -698,8 +698,21 @@ def _resolve_call(
                     )
 
         if obj_name == "cls" and in_class:
+            # 优先匹配同文件中的类定义（调用方上下文）
+            if in_class in caller_info.classes:
+                cinfo = caller_info.classes[in_class]
+                if method_name in cinfo.methods:
+                    return (
+                        caller_file,
+                        f"{in_class}{sep}{method_name}",
+                        cinfo.methods[method_name],
+                        "method_call",
+                    )
+            # 回退到全局查找
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
+                if cfpath == caller_file:
+                    continue  # 已经检查过同文件
                 if method_name in cinfo.methods:
                     return (
                         cfpath,
@@ -720,10 +733,18 @@ def _resolve_call(
 
         import_target = caller_info.imports.get(obj_name)
         if import_target:
-            func_matches = name_to_file.get(method_name, [])
-            for mfpath, mline in func_matches:
-                if mfpath != caller_file:
-                    return (mfpath, method_name, mline, "import_call")
+            # 对于 :: 调用（Rust），外部 crate 类型不应回退到全局函数匹配
+            # 避免 HashMap::new() 匹配到独立的 fn new()
+            is_local_import = (
+                sep != "::"
+                or import_target.startswith((".", "crate::", "self::", "super::"))
+                or caller_file in import_target
+            )
+            if is_local_import:
+                func_matches = name_to_file.get(method_name, [])
+                for mfpath, mline in func_matches:
+                    if mfpath != caller_file:
+                        return (mfpath, method_name, mline, "import_call")
 
     func_name = parts[0]
     matches = name_to_file.get(func_name, [])

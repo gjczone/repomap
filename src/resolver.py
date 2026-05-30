@@ -364,7 +364,7 @@ class ImportResolver:
         匹配模式: '@alias': 'path' 或 '@alias': path.resolve(__dirname, 'path')
         """
         alias_pattern = re.compile(
-            r"""['\"]@?(\w[\w/-]*)['\"]\s*:\s*"""  # key: '@alias' or 'alias'
+            r"""['\"](@?\w[\w/-]*)['\"]\s*:\s*"""  # key: '@alias' or 'alias'
             r"""(?:path\.resolve\(__dirname,\s*['\"]([^'\"]+)['\"]\)|['\"]([^'\"]+)['\"])""",  # value
         )
         for match in alias_pattern.finditer(content):

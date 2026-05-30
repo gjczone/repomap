@@ -124,7 +124,7 @@ class TestReadLoopSentinel(unittest.TestCase):
 
             client = StdioLspClient(command=["fake-lsp"], workspace_root=Path("/tmp"))
             client.process = mock_process
-            client._stop_reader = False
+            client._stop_event = __import__("threading").Event()
 
             with patch("src.lsp._read_lsp_message", return_value=_STREAM_EOF):
                 client._read_loop()
@@ -142,7 +142,7 @@ class TestReadLoopSentinel(unittest.TestCase):
 
             client = StdioLspClient(command=["fake-lsp"], workspace_root=Path("/tmp"))
             client.process = mock_process
-            client._stop_reader = False
+            client._stop_event = __import__("threading").Event()
 
             call_count = [0]
 

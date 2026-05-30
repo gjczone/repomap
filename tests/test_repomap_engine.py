@@ -1234,8 +1234,8 @@ class RepoMapEngineTests(unittest.TestCase):
             ):
                 modified, deleted = engine._git_changed_files()
 
-            self.assertEqual(modified, [])
-            self.assertEqual(deleted, [])
+            self.assertIsNone(modified)
+            self.assertIsNone(deleted)
             self.assertTrue(engine.scan_stats.git_failed)
 
     def test_git_changed_files_clears_git_failed_on_success(self) -> None:

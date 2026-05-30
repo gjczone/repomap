@@ -31,7 +31,7 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
         client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
-        client._stop_reader = False
+        client._stop_event = __import__("threading").Event()
         client._reader = None
         client._stderr_reader = None
         client._send = MagicMock()
@@ -60,7 +60,7 @@ class TestP1_1_LspResponsePollution(unittest.TestCase):
         client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
-        client._stop_reader = False
+        client._stop_event = __import__("threading").Event()
         client._reader = None
         client._stderr_reader = None
         client._send = MagicMock()
@@ -104,7 +104,7 @@ class TestP1_2_LspCloseShutdownFailure(unittest.TestCase):
         client.command = ["test-lsp"]
         client._messages = queue.Queue()
         client._notifications = []
-        client._stop_reader = False
+        client._stop_event = __import__("threading").Event()
         client._reader = None
         client._stderr_reader = None
         client._id_lock = threading.Lock()
