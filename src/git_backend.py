@@ -567,7 +567,9 @@ class Pygit2Backend:
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for i, commit in enumerate(walker):
                 if i >= max_commits:
-                    logger.warning("log_name_only: hit max_commits=%d limit", max_commits)
+                    logger.warning(
+                        "log_name_only: hit max_commits=%d limit", max_commits
+                    )
                     break
                 if commit.commit_time < since_seconds:
                     break
@@ -598,7 +600,9 @@ class Pygit2Backend:
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for i, commit in enumerate(walker):
                 if i >= max_commits:
-                    logger.warning("log_commits_grouped: hit max_commits=%d limit", max_commits)
+                    logger.warning(
+                        "log_commits_grouped: hit max_commits=%d limit", max_commits
+                    )
                     break
                 if commit.commit_time < since_seconds:
                     break
@@ -628,7 +632,9 @@ class Pygit2Backend:
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for i, commit in enumerate(walker):
                 if i >= max_commits:
-                    logger.warning("diff_name_only_since: hit max_commits=%d limit", max_commits)
+                    logger.warning(
+                        "diff_name_only_since: hit max_commits=%d limit", max_commits
+                    )
                     break
                 if commit.commit_time < since_seconds:
                     break
@@ -748,7 +754,9 @@ class Pygit2Backend:
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
             for i, commit in enumerate(walker):
                 if i >= max_commits:
-                    logger.warning("file_authors: hit max_commits=%d limit", max_commits)
+                    logger.warning(
+                        "file_authors: hit max_commits=%d limit", max_commits
+                    )
                     break
                 # 超过时间限制则停止遍历
                 if commit.commit_time < cutoff_timestamp:

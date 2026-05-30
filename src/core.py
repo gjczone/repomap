@@ -257,7 +257,9 @@ class RepoMapEngine:
             # git 失败时降级为全量扫描
             if changed_files is None or deleted_files is None:
                 inc_cache = None
-                logger.warning("Git changed files unavailable, falling back to full scan")
+                logger.warning(
+                    "Git changed files unavailable, falling back to full scan"
+                )
             else:
                 all_candidate_files = self._list_files(max_files)
                 changed_set = set(changed_files) & set(all_candidate_files)
