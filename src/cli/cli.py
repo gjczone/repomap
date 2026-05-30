@@ -244,14 +244,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait for LSP responses.",
     )
 
-    hotspots_parser = subparsers.add_parser(
-        "hotspots", help="Scan a repository and print hotspot files."
-    )
-    _add_project_args(hotspots_parser)
-    hotspots_parser.add_argument(
-        "--limit", type=int, default=15, help="Number of files to print."
-    )
-
     cache_parser = subparsers.add_parser(
         "cache", help="Prepare a graph baseline before the target edits."
     )
@@ -487,7 +479,6 @@ def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     from .commands.overview import run_overview, run_scan  # noqa: PLC0415
-    from .commands.overview import run_hotspots  # noqa: PLC0415
     from .commands.symbol import run_call_chain, run_query_symbol  # noqa: PLC0415
     from .commands.symbol import run_file_detail, run_refs, run_state_map  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
@@ -592,8 +583,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             getattr(args, "lsp_timeout", DEFAULT_LSP_TIMEOUT),
             args.json,
         )
-    if command == "hotspots":
-        return run_hotspots(args.project, args.max_files, args.limit, args.json)
     if command == "cache":
         return run_cache(args.project, args.action, getattr(args, "json", False))
     if command == "diff":

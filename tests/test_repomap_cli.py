@@ -1038,7 +1038,6 @@ class RepoMapCliTests(unittest.TestCase):
             "call-chain",
             "query-symbol",
             "file-detail",
-            "hotspots",
             "cache",
             "diff",
             "refs",
