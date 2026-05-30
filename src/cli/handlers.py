@@ -170,12 +170,6 @@ def _normalize_project_relative_paths(
     ]
 
 
-def _normalize_path_prefix(project_root: str | Path, prefix: str) -> str:
-    return _normalize_project_relative_path(
-        project_root, prefix.rstrip("/"), must_exist=False
-    )
-
-
 def _path_matches_prefix(file_path: str, prefix: str) -> bool:
     return file_path == prefix or file_path.startswith(prefix.rstrip("/") + "/")
 

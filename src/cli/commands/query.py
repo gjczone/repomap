@@ -18,7 +18,7 @@ from ..handlers import (
     CLI_NAME,
     EXIT_NO_RESULTS,
     _scan_engine,
-    _normalize_path_prefix,
+    _normalize_project_relative_path,
     _path_matches_prefix,
     _scan_stats_payload,
 )
@@ -58,7 +58,9 @@ def run_query(
         excluded: set[str] = set()
         if paths:
             allowed = {
-                _normalize_path_prefix(engine.project_root, p)
+                _normalize_project_relative_path(
+                    engine.project_root, p.rstrip("/"), must_exist=False
+                )
                 for p in paths.split(",")
                 if p.strip()
             }
@@ -69,7 +71,9 @@ def run_query(
             ]
         if exclude:
             excluded = {
-                _normalize_path_prefix(engine.project_root, e)
+                _normalize_project_relative_path(
+                    engine.project_root, e.rstrip("/"), must_exist=False
+                )
                 for e in exclude.split(",")
                 if e.strip()
             }

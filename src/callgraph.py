@@ -102,7 +102,9 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
                 self.info.calls.append(
                     (
                         call_name,
-                        self._current_class[-1] if self._current_class else "",
+                        ".".join(self._func_stack)
+                        if not self._current_class
+                        else self._current_class[-1],
                         node.lineno,
                     )
                 )

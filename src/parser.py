@@ -546,7 +546,7 @@ class TreeSitterAdapter:
             # 检测极端深度的括号嵌套（可能导致递归溢出）
             max_nesting = 0
             current_nesting = 0
-            for char in content_str[:100000]:  # 只检查前 100KB
+            for char in content_str:  # 检查全部内容
                 if char in "({[<":
                     current_nesting += 1
                     max_nesting = max(max_nesting, current_nesting)
@@ -1849,7 +1849,7 @@ class TreeSitterAdapter:
                         for sub in child.children:
                             if sub.type == "string":
                                 return self._text(sub).strip("\"'` \n")
-            elif lang in ("javascript", "typescript", "go", "rust"):
+            elif lang in ("javascript", "typescript", "go", "rust", "java", "c_sharp"):
                 prev = getattr(node, "prev_sibling", None)
                 if prev and "comment" in prev.type:
                     return self._text(prev).lstrip("/* \n").rstrip("*/ \n")
@@ -1875,6 +1875,8 @@ class TreeSitterAdapter:
                 "typescript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)(?:\s*:\s*\S+)?\s*=>)",
                 "rust": r"(?:pub\s+)?(?:async\s+)?fn\s+\w+(?:<[^>]*>)?\s*\([^)]*\)(?:\s*->\s*[^{]+)?",
                 "go": r"func\s+(?:\([^)]+\)\s+)?\w+\s*\([^)]*\)(?:\s*\([^)]*\))?(?:\s*[^{]+)?",
+                "java": r"\w+\s*\([^)]*\)",
+                "c_sharp": r"\w+\s*\([^)]*\)",
             }
             pat = patterns.get(lang, "")
             if pat:

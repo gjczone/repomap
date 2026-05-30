@@ -31,7 +31,6 @@ try:
     def json_load(fp: Any) -> Any:
         return json_loads(fp.read())
 
-    HAS_ORJSON = True
 except ImportError:
     import json as _json_mod
 
@@ -46,8 +45,6 @@ except ImportError:
 
     def json_load(fp: Any) -> Any:
         return _json_mod.load(fp)
-
-    HAS_ORJSON = False
 
 
 CACHE_DIR = Path.home() / ".cache" / "repomap"

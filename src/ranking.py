@@ -193,10 +193,6 @@ class GraphAnalyzer:
             if allowed_kinds is None or edge.kind in allowed_kinds
         )
 
-    def _signal_weight(self, symbol: Symbol) -> float:
-        # 委托给 __init__.py 中的统一实现，与 topic.py 保持一致
-        return signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
-
     def _summary_symbol_score(self, symbol: Symbol) -> float:
         incoming_calls = self._edge_count(symbol.id, "incoming", {"call"})
         outgoing_calls = self._edge_count(symbol.id, "outgoing", {"call"})
@@ -224,7 +220,7 @@ class GraphAnalyzer:
             + visibility_bonus
             + kind_bonus
             + centrality_bonus
-        ) * self._signal_weight(symbol)
+        ) * signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
 
     def hotspots(self, limit: int = 15) -> list[dict]:
         """识别高密度文件，优先看高语义密度而不是标签/配置噪音。"""
@@ -318,18 +314,21 @@ class GraphAnalyzer:
                 ),
             )
             semantic_symbol_count = sum(
-                self._signal_weight(symbol) for symbol in symbols
+                signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
+                for symbol in symbols
             )
             semantic_pagerank_sum = sum(
-                symbol.pagerank * self._signal_weight(symbol) for symbol in symbols
+                symbol.pagerank
+                * signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
+                for symbol in symbols
             )
             weighted_exported_count = sum(
-                self._signal_weight(symbol)
+                signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
                 for symbol in symbols
                 if symbol.visibility == "exported"
             )
             weighted_public_count = sum(
-                self._signal_weight(symbol)
+                signal_weight_for_symbol(symbol.kind, symbol.name, symbol.visibility)
                 for symbol in symbols
                 if symbol.visibility == "public"
             )
