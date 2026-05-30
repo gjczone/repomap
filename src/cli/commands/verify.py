@@ -760,14 +760,16 @@ def run_verify(
         if changed_files and not as_json:
             _print_missed_files_section(engine, changed_files)
 
-        if status == "failed":
-            return 1
-        if status == "warning":
-            return EXIT_NO_RESULTS
+        # 输出 hints（所有状态路径都应执行）
         ver_status = str(payload.get("status", "unknown"))
         has_risks = bool(payload.get("contractRisks"))
         for hint in verify_hint(status=ver_status, has_contract_risks=has_risks):
             print(hint, file=sys.stderr)
+
+        if status == "failed":
+            return 1
+        if status == "warning":
+            return EXIT_NO_RESULTS
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)
