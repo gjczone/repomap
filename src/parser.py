@@ -1260,6 +1260,16 @@ class TreeSitterAdapter:
                     self._add_import_binding(
                         bindings, local_name, source_name, module, line, "named"
                     )
+            elif child.type == "rest_pattern":
+                # 处理 const { a, ...rest } = require('foo') 中的 ...rest
+                rest_id = child.child_by_field_name("argument") or (
+                    child.children[0] if child.children else None
+                )
+                if rest_id and rest_id.type == "identifier":
+                    name = rest_id.text.decode("utf-8", errors="replace")
+                    self._add_import_binding(
+                        bindings, name, name, module, line, "named"
+                    )
 
     def _collect_es_export_bindings(
         self,
