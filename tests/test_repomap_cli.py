@@ -550,7 +550,7 @@ class RepoMapCliTests(unittest.TestCase):
                 ):
                     with patch.object(RepoMapChecker, "check", fake_check):
                         with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                            exit_code = main(["verify", "--project", project_root])
+                            main(["verify", "--project", project_root])
 
             output = stdout.getvalue()
             # 应显示实际状态 PASS，而非 UNKNOWN
