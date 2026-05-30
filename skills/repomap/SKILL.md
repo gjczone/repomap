@@ -81,13 +81,28 @@ repomap <command> [--project <path>] [options]
 3. Edit
 4. `verify`
 
+## Diagnostic Decision
+
+| After editing… | Use | Time | What it checks |
+|---|---|---|---|
+| Just saved a file | `verify --quick` | ~2s | Git changes + risk level only |
+| Ready to commit | `verify` | 10-30s | Full evidence: changes, risk, orphan symbols, LSP diagnostics, graph diff |
+| Need compiler/lint errors | `check` | varies | Standalone diagnostics (eslint, tsc, ruff, go vet) — no git dependency |
+| CI pipeline | `check` + `verify` | varies | Diagnostics first, then full evidence gate |
+
+**Rule**: `verify --quick` after each edit. `verify` before commit. `check` when you need diagnostics independent of git state.
+
 ## Critical Rules
 
 - `check` reports `unknown` → no diagnostic tool ran, investigate
 - `verify` says "SKIPPED" → state limitation explicitly
 - `verify` reports contract risks → address each before claiming completion
-- `cache save` must run before target edits
-- `--with-co-change` is opt-in, adds 30-60s
+
+### Session Flags
+
+- **`cache save`**: Run BEFORE a refactoring session. Saves graph baseline so `verify` can show a before/after graph diff. Skip for isolated single-file edits.
+- **`--with-co-change`**: Enable for HIGH-RISK edits (changing exported symbols, core modules). Uses git history to find files that are often modified together. Adds 30-60s. Skip for routine edits.
+- **`--no-incremental`**: Force a full rescan, ignoring cached data. Use when cache may be stale (switched branches, pulled new commits, getting unexpected results).
 
 ## Capabilities
 
