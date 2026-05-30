@@ -1,6 +1,7 @@
 """Regression tests for LSP fixes from issue #59."""
 
 import io
+import select
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -126,7 +127,11 @@ class TestReadLoopSentinel(unittest.TestCase):
             client.process = mock_process
             client._stop_event = __import__("threading").Event()
 
-            with patch("src.lsp._read_lsp_message", return_value=_STREAM_EOF):
+            fd = mock_process.stdout.fileno()
+            with (
+                patch("src.lsp._read_lsp_message", return_value=_STREAM_EOF),
+                patch.object(select, "select", return_value=([fd], [], [])),
+            ):
                 client._read_loop()
 
             self.assertTrue(client._messages.empty())
@@ -152,7 +157,11 @@ class TestReadLoopSentinel(unittest.TestCase):
                     return _MESSAGE_SKIPPED
                 return _STREAM_EOF
 
-            with patch("src.lsp._read_lsp_message", side_effect=mock_read):
+            fd = mock_process.stdout.fileno()
+            with (
+                patch("src.lsp._read_lsp_message", side_effect=mock_read),
+                patch.object(select, "select", return_value=([fd], [], [])),
+            ):
                 client._read_loop()
 
             self.assertEqual(call_count[0], 2)
