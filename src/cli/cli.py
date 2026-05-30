@@ -260,21 +260,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_project_args(diff_parser)
 
-    refs_parser = subparsers.add_parser(
-        "refs", help="Scan a repository and analyze references."
-    )
-    _add_project_args(refs_parser)
-    refs_parser.add_argument("--symbol", help="Optional symbol name.")
-    refs_parser.add_argument(
-        "--file-path", help="Disambiguate symbol analysis by relative file path."
-    )
-    refs_parser.add_argument(
-        "--lsp-timeout",
-        type=float,
-        default=DEFAULT_LSP_TIMEOUT,
-        help="Seconds to wait for LSP responses.",
-    )
-
     orphan_parser = subparsers.add_parser(
         "orphan", help="Scan a repository and find orphaned symbols."
     )
@@ -480,7 +465,7 @@ def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
 def main(argv: Sequence[str] | None = None) -> int:
     from .commands.overview import run_overview, run_scan  # noqa: PLC0415
     from .commands.symbol import run_call_chain, run_query_symbol  # noqa: PLC0415
-    from .commands.symbol import run_file_detail, run_refs, run_state_map  # noqa: PLC0415
+    from .commands.symbol import run_file_detail, run_state_map  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
     from .commands.verify import run_verify, run_check, run_orphan  # noqa: PLC0415
@@ -587,15 +572,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_cache(args.project, args.action, getattr(args, "json", False))
     if command == "diff":
         return run_diff(args.project, args.json)
-    if command == "refs":
-        return run_refs(
-            args.project,
-            args.max_files,
-            args.symbol,
-            args.file_path,
-            args.json,
-            args.lsp_timeout,
-        )
     if command == "orphan":
         return run_orphan(
             args.project, args.max_files, args.json, args.limit, args.min_confidence

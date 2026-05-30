@@ -1040,7 +1040,6 @@ class RepoMapCliTests(unittest.TestCase):
             "file-detail",
             "cache",
             "diff",
-            "refs",
             "orphan",
             "check",
             "doctor",
