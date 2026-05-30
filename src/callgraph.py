@@ -733,10 +733,18 @@ def _resolve_call(
 
         import_target = caller_info.imports.get(obj_name)
         if import_target:
-            func_matches = name_to_file.get(method_name, [])
-            for mfpath, mline in func_matches:
-                if mfpath != caller_file:
-                    return (mfpath, method_name, mline, "import_call")
+            # 对于 :: 调用（Rust），外部 crate 类型不应回退到全局函数匹配
+            # 避免 HashMap::new() 匹配到独立的 fn new()
+            is_local_import = (
+                sep != "::"
+                or import_target.startswith((".", "crate::", "self::", "super::"))
+                or caller_file in import_target
+            )
+            if is_local_import:
+                func_matches = name_to_file.get(method_name, [])
+                for mfpath, mline in func_matches:
+                    if mfpath != caller_file:
+                        return (mfpath, method_name, mline, "import_call")
 
     func_name = parts[0]
     matches = name_to_file.get(func_name, [])
