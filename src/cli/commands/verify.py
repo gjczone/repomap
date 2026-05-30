@@ -839,7 +839,9 @@ def _orphan_note(symbol: Symbol) -> str:
     return "; ".join(reasons)
 
 
-def _collect_orphan_symbols(engine: RepoMapEngine, min_confidence: int = 70) -> list[dict]:
+def _collect_orphan_symbols(
+    engine: RepoMapEngine, min_confidence: int = 70
+) -> list[dict]:
     """收集高置信度的孤儿符号信息，用于 verify 报告。"""
     symbol_ids = set(engine.graph.symbols.keys())
     refs_in: dict[str, set[str]] = {symbol_id: set() for symbol_id in symbol_ids}
@@ -862,8 +864,7 @@ def _collect_orphan_symbols(engine: RepoMapEngine, min_confidence: int = 70) -> 
             if symbol.kind in _ORPHAN_EXCLUDED_KINDS:
                 continue
             if any(
-                symbol.file.lower().endswith(ext)
-                for ext in _ORPHAN_EXCLUDED_EXTENSIONS
+                symbol.file.lower().endswith(ext) for ext in _ORPHAN_EXCLUDED_EXTENSIONS
             ):
                 continue
             candidates.append(symbol)

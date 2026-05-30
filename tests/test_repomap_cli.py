@@ -547,6 +547,7 @@ class RepoMapCliTests(unittest.TestCase):
             output = stdout.getvalue()
             # 默认输出 JSON 格式
             import json
+
             data = json.loads(output)
             # 应显示实际状态 passed，而非 unknown
             self.assertIn(data["result"]["status"], {"passed", "warning"})
@@ -1785,6 +1786,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 2)
+
 
 class DiagnosticWarningTests(unittest.TestCase):
     """Test that diagnostic tools properly classify warnings vs errors."""

@@ -230,7 +230,9 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
 
 
 def _scan_engine(
-    project: str | None = None, max_files: int = DEFAULT_MAX_FILES, incremental: bool = False
+    project: str | None = None,
+    max_files: int = DEFAULT_MAX_FILES,
+    incremental: bool = False,
 ) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (

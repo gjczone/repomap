@@ -42,18 +42,22 @@ def _collect_references_for_symbol(engine: RepoMapEngine, symbol: Any) -> list[d
             if edge.target == symbol.id:
                 source_symbol = engine.graph.symbols.get(source_id)
                 if source_symbol:
-                    references.append({
-                        "file": source_symbol.file,
-                        "line": source_symbol.line,
-                        "type": edge.kind,
-                        "name": source_symbol.name,
-                    })
+                    references.append(
+                        {
+                            "file": source_symbol.file,
+                            "line": source_symbol.line,
+                            "type": edge.kind,
+                            "name": source_symbol.name,
+                        }
+                    )
     # 按文件和行号排序
     references.sort(key=lambda x: (x["file"], x["line"]))
     return references[:50]  # 限制返回数量
 
 
-def _collect_state_map_for_symbol(engine: RepoMapEngine, symbol_name: str) -> list[dict] | None:
+def _collect_state_map_for_symbol(
+    engine: RepoMapEngine, symbol_name: str
+) -> list[dict] | None:
     """收集符号的状态映射信息，用于 query-symbol 报告。"""
     try:
         defs = find_state_definitions(engine, symbol=symbol_name)
@@ -66,16 +70,13 @@ def _collect_state_map_for_symbol(engine: RepoMapEngine, symbol_name: str) -> li
                 "line": d.line,
                 "kind": d.kind,
                 "values": [
-                    {"name": v.name, "file": v.file, "line": v.line}
-                    for v in d.values
+                    {"name": v.name, "file": v.file, "line": v.line} for v in d.values
                 ],
                 "writers": [
-                    {"name": w.name, "file": w.file, "line": w.line}
-                    for w in d.writers
+                    {"name": w.name, "file": w.file, "line": w.line} for w in d.writers
                 ],
                 "readers": [
-                    {"name": r.name, "file": r.file, "line": r.line}
-                    for r in d.readers
+                    {"name": r.name, "file": r.file, "line": r.line} for r in d.readers
                 ],
             }
             for d in defs
