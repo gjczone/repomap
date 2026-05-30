@@ -1857,7 +1857,14 @@ class TreeSitterAdapter:
         if not node:
             return ""
         try:
-            first_line = self._text(node).split("\n")[0]
+            # 对于 decorated_definition，找到 function_definition 子节点
+            target_node = node
+            if node.type == "decorated_definition":
+                for child in node.children:
+                    if child.type == "function_definition":
+                        target_node = child
+                        break
+            first_line = self._text(target_node).split("\n")[0]
             patterns = {
                 "python": r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
                 "javascript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)",
