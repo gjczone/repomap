@@ -374,6 +374,11 @@ class Pygit2Backend:
     """基于 pygit2（libgit2）的 git 操作后端，消除 fork 开销。"""
 
     @staticmethod
+    def _validate_git_ref(ref: str) -> str | None:
+        """Backward-compatible alias for the module-level _validate_git_ref."""
+        return _validate_git_ref(ref)
+
+    @staticmethod
     def _repo(project_root: str) -> Any | None:
         if not _HAS_PYGIT2:
             return None
