@@ -563,8 +563,12 @@ class Pygit2Backend:
             _m = _re.match(r"(\d+)\.days\.ago", since)
             since_days = int(_m.group(1)) if _m else 90
             since_seconds = int(now) - since_days * 86400
+            max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
-            for commit in walker:
+            for i, commit in enumerate(walker):
+                if i >= max_commits:
+                    logger.warning("log_name_only: hit max_commits=%d limit", max_commits)
+                    break
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
@@ -590,8 +594,12 @@ class Pygit2Backend:
 
             since_seconds = int(_time.time()) - since_days * 86400
             groups: list[list[str]] = []
+            max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
-            for commit in walker:
+            for i, commit in enumerate(walker):
+                if i >= max_commits:
+                    logger.warning("log_commits_grouped: hit max_commits=%d limit", max_commits)
+                    break
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
@@ -616,8 +624,12 @@ class Pygit2Backend:
 
             since_seconds = int(_time.time()) - days * 86400
             files: set[str] = set()
+            max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
-            for commit in walker:
+            for i, commit in enumerate(walker):
+                if i >= max_commits:
+                    logger.warning("diff_name_only_since: hit max_commits=%d limit", max_commits)
+                    break
                 if commit.commit_time < since_seconds:
                     break
                 if not commit.parents:
@@ -732,8 +744,12 @@ class Pygit2Backend:
             cutoff_timestamp = int(cutoff.timestamp())
 
             author_counts: dict[str, int] = {}
+            max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
-            for commit in walker:
+            for i, commit in enumerate(walker):
+                if i >= max_commits:
+                    logger.warning("file_authors: hit max_commits=%d limit", max_commits)
+                    break
                 # 超过时间限制则停止遍历
                 if commit.commit_time < cutoff_timestamp:
                     break
