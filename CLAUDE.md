@@ -23,17 +23,17 @@ All via `repomap <subcommand> [--project <path>]`.
 | -------------------------------------- | ------------------------------------------------------------------------ |
 | `overview`                             | Project map: modules, entry points, reading order, hotspots, key symbols |
 | `query --query "keyword"`              | Topic/feature discovery with adaptive fallback (never empty)             |
-| `search --query "text"`                | BM25 semantic symbol search with keyword fallback                        |
-| `file-detail --file-path <f>`          | Symbols and structure of a known file                                    |
+| `query --symbol <name>`                | Exact/fuzzy symbol lookup + state map for enums + references             |
+| `query --search "text"`                | BM25 semantic symbol search with keyword fallback                        |
+| `query --file <f>`                     | Symbols and structure of a known file                                    |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning                                    |
-| `query-symbol --symbol <name>`         | Exact/fuzzy symbol lookup + state map for enums                          |
 | `call-chain --symbol <name>`           | Caller/callee context + references                                       |
-| `verify [--quick] [--with-diff]`       | Post-edit evidence gate + orphan symbols                                 |
+| `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff                    |
 | `check`                                | Compiler/type/lint diagnostics                                           |
 | `routes [--json] [--with-consumers]`   | HTTP/API route inventory + consumer mapping                              |
-| `cache save` / `diff`                  | Graph baseline + comparison                                              |
+| `cache save`                           | Graph baseline save for diff comparison                                  |
 | `lsp setup`                            | Auto-install LSP servers for detected languages                          |
-| `doctor`                               | Validate runtime + check LSP availability with `--lsp`                   |
+| `doctor [--no-lsp]`                    | Validate runtime + LSP status (default)                                  |
 | `fix [--dry-run]`                      | Auto-fix: ruff --fix + eslint --fix                                      |
 | `ready`                                | Pre-commit readiness check (verify + check + format)                     |
 
@@ -45,7 +45,7 @@ uv run repomap --help
 uv run python -m unittest discover -s tests -v
 
 # Build binary
-uv run --with pyinstaller python -m src.cli build-binary --output dist
+uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py
 ```
 
 ## Architecture
@@ -67,8 +67,7 @@ src/                    # Python package (flat)
 │       ├── cache.py        # run_cache, run_diff
 │       ├── routes.py       # run_routes
 │       ├── fix.py          # run_fix, run_ready
-│       ├── doctor.py       # run_doctor, run_lsp_doctor, run_lsp_setup
-│       └── build.py        # run_build_binary
+│       └── doctor.py       # run_doctor, run_lsp_doctor, run_lsp_setup
 ├── hints.py                 # Runtime hints: context-aware next-step suggestions
 ├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
@@ -100,10 +99,10 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 ## Change Map
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
-- **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`
+- **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query --symbol`, `impact`
 - **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter)
-- **Type inference**: `src/type_inference.py` → `query-symbol` return_type/params (11 languages)
-- **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
+- **Type inference**: `src/type_inference.py` → `query --symbol` return_type/params (11 languages)
+- **Search**: `src/search.py` → `query --search` (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
@@ -111,10 +110,10 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
 - **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
-- **Cache/diff**: `src/toolkit.py` → `cache save`, `diff`, `verify --with-diff`
+- **Cache/diff**: `src/toolkit.py` → `cache save`, `verify` (graph diff)
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
-- **State map**: `src/state_map.py` → integrated into `query-symbol` for enum/const symbols
-- **LSP**: `src/lsp.py` → auto-enabled, affects `query-symbol`, `file-detail`, `verify`, `check`, `doctor --lsp`, `lsp setup`
+- **State map**: `src/state_map.py` → integrated into `query --symbol` for enum/const symbols
+- **LSP**: `src/lsp.py` → auto-enabled, affects `query --symbol`, `query --file`, `verify`, `check`, `doctor`, `lsp setup`
 - **JSON output**: `src/cli/handlers.py::json_envelope()` → unified `{schema_version, command, project, status, result}` envelope; all commands support `--json`
 
 ## Verification

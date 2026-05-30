@@ -19,7 +19,7 @@ repomap <command> [--project <path>] [options]
 
 1. **Repomap first, grep later.** Use repomap commands instead of grep/find for code understanding.
 2. **TIMEOUT: 120 seconds minimum.** Every bash command invoking repomap MUST use timeout ≥120s.
-3. **LSP is automatic.** `query-symbol`, `call-chain`, `file-detail`, `verify`, and `check` use LSP when available.
+3. **LSP is automatic.** `query --symbol`, `call-chain`, `query --file`, `verify`, and `check` use LSP when available.
 4. **`verify` after edits.** Run after every non-trivial code change.
 5. **`impact` before edits.** Run before non-trivial edits to assess blast radius.
 
@@ -28,42 +28,43 @@ repomap <command> [--project <path>] [options]
 | Situation | Command | Notes |
 |-----------|---------|-------|
 | Project overview | `overview` | Modules, entrypoints, reading order, hotspots |
-| Read a file | `file-detail --file-path <f>` | Symbols, signatures, callers, LSP tree |
-| Find symbol | `query-symbol --symbol <name>` | LSP precision, state map for enums |
+| Find symbol | `query --symbol <name>` | LSP precision, state map for enums |
 | Call flow | `call-chain --symbol <name>` | Callers, callees, references |
 | Topic search | `query --query <keyword>` | Synonym expansion, relevance ranking |
-| Symbol search | `search --query <text>` | BM25 ranking |
+| BM25 search | `query --search <text>` | BM25 symbol ranking |
+| Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
 | Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests |
-| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols |
+| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff |
 | Quick check | `verify --quick` | Git changes + risk only |
 | Lint diagnostics | `check` | Compiler/lint errors |
 | Auto-fix | `fix` | ruff --fix, eslint --fix |
 | Pre-commit | `ready` | verify + check + format |
 | API routes | `routes` | HTTP route inventory |
-| LSP setup | `doctor --lsp` | Check LSP availability |
-| Cache baseline | `cache save` | For verify --with-diff |
+| Health check | `doctor` | Runtime + LSP status (default) |
+| Cache baseline | `cache save` | For verify diff comparison |
 
 ## Value-Added Features (Auto-Enabled)
 
-- **verify** automatically outputs high-confidence orphan symbols (≥70)
-- **query-symbol** automatically outputs state map for enum/const symbols
+- **verify** automatically outputs high-confidence orphan symbols (≥70) and graph diff (when baseline exists)
+- **query --symbol** automatically outputs state map for enum/const symbols and references
 - **call-chain** automatically outputs all references
 - **overview** automatically includes hotspot files
+- **doctor** automatically outputs LSP server status
 
 ## Workflows
 
 **New repo:**
 1. `overview` → grasp structure
-2. `doctor --lsp` → check LSP availability
+2. `doctor` → check runtime + LSP availability
 
 **Edit file:**
-1. `file-detail --file-path <f>` → understand before touching
+1. `query --file <f>` → understand before touching
 2. `impact --files <f> --with-symbols` → assess blast radius
 3. Edit
-4. `verify` → evidence gate
+4. `verify` → evidence gate (includes graph diff)
 
 **Change symbol behavior:**
-1. `query-symbol --symbol <name>` → find definition + state map
+1. `query --symbol <name>` → find definition + state map
 2. `call-chain --symbol <name>` → understand call flow + references
 3. Edit
 4. `verify`

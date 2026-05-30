@@ -116,7 +116,7 @@ def _module_origin(module_name: str) -> str:
     return spec.origin or "built-in"
 
 
-def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> int:
+def run_doctor(project: str, show_lsp: bool = True, as_json: bool = False) -> int:
     from ...parser import TreeSitterAdapter
 
     if project:
@@ -182,8 +182,6 @@ def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> i
             }
             for d in missing
         ]
-    else:
-        result["lsp_hint"] = "run `repomap doctor --lsp` to check"
 
     if as_json:
         from ..handlers import json_envelope
@@ -212,12 +210,4 @@ def run_doctor(project: str, show_lsp: bool = False, as_json: bool = False) -> i
         else:
             print("\nAll LSP servers available.")
         print("\nTip: run `repomap lsp setup --dry-run` to preview auto-install.")
-    else:
-        print("LSP servers: run `repomap doctor --lsp` to check")
-    if pyinstaller_spec is not None:
-        print("PyInstaller: available")
-    else:
-        print(
-            "PyInstaller: not installed in current runtime, only required for build-binary"
-        )
     return 0

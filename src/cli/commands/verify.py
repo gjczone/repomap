@@ -630,7 +630,7 @@ def run_verify(
     resolve_symbols: bool = True,
     lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
     lsp_max_files: int = 20,
-    with_diff: bool = False,
+    with_diff: bool = True,
     quick: bool = False,
     incremental: bool = False,
     max_chars: int = 16000,

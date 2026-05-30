@@ -89,34 +89,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum text output size.",
     )
 
-    query_parser = subparsers.add_parser(
-        "query-symbol", help="Scan a repository and query matching symbols."
-    )
-    _add_project_args(query_parser)
-    query_parser.add_argument(
-        "--symbol", required=True, help="Symbol name to search for."
-    )
-    query_parser.add_argument("--file-path", help="Optional relative file path filter.")
-    query_parser.add_argument(
-        "--max-chars",
-        type=int,
-        default=DEFAULT_QUERY_SYMBOL_MAX_CHARS,
-        help="Maximum text output size.",
-    )
-    query_parser.add_argument(
-        "--lsp-timeout",
-        type=float,
-        default=DEFAULT_LSP_TIMEOUT,
-        help="Seconds to wait for LSP responses.",
-    )
-
-    # ── 新增: query（主题关键词搜索）──────────────────────────────────────────
+    # ── query: 统一查询入口（主题搜索 + 符号查询 + BM25 搜索 + 文件详情）──
     topic_query_parser = subparsers.add_parser(
-        "query", help="Search repository by topic keyword."
+        "query", help="Unified query: topic search, symbol lookup, BM25 search, or file detail."
     )
     _add_project_args(topic_query_parser)
-    topic_query_parser.add_argument(
-        "--query", "-q", required=True, help="Topic keyword."
+    # 四种查询模式（互斥）
+    query_mode = topic_query_parser.add_mutually_exclusive_group()
+    query_mode.add_argument(
+        "--query", "-q", help="Topic keyword search."
+    )
+    query_mode.add_argument(
+        "--symbol", help="Symbol name lookup (exact + fuzzy match, state map, references)."
+    )
+    query_mode.add_argument(
+        "--search", help="BM25 symbol search by natural language."
+    )
+    query_mode.add_argument(
+        "--file", help="File detail: symbols, signatures, callers."
     )
     topic_query_parser.add_argument(
         "--max-result-files",
@@ -139,6 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=2,
         help="Context lines around matched text (default 2).",
+    )
+    topic_query_parser.add_argument(
+        "--top-k", type=int, default=20, help="Max results for --search (default 20)."
     )
 
     # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
@@ -208,40 +201,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum changed files to open through LSP.",
     )
     verify_parser.add_argument(
-        "--with-diff",
+        "--no-diff",
         action="store_true",
-        help="Include graph diff when a cache baseline exists.",
+        default=False,
+        help="Skip graph diff even when a cache baseline exists.",
     )
     verify_parser.add_argument(
         "--quick",
         action="store_true",
         help="Risk-only mode for current Git changes; skips compiler and LSP checks.",
-    )
-
-    file_parser = subparsers.add_parser(
-        "file-detail", help="Scan a repository and print file detail."
-    )
-    _add_project_args(file_parser)
-    file_parser.add_argument(
-        "--file-path", required=True, help="Relative file path to inspect."
-    )
-    file_parser.add_argument(
-        "--max-symbols",
-        type=int,
-        default=DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
-        help="Maximum symbols to expand in text output.",
-    )
-    file_parser.add_argument(
-        "--max-chars",
-        type=int,
-        default=DEFAULT_FILE_DETAIL_MAX_CHARS,
-        help="Maximum text output size.",
-    )
-    file_parser.add_argument(
-        "--lsp-timeout",
-        type=float,
-        default=DEFAULT_LSP_TIMEOUT,
-        help="Seconds to wait for LSP responses.",
     )
 
     cache_parser = subparsers.add_parser(
@@ -253,12 +221,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.",
     )
     _add_project_args(cache_parser)
-
-    diff_parser = subparsers.add_parser(
-        "diff",
-        help="Advanced graph-only comparison against a baseline saved before the target edits.",
-    )
-    _add_project_args(diff_parser)
 
     check_parser = subparsers.add_parser(
         "check", help="Run compiler/static analysis diagnostics."
@@ -358,32 +320,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_project_args(doctor_parser)
     doctor_parser.add_argument(
-        "--lsp",
+        "--no-lsp",
         action="store_true",
-        help="Also check LSP server availability and suggest install commands.",
+        default=False,
+        help="Skip LSP server availability check (LSP is checked by default).",
     )
-
-    search_parser = subparsers.add_parser(
-        "search", help="BM25 symbol search by natural language query."
-    )
-    _add_project_args(search_parser)
-    search_parser.add_argument(
-        "--query",
-        "-q",
-        required=True,
-        help="Search query (natural language or keywords).",
-    )
-    search_parser.add_argument(
-        "--top-k", type=int, default=20, help="Maximum results (default 20)."
-    )
-
-    build_parser_cmd = subparsers.add_parser(
-        "build-binary", help="Build a one-file executable with PyInstaller."
-    )
-    build_parser_cmd.add_argument(
-        "--output", default="dist", help="Directory for the final binary."
-    )
-    build_parser_cmd.add_argument("--name", default=CLI_NAME, help="Binary file name.")
 
     return parser
 
@@ -441,11 +382,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
     from .commands.verify import run_verify, run_check  # noqa: PLC0415
-    from .commands.cache import run_cache, run_diff  # noqa: PLC0415
+    from .commands.cache import run_cache  # noqa: PLC0415
     from .commands.routes import run_routes  # noqa: PLC0415
     from .commands.fix import run_fix, run_ready  # noqa: PLC0415
     from .commands.doctor import run_doctor, run_lsp_doctor, run_lsp_setup  # noqa: PLC0415
-    from .commands.build import run_build_binary  # noqa: PLC0415
 
     parser = build_parser()
     try:
@@ -482,17 +422,42 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.max_chars,
             args.json,
         )
-    if command == "query-symbol":
-        return run_query_symbol(
-            args.project,
-            args.max_files,
-            args.symbol,
-            args.file_path,
-            args.max_chars,
-            args.lsp_timeout,
-            args.json,
-        )
     if command == "query":
+        # 符号查询模式
+        if getattr(args, "symbol", None):
+            return run_query_symbol(
+                args.project,
+                args.max_files,
+                args.symbol,
+                None,  # file_path filter
+                DEFAULT_QUERY_SYMBOL_MAX_CHARS,
+                DEFAULT_LSP_TIMEOUT,
+                args.json,
+            )
+        # BM25 搜索模式
+        if getattr(args, "search", None):
+            return run_search(
+                args.project,
+                args.max_files,
+                args.search,
+                getattr(args, "top_k", 20),
+                args.json,
+            )
+        # 文件详情模式
+        if getattr(args, "file", None):
+            return run_file_detail(
+                args.project,
+                args.max_files,
+                args.file,
+                DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
+                DEFAULT_FILE_DETAIL_MAX_CHARS,
+                DEFAULT_LSP_TIMEOUT,
+                args.json,
+            )
+        # 主题搜索模式（原有 --query）
+        if not args.query:
+            print("[repomap] error: one of --query, --symbol, --search, or --file is required", file=sys.stderr)
+            return 2
         return run_query(
             args.project,
             args.max_files,
@@ -525,25 +490,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             resolve_symbols=not args.no_symbols,
             lsp_timeout=args.lsp_timeout,
             lsp_max_files=args.lsp_max_files,
-            with_diff=args.with_diff,
+            with_diff=not getattr(args, "no_diff", False),
             quick=args.quick,
             incremental=not getattr(args, "no_incremental", False),
             max_chars=args.max_chars,
         )
-    if command == "file-detail":
-        return run_file_detail(
-            args.project,
-            args.max_files,
-            args.file_path,
-            args.max_symbols,
-            args.max_chars,
-            getattr(args, "lsp_timeout", DEFAULT_LSP_TIMEOUT),
-            args.json,
-        )
     if command == "cache":
         return run_cache(args.project, args.action, getattr(args, "json", False))
-    if command == "diff":
-        return run_diff(args.project, args.json)
     if command == "check":
         return run_check(
             project=args.project,
@@ -567,11 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_routes(args.project, args.max_files, args.json, args.with_consumers)
     if command == "doctor":
         return run_doctor(
-            args.project, getattr(args, "lsp", False), getattr(args, "json", False)
-        )
-    if command == "search":
-        return run_search(
-            args.project, args.max_files, args.query, args.top_k, args.json
+            args.project, not getattr(args, "no_lsp", False), getattr(args, "json", False)
         )
     if command == "fix":
         return run_fix(
@@ -579,8 +528,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if command == "ready":
         return run_ready(args.project, getattr(args, "json", False))
-    if command == "build-binary":
-        return run_build_binary(args.output, args.name)
     parser.error(f"unknown command: {command}")
     return 2
 
