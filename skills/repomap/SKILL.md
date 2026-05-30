@@ -40,8 +40,9 @@ repomap <command> [--project <path>] [options]
 | Auto-fix | `fix` | ruff --fix, eslint --fix |
 | Pre-commit | `ready` | verify + check + format |
 | API routes | `routes` | HTTP route inventory |
-| Health check | `doctor` | Runtime + LSP status (default) |
-| Cache baseline | `cache save` | For verify diff comparison |
+| Prepare for changes | `cache save` | For verify diff comparison |
+| LSP status / setup | `lsp doctor` / `lsp setup` | Detects and installs language servers |
+| Health check | `doctor` | Runtime + LSP server availability |
 
 ## Value-Added Features (Auto-Enabled)
 
@@ -90,8 +91,9 @@ repomap <command> [--project <path>] [options]
 
 ## Capabilities
 
-- **Call graph**: Python, TypeScript/TSX, Go, Rust (tree-sitter)
-- **Type inference**: 10 languages (Python, TS/TSX, Go, Rust, Java, Kotlin, Swift, C#, C++, PHP)
+- **Call graph**: Python, TypeScript/TSX, Go, Rust, Java, C#, C++ (tree-sitter, 7 languages)
+- **Type inference**: 11 languages (Python, TS/TSX, Go, Rust, Java, Kotlin, Swift, C#, C++, PHP)
+- **Parsing**: 17 languages — Python, JS/TS/TSX, Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, Lua, HTML, CSS, JSON, YAML, Bash
 - **Git backend**: pygit2 (libgit2) when available, subprocess fallback
 - **Search**: BM25 ranking with keyword fallback
 - **LSP**: default-on when available, local-only
