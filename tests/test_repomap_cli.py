@@ -555,11 +555,13 @@ class RepoMapCliTests(unittest.TestCase):
                             main(["verify", "--project", project_root])
 
             output = stdout.getvalue()
-            # 应显示实际状态 PASS，而非 UNKNOWN
-            self.assertIn("PASS", output)
-            self.assertNotIn("UNKNOWN", output)
-            # 应显示变更文件
-            self.assertIn("main.py", output)
+            # 默认输出 JSON 格式
+            import json
+            data = json.loads(output)
+            # 应显示实际状态 passed，而非 unknown
+            self.assertIn(data["result"]["status"], {"passed", "warning"})
+            # 应包含变更文件
+            self.assertIn("main.py", data["result"]["changedFiles"])
 
     def test_verify_passes_lsp_options(self) -> None:
         from src.cli import main

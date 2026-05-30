@@ -623,14 +623,14 @@ def _print_missed_files_section(
 
 
 def run_verify(
-    project: str,
-    as_json: bool,
-    types: list[str] | None,
-    max_issues: int,
-    resolve_symbols: bool,
-    lsp_timeout: float,
-    lsp_max_files: int,
-    with_diff: bool,
+    project: str | None = None,
+    as_json: bool = True,
+    types: list[str] | None = None,
+    max_issues: int = 50,
+    resolve_symbols: bool = True,
+    lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
+    lsp_max_files: int = 20,
+    with_diff: bool = False,
     quick: bool = False,
     incremental: bool = False,
     max_chars: int = 16000,

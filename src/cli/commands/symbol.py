@@ -4,8 +4,11 @@ import sys
 from typing import Any
 
 from ... import (
+    DEFAULT_CALL_CHAIN_MAX_CHARS,
     DEFAULT_FILE_DETAIL_MAX_SYMBOLS,
+    DEFAULT_QUERY_SYMBOL_MAX_CHARS,
 )
+from ...core import DEFAULT_MAX_FILES
 from ...ai import _truncate_output
 from ...core import RepoMapEngine
 from ...hints import (
@@ -81,14 +84,14 @@ _CALL_CHAIN_MAX_DEPTH = 10
 
 
 def run_call_chain(
-    project: str,
-    max_files: int,
-    symbol: str,
-    file_path: str | None,
-    direction: str,
-    depth: int,
-    max_chars: int,
-    as_json: bool,
+    project: str | None = None,
+    max_files: int = DEFAULT_MAX_FILES,
+    symbol: str = "",
+    file_path: str | None = None,
+    direction: str = "both",
+    depth: int = 3,
+    max_chars: int = DEFAULT_CALL_CHAIN_MAX_CHARS,
+    as_json: bool = True,
 ) -> int:
     if depth > _CALL_CHAIN_MAX_DEPTH:
         print(
@@ -164,13 +167,13 @@ def run_call_chain(
 
 
 def run_query_symbol(
-    project: str,
-    max_files: int,
-    symbol: str,
-    file_path: str | None,
-    max_chars: int,
+    project: str | None = None,
+    max_files: int = DEFAULT_MAX_FILES,
+    symbol: str = "",
+    file_path: str | None = None,
+    max_chars: int = DEFAULT_QUERY_SYMBOL_MAX_CHARS,
     lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
-    as_json: bool = False,
+    as_json: bool = True,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)

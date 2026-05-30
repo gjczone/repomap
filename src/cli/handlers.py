@@ -24,7 +24,7 @@ from .. import (
     SESSION_CACHE_VERSION,
     get_repomap_version,
 )
-from ..core import RepoMapEngine
+from ..core import DEFAULT_MAX_FILES, RepoMapEngine
 from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
 from ..topic import is_test_like_file
@@ -92,17 +92,42 @@ def json_envelope(command: str, project: str, result: dict, status: str = "ok") 
     )
 
 
-def _resolve_project(project: str) -> str:
-    project_path = Path(project).expanduser().resolve()
-    if not project_path.is_dir():
-        raise ValueError(f"project path is not a directory: {project_path}")
-    if project_path == Path.home().resolve():
-        print(
-            f"[{CLI_NAME}] warning: project root is your home directory: {project_path}. "
-            "Run from the intended project directory or pass --project explicitly.",
-            file=sys.stderr,
-        )
-    return str(project_path)
+def _resolve_project(project: str | None = None) -> str:
+    """解析项目路径。如果未指定，自动检测 git 根目录。"""
+    # 1. 如果指定了 --project 参数，直接使用
+    if project:
+        project_path = Path(project).expanduser().resolve()
+        if not project_path.is_dir():
+            raise ValueError(f"project path is not a directory: {project_path}")
+        if project_path == Path.home().resolve():
+            print(
+                f"[{CLI_NAME}] warning: project root is your home directory: {project_path}. "
+                "Run from the intended project directory or pass --project explicitly.",
+                file=sys.stderr,
+            )
+        return str(project_path)
+
+    # 2. 自动检测 git 根目录
+    try:
+        from ..git_backend import GitBackend
+
+        git = GitBackend(str(Path.cwd()))
+        git_root = git.show_toplevel()
+        if git_root:
+            return git_root
+    except Exception:
+        pass
+
+    # 3. 检测父目录是否是 git 仓库
+    current = Path.cwd()
+    for parent in current.parents:
+        if (parent / ".git").exists():
+            return str(parent)
+
+    # 4. 如果都没有检测到，报错
+    raise ValueError(
+        "无法自动检测项目目录。请使用 --project 参数指定项目路径，或在 git 仓库目录中运行。"
+    )
 
 
 def _normalize_project_relative_path(
@@ -205,7 +230,7 @@ def _scan_fingerprint(project_root: str, max_files: int) -> str:
 
 
 def _scan_engine(
-    project: str, max_files: int, incremental: bool = False
+    project: str | None = None, max_files: int = DEFAULT_MAX_FILES, incremental: bool = False
 ) -> RepoMapEngine:
     resolved_project = _resolve_project(project)
     cache_key = (

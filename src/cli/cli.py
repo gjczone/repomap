@@ -443,8 +443,9 @@ def _add_project_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--project",
         "-p",
-        required=True,
-        help="Project root path (absolute path recommended).",
+        required=False,
+        default=None,
+        help="Project root path (absolute path recommended). Auto-detected from git if not specified.",
     )
     parser.add_argument(
         "--max-files",
