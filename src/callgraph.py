@@ -698,8 +698,21 @@ def _resolve_call(
                     )
 
         if obj_name == "cls" and in_class:
+            # 优先匹配同文件中的类定义（调用方上下文）
+            if in_class in caller_info.classes:
+                cinfo = caller_info.classes[in_class]
+                if method_name in cinfo.methods:
+                    return (
+                        caller_file,
+                        f"{in_class}{sep}{method_name}",
+                        cinfo.methods[method_name],
+                        "method_call",
+                    )
+            # 回退到全局查找
             cls_info_list = class_name_to_file.get(in_class, [])
             for cfpath, cinfo in cls_info_list:
+                if cfpath == caller_file:
+                    continue  # 已经检查过同文件
                 if method_name in cinfo.methods:
                     return (
                         cfpath,
