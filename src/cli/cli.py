@@ -260,23 +260,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_project_args(diff_parser)
 
-    orphan_parser = subparsers.add_parser(
-        "orphan", help="Scan a repository and find orphaned symbols."
-    )
-    _add_project_args(orphan_parser)
-    orphan_parser.add_argument(
-        "--limit",
-        type=int,
-        default=20,
-        help="Max candidates per confidence tier in text mode (default 20).",
-    )
-    orphan_parser.add_argument(
-        "--min-confidence",
-        type=int,
-        default=0,
-        help="Minimum confidence score 0-100 to include in output (default 0).",
-    )
-
     check_parser = subparsers.add_parser(
         "check", help="Run compiler/static analysis diagnostics."
     )
@@ -457,7 +440,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .commands.symbol import run_file_detail  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
-    from .commands.verify import run_verify, run_check, run_orphan  # noqa: PLC0415
+    from .commands.verify import run_verify, run_check  # noqa: PLC0415
     from .commands.cache import run_cache, run_diff  # noqa: PLC0415
     from .commands.routes import run_routes  # noqa: PLC0415
     from .commands.fix import run_fix, run_ready  # noqa: PLC0415
@@ -561,10 +544,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_cache(args.project, args.action, getattr(args, "json", False))
     if command == "diff":
         return run_diff(args.project, args.json)
-    if command == "orphan":
-        return run_orphan(
-            args.project, args.max_files, args.json, args.limit, args.min_confidence
-        )
     if command == "check":
         return run_check(
             project=args.project,

@@ -1030,7 +1030,6 @@ class RepoMapCliTests(unittest.TestCase):
             "file-detail",
             "cache",
             "diff",
-            "orphan",
             "check",
             "doctor",
             "build-binary",
@@ -1175,20 +1174,6 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertIn("--onefile", command)
             self.assertIn("--name", command)
             self.assertIn("repomap", command)
-
-    def test_orphan_reports_unreferenced_get_prefix_function(self) -> None:
-        from src.cli import main
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "main.py", "def get_unused():\n    return 1\n")
-
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["orphan", "--project", project_root])
-
-            self.assertEqual(exit_code, 0)
-            self.assertIn("get_unused", stdout.getvalue())
 
     def test_call_chain_requires_file_path_when_symbol_is_ambiguous(self) -> None:
         from src.cli import main
