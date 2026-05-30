@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import sys
+import threading
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -56,12 +57,14 @@ PYINSTALLER_BINDINGS = [
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
 _SCAN_CACHE_MAX_SIZE = 16
+_SCAN_CACHE_LOCK = threading.Lock()
 
 
 def clear_scan_cache() -> int:
     """清理内存中的扫描缓存。返回被清理的条目数。"""
-    count = len(_SCAN_CACHE)
-    _SCAN_CACHE.clear()
+    with _SCAN_CACHE_LOCK:
+        count = len(_SCAN_CACHE)
+        _SCAN_CACHE.clear()
     return count
 
 
@@ -115,7 +118,8 @@ def _resolve_project(project: str | None = None) -> str:
         git_root = git.show_toplevel()
         if git_root:
             return git_root
-    except Exception:
+    except (OSError, ValueError, ImportError, RuntimeError) as exc:
+        logger.warning("git detection failed: %s", exc)
         pass
 
     # 3. 检测父目录是否是 git 仓库
@@ -256,18 +260,19 @@ def _scan_engine(
 
     session_engine = _load_session_engine(resolved_project, fingerprint, incremental)
     if session_engine is not None:
-        if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
-            _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
-        _SCAN_CACHE[cache_key] = (fingerprint, session_engine)
+        with _SCAN_CACHE_LOCK:
+            if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
+                _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
+            _SCAN_CACHE[cache_key] = (fingerprint, session_engine)
         return session_engine
-
     engine = RepoMapEngine(resolved_project)
     engine.scan(max_files=max_files, incremental=incremental)
     if not _save_session_engine(resolved_project, fingerprint, engine):
         logger.warning("Session cache save failed, --with-diff will be unavailable")
-    if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
-        _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
-    _SCAN_CACHE[cache_key] = (fingerprint, engine)
+    with _SCAN_CACHE_LOCK:
+        if len(_SCAN_CACHE) >= _SCAN_CACHE_MAX_SIZE:
+            _SCAN_CACHE.pop(next(iter(_SCAN_CACHE)))
+        _SCAN_CACHE[cache_key] = (fingerprint, engine)
     return engine
 
 

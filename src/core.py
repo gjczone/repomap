@@ -51,6 +51,7 @@ logger = logging.getLogger("repomap")
 
 DEFAULT_MAX_FILE_BYTES = 512 * 1024
 DEFAULT_MAX_FILES = 8000
+MAX_FAILED_FILES = 50
 _DEFAULT_SKIP_DIRS = frozenset(
     {
         "node_modules",
@@ -308,9 +309,14 @@ class RepoMapEngine:
                 try:
                     self._process_file(f)
                 except Exception as e:
-                    if len(self.scan_stats.failed_files) < 5:
+                    if len(self.scan_stats.failed_files) < MAX_FAILED_FILES:
                         self.scan_stats.failed_files.append(
                             f"{f}: {type(e).__name__}: {str(e)[:50]}"
+                        )
+                    elif len(self.scan_stats.failed_files) == MAX_FAILED_FILES:
+                        logger.warning(
+                            "Too many failed files (≥%d), suppressing further entries",
+                            MAX_FAILED_FILES,
                         )
                     logger.warning(f"Failed to process file {f}: {e}")
             # 边构建和 PageRank 也受超时保护
@@ -527,7 +533,7 @@ class RepoMapEngine:
                 for line in result.stdout.strip().split("\n")
                 if line and Path(line).suffix.lower() in EXT_TO_LANG
             )
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             logger.warning(
                 "rg --files failed for source listing, falling back to os.walk"
             )
@@ -590,7 +596,7 @@ class RepoMapEngine:
             candidates = sorted(
                 line for line in result.stdout.strip().split("\n") if line
             )
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             logger.warning(
                 "rg --files failed for supporting files, falling back to rglob"
             )
@@ -801,23 +807,28 @@ class RepoMapEngine:
         files = [f for f in self.graph.file_symbols if f.endswith(extensions)]
         if not files:
             return
-        try:
-            from . import callgraph as cg
+        from . import callgraph as cg
 
-            analyze_fn = getattr(cg, analyze_fn_name)
-            source_map = getattr(self, "_source_bytes", None) or {}
-            if needs_ts:
-                modules = analyze_fn(
-                    self.project_root, files, self.ts, source_map=source_map
+        analyze_fn = getattr(cg, analyze_fn_name)
+        source_map = getattr(self, "_source_bytes", None) or {}
+        modules: dict[str, Any] = {}
+        for f in files:
+            try:
+                if needs_ts:
+                    result = analyze_fn(
+                        self.project_root, [f], self.ts, source_map=source_map
+                    )
+                else:
+                    result = analyze_fn(self.project_root, [f], source_map=source_map)
+                modules.update(result)
+            except Exception as exc:
+                logger.warning(
+                    "%s call graph enrichment failed for %s: %s", label, f, exc
                 )
-            else:
-                modules = analyze_fn(self.project_root, files, source_map=source_map)
-            precise_edges = cg.resolve_precise_edges(modules)
-            added = self._add_precise_edges(precise_edges)
-            if added:
-                logger.debug(f"{label} precise call graph added {added} edges")
-        except Exception as exc:
-            logger.warning(f"{label} call graph enrichment failed: {exc}")
+        precise_edges = cg.resolve_precise_edges(modules)
+        added = self._add_precise_edges(precise_edges)
+        if added:
+            logger.debug(f"{label} precise call graph added {added} edges")
 
     def _enrich_python_call_edges(self) -> None:
         self._enrich_call_edges("Python", (".py", ".pyi"), "analyze_python_callgraph")

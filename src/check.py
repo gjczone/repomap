@@ -282,16 +282,23 @@ class DiagnosticRunner:
         """运行命令并返回 (exit_code, stdout, duration_ms)"""
         start = self._now_ms()
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 cmd,
                 cwd=self.project_root,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=120,
             )
+            stdout, stderr = process.communicate(timeout=120)
             duration = self._now_ms() - start
-            output = result.stdout + result.stderr
-            return result.returncode, output, duration
+            output = stdout + stderr
+            # Truncate to 10MB
+            max_bytes = 10 * 1024 * 1024
+            output_bytes = output.encode("utf-8", errors="replace")
+            if len(output_bytes) > max_bytes:
+                output = output_bytes[:max_bytes].decode("utf-8", errors="replace")
+                output += "\n... [output truncated at 10MB]"
+            return process.returncode, output, duration
         except subprocess.TimeoutExpired:
             return -1, "Timeout after 120s", self._now_ms() - start
         except Exception as e:
@@ -589,7 +596,13 @@ class DiagnosticRunner:
             cmd = ["pyright", ".", "--outputjson"]
 
         exit_code, output, duration = self._run_command(cmd, tool)
-        errors, warnings = self._parse_pyright_output(output)
+        parsed = self._parse_pyright_output(output)
+        if parsed is None:
+            logger.warning("pyright output parse failed, returning empty diagnostics")
+            errors: list[DiagnosticIssue] = []
+            warnings: list[DiagnosticIssue] = []
+        else:
+            errors, warnings = parsed
 
         return DiagnosticResult(
             tool=tool,
@@ -604,7 +617,7 @@ class DiagnosticRunner:
 
     def _parse_pyright_output(
         self, output: str
-    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]]:
+    ) -> tuple[list[DiagnosticIssue], list[DiagnosticIssue]] | None:
         """解析 pyright --outputjson"""
         errors: list[DiagnosticIssue] = []
         warnings: list[DiagnosticIssue] = []
@@ -612,7 +625,7 @@ class DiagnosticRunner:
             data = json_loads(output) if output.strip() else {}
         except Exception:
             logger.warning("Failed to parse pyright JSON output", exc_info=True)
-            return errors, warnings
+            return None
 
         for diag in data.get("generalDiagnostics", []):
             severity = diag.get("severity", "error")

@@ -573,7 +573,7 @@ class TreeSitterAdapter:
             logger.warning(f"Parser out of memory for {lang}, skipping file")
             return None
         except Exception as e:
-            logger.info(f"Parse error [{lang}]: {e}")
+            logger.warning(f"Parse error [{lang}]: {e}")
             return None
 
     def extract_symbols(
@@ -605,12 +605,21 @@ class TreeSitterAdapter:
                 elif "definition" in cap_name or "export" in cap_name:
                     def_nodes.append((node, cap_name))
 
+            total_matches = 0
             for name_node in name_nodes:
-                matching_defs = [
-                    (def_node, def_cap)
-                    for def_node, def_cap in def_nodes
-                    if self._within(name_node, def_node)
-                ]
+                if total_matches >= 5000:
+                    break
+                matching_defs = []
+                def_searched = 0
+                for def_node, def_cap in def_nodes:
+                    if def_searched >= 500:
+                        break
+                    def_searched += 1
+                    if self._within(name_node, def_node):
+                        matching_defs.append((def_node, def_cap))
+                        total_matches += 1
+                        if total_matches >= 5000:
+                            break
                 matching_defs.sort(
                     key=lambda item: (
                         (

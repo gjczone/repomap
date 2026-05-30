@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import shutil
+import select
 import subprocess
 import threading
 import time
@@ -478,6 +479,14 @@ def _read_lsp_message(stream: Any) -> Any:
     """Read a single LSP message from the stream. Returns dict, _STREAM_EOF, or _MESSAGE_SKIPPED."""
     headers: dict[str, str] = {}
     while True:
+        try:
+            fd = stream.fileno()
+        except (OSError, AttributeError):
+            fd = None
+        if fd is not None:
+            ready, _, _ = select.select([fd], [], [], 30.0)
+            if not ready:
+                return _STREAM_EOF
         line = stream.readline()
         if not line:
             return _STREAM_EOF
@@ -554,10 +563,17 @@ class StdioLspClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
-        self._reader.start()
-        self._stderr_reader = threading.Thread(target=self._drain_stderr, daemon=True)
-        self._stderr_reader.start()
+        try:
+            self._reader = threading.Thread(target=self._read_loop, daemon=True)
+            self._reader.start()
+            self._stderr_reader = threading.Thread(
+                target=self._drain_stderr, daemon=True
+            )
+            self._stderr_reader.start()
+        except Exception:
+            self.process.kill()
+            self.process.wait()
+            raise
 
     def _read_loop(self) -> None:
         if self.process is None or self.process.stdout is None:
@@ -593,6 +609,7 @@ class StdioLspClient:
                 if self._stop_event.is_set():
                     return  # close() 触发的异常，正常退出
                 logger.debug("Stderr drain interrupted", exc_info=True)
+                logger.warning("Stderr drain failed unexpectedly", exc_info=True)
                 break
 
     def send_notification(

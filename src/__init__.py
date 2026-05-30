@@ -78,6 +78,7 @@ def get_repomap_version() -> str:
             "Failed to load VERSION from _version.py, falling back to 0.0.0-dev",
             exc_info=True,
         )
+    logger.warning("Version detection completely failed, using fallback 0.0.0-dev")
     return "0.0.0-dev"
 
 
@@ -474,4 +475,8 @@ def node_text(node: Any) -> str:
 
     用于 callgraph.py 和 type_inference.py 中的符号名称提取。
     """
-    return node.text.decode("utf-8") if getattr(node, "text", None) else ""
+    return (
+        node.text.decode("utf-8", errors="replace")
+        if getattr(node, "text", None)
+        else ""
+    )

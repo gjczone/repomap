@@ -670,8 +670,12 @@ def _resolve_call(
         parts = call_name.split("::")
 
     if len(parts) >= 2:
-        obj_name = parts[0]
-        method_name = parts[1]
+        if "::" in call_name:
+            obj_name = "::".join(parts[:-1])
+            method_name = parts[-1]
+        else:
+            obj_name = parts[0]
+            method_name = parts[1]
 
         if obj_name in ("self", "this", "Self") and in_class:
             # 优先匹配同文件中的类定义（调用方上下文）
