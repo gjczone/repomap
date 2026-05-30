@@ -450,14 +450,33 @@ def run_search(
         if as_json:
             from ..handlers import json_envelope
 
+            # 将 Symbol 对象转换为可序列化的字典
+            serializable_results = []
+            for sym, score in results:
+                item = {
+                    "name": sym.name,
+                    "kind": sym.kind,
+                    "file": sym.file,
+                    "line": sym.line,
+                    "score": score,
+                    "pagerank": sym.pagerank,
+                }
+                if sym.signature:
+                    item["signature"] = sym.signature
+                if sym.return_type:
+                    item["return_type"] = sym.return_type
+                if sym.params:
+                    item["params"] = sym.params
+                serializable_results.append(item)
+
             print(
                 json_envelope(
                     "search",
-                    project,
+                    str(engine.project_root),
                     {
                         "query": query,
-                        "results": results,
-                        "count": len(results),
+                        "results": serializable_results,
+                        "count": len(serializable_results),
                     },
                 )
             )
