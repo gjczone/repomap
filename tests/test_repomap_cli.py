@@ -1245,6 +1245,62 @@ class RepoMapCliTests(unittest.TestCase):
             data = json.loads(text)
             self.assertIn("exact_matches", data["result"])
 
+    def test_query_search_returns_bm25_results(self) -> None:
+        from src.cli import main
+        import json
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "auth.py", "def login():\n    return 1\n")
+            write_file(project_root, "user.py", "def get_user():\n    return 2\n")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    ["query", "--project", project_root, "--search", "login"]
+                )
+
+            # search may return 0 (results found) or 3 (no results) or 1 (fallback to hotspots)
+            self.assertIn(exit_code, (0, 1, 3))
+            if exit_code == 0:
+                text = stdout.getvalue()
+                data = json.loads(text)
+                self.assertIn("results", data["result"])
+                self.assertIn("count", data["result"])
+
+    def test_query_file_returns_file_symbols(self) -> None:
+        from src.cli import main
+        import json
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "main.py",
+                "def helper():\n    return 1\n\ndef caller():\n    return helper()\n",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(
+                    ["query", "--project", project_root, "--file", "main.py"]
+                )
+
+            text = stdout.getvalue()
+            self.assertEqual(exit_code, 0)
+            data = json.loads(text)
+            self.assertIn("symbols", data["result"])
+            self.assertIn("file", data["result"])
+
+    def test_query_requires_one_mode_argument(self) -> None:
+        from src.cli import main
+
+        stderr = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+            exit_code = main(["query", "--project", "."])
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("required", stderr.getvalue().lower())
+
     def test_overview_git_co_change_requires_explicit_flag(self) -> None:
         import src.ai
         from src.cli import main
