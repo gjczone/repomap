@@ -380,17 +380,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also check LSP server availability and suggest install commands.",
     )
 
-    state_map_parser = subparsers.add_parser(
-        "state-map", help="Map state values, writers, and readers for an enum/type."
-    )
-    _add_project_args(state_map_parser)
-    state_map_parser.add_argument(
-        "--symbol", default=None, help="Symbol name (e.g. TaskStatus)."
-    )
-    state_map_parser.add_argument(
-        "--query", default=None, help="Keywords to find relevant state definitions."
-    )
-
     search_parser = subparsers.add_parser(
         "search", help="BM25 symbol search by natural language query."
     )
@@ -465,7 +454,7 @@ def _prepare_argv(argv: Sequence[str] | None) -> list[str] | None:
 def main(argv: Sequence[str] | None = None) -> int:
     from .commands.overview import run_overview, run_scan  # noqa: PLC0415
     from .commands.symbol import run_call_chain, run_query_symbol  # noqa: PLC0415
-    from .commands.symbol import run_file_detail, run_state_map  # noqa: PLC0415
+    from .commands.symbol import run_file_detail  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
     from .commands.verify import run_verify, run_check, run_orphan  # noqa: PLC0415
@@ -600,10 +589,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "doctor":
         return run_doctor(
             args.project, getattr(args, "lsp", False), getattr(args, "json", False)
-        )
-    if command == "state-map":
-        return run_state_map(
-            args.project, args.max_files, args.symbol, args.query, args.json
         )
     if command == "search":
         return run_search(

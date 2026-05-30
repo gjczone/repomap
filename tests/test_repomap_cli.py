@@ -482,10 +482,6 @@ class RepoMapCliTests(unittest.TestCase):
             captured["file-detail"] = args
             return 0
 
-        def fake_run_refs(*args):
-            captured["refs"] = args
-            return 0
-
         with patch("src.cli.commands.symbol.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
@@ -496,16 +492,10 @@ class RepoMapCliTests(unittest.TestCase):
                 self.assertEqual(
                     main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0
                 )
-        with patch("src.cli.commands.symbol.run_refs", fake_run_refs):
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(
-                    main(["refs", "--project", ".", "--symbol", "target"]), 0
-                )
 
-        # lsp_timeout is now the 6th positional arg (index 5) for query-symbol and refs
+        # lsp_timeout is now the 6th positional arg (index 5) for query-symbol
         self.assertEqual(captured["query-symbol"][5], 8.0)
         self.assertEqual(captured["file-detail"][5], 8.0)
-        self.assertEqual(captured["refs"][5], 8.0)
 
     def test_verify_text_output_shows_actual_status(self) -> None:
         """P0: verify 文本报告应显示实际状态而非 UNKNOWN。"""
@@ -1138,58 +1128,6 @@ class RepoMapCliTests(unittest.TestCase):
             data = json.loads(output)
             self.assertIn("lsp", data["result"])
             self.assertEqual(data["result"]["lsp"]["status"], "ok")
-
-    def test_refs_lsp_json_includes_evidence(self) -> None:
-        from src.cli import main
-
-        fake_run = {
-            "server": "fake-lsp",
-            "language": "python",
-            "status": "ok",
-            "command": ["fake-lsp"],
-            "workspaceRoot": "/tmp/demo",
-            "reason": "",
-            "durationMs": 1,
-            "diagnostics": [],
-            "definitions": [
-                {"file": "lib.py", "line": 1, "col": 5, "end_line": 1, "end_col": 11}
-            ],
-            "references": [
-                {"file": "main.py", "line": 4, "col": 12, "end_line": 4, "end_col": 18}
-            ],
-        }
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "lib.py", "def helper():\n    return 1\n")
-            write_file(
-                project_root,
-                "main.py",
-                "from lib import helper\n\ndef caller():\n    return helper()\n",
-            )
-            stdout = io.StringIO()
-            with patch(
-                "src.cli.commands.symbol._collect_lsp_evidence_for_symbol",
-                return_value=fake_run,
-            ):
-                with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                    exit_code = main(
-                        [
-                            "refs",
-                            "--project",
-                            project_root,
-                            "--symbol",
-                            "helper",
-                            "--file-path",
-                            "lib.py",
-                            "--json",
-                        ]
-                    )
-
-            self.assertEqual(exit_code, 0)
-            payload = json.loads(stdout.getvalue())
-            result = payload.get("result", payload)
-            self.assertEqual(result["lsp"]["status"], "ok")
-            self.assertEqual(result["lsp"]["references"][0]["file"], "main.py")
 
     def test_cache_save_and_diff_follow_standalone_cli_semantics(self) -> None:
         from src.cli import main
@@ -1862,61 +1800,6 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 2)
-
-    def test_refs_requires_file_path_when_symbol_is_ambiguous(self) -> None:
-        from src.cli import main
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "a.py", "def helper():\n    return 1\n")
-            write_file(
-                project_root,
-                "b.py",
-                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
-            )
-
-            stderr = io.StringIO()
-            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                exit_code = main(
-                    ["refs", "--project", project_root, "--symbol", "helper"]
-                )
-
-            self.assertEqual(exit_code, 1)
-            self.assertIn("--file-path", stderr.getvalue())
-            self.assertIn("a.py:1", stderr.getvalue())
-            self.assertIn("b.py:1", stderr.getvalue())
-
-    def test_refs_can_disambiguate_with_file_path(self) -> None:
-        from src.cli import main
-        import json
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "a.py", "def helper():\n    return 1\n")
-            write_file(
-                project_root,
-                "b.py",
-                "def helper():\n    return 2\n\ndef caller():\n    return helper()\n",
-            )
-
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(
-                    [
-                        "refs",
-                        "--project",
-                        project_root,
-                        "--symbol",
-                        "helper",
-                        "--file-path",
-                        "b.py",
-                    ]
-                )
-
-            self.assertEqual(exit_code, 0)
-            # 默认输出 JSON 格式
-            data = json.loads(stdout.getvalue())
-            self.assertIn("symbol", data["result"])
-
 
 class DiagnosticWarningTests(unittest.TestCase):
     """Test that diagnostic tools properly classify warnings vs errors."""
