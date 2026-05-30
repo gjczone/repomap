@@ -33,6 +33,26 @@ from ..handlers import (
 from ...state_map import find_state_definitions
 
 
+def _collect_references_for_symbol(engine: RepoMapEngine, symbol: Any) -> list[dict]:
+    """收集符号的引用信息，用于 call-chain 报告。"""
+    references = []
+    # 查找所有引用该符号的边
+    for source_id, edge_list in engine.graph.outgoing.items():
+        for edge in edge_list:
+            if edge.target == symbol.id:
+                source_symbol = engine.graph.symbols.get(source_id)
+                if source_symbol:
+                    references.append({
+                        "file": source_symbol.file,
+                        "line": source_symbol.line,
+                        "type": edge.kind,
+                        "name": source_symbol.name,
+                    })
+    # 按文件和行号排序
+    references.sort(key=lambda x: (x["file"], x["line"]))
+    return references[:50]  # 限制返回数量
+
+
 def _collect_state_map_for_symbol(engine: RepoMapEngine, symbol_name: str) -> list[dict] | None:
     """收集符号的状态映射信息，用于 query-symbol 报告。"""
     try:
@@ -143,6 +163,9 @@ def run_call_chain(
             return 1
         if as_json:
             chain = engine.call_chain(selected.id, direction, depth)
+            # 收集引用信息
+            references = _collect_references_for_symbol(engine, selected)
+
             payload = {
                 "symbol": {
                     "id": selected.id,
@@ -161,6 +184,7 @@ def run_call_chain(
                 "callees": [
                     _format_symbol_ref(engine, item.id) for item in chain["callees"]
                 ],
+                "references": references,
             }
             print(json_envelope("call-chain", str(engine.project_root), payload))
             return 0
