@@ -461,9 +461,9 @@ def _load_session_engine(
 
 def _save_session_engine(
     project_root: str, fingerprint: str, engine: RepoMapEngine
-) -> None:
+) -> bool:
     if engine.scan_state not in ("scanned", "partial"):
-        return
+        return False
     cache_path = get_session_cache_path(project_root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = _engine_to_session_payload(project_root, fingerprint, engine)
