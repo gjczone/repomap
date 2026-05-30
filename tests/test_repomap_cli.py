@@ -372,6 +372,7 @@ class RepoMapCliTests(unittest.TestCase):
         output = stdout.getvalue()
         # 默认输出 JSON 格式
         import json
+
         data = json.loads(output)
         self.assertEqual(data["result"]["status"], "failed")
 
@@ -945,6 +946,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         # 默认输出 JSON 格式，检查 routes 为空
         import json
+
         result = json.loads(output)
         self.assertEqual(result["result"]["routes"], [])
 
@@ -1014,6 +1016,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         # 默认输出 JSON 格式
         import json
+
         data = json.loads(result.stdout)
         self.assertIn("python", data["result"]["parsers"])
         self.assertTrue(data["result"]["tsx_available"])
@@ -1131,6 +1134,7 @@ class RepoMapCliTests(unittest.TestCase):
             output = stdout.getvalue()
             # 默认输出 JSON 格式
             import json
+
             data = json.loads(output)
             self.assertIn("lsp", data["result"])
             self.assertEqual(data["result"]["lsp"]["status"], "ok")
@@ -1359,25 +1363,52 @@ class RepoMapCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def run():\n    return 1\n")
             # 创建 git 仓库
-            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=project_root, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test"], cwd=project_root, check=True, capture_output=True)
-            subprocess.run(["git", "add", "."], cwd=project_root, check=True, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "init"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "add", "."], cwd=project_root, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+            )
 
             with patch.object(
                 src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]
             ) as co_change_mock:
                 # Default: co-change is disabled (opt-in)
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    default_code = main(["overview", "--project", project_root, "--no-json"])
+                    default_code = main(
+                        ["overview", "--project", project_root, "--no-json"]
+                    )
                 self.assertEqual(default_code, 0)
                 self.assertEqual(co_change_mock.call_count, 0)
 
                 # --with-co-change should enable it
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     enabled_code = main(
-                        ["overview", "--project", project_root, "--with-co-change", "--no-json"]
+                        [
+                            "overview",
+                            "--project",
+                            project_root,
+                            "--with-co-change",
+                            "--no-json",
+                        ]
                     )
                 self.assertEqual(enabled_code, 0)
                 self.assertGreater(co_change_mock.call_count, 0)
@@ -1491,6 +1522,7 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             # 默认输出 JSON 格式
             import json
+
             data = json.loads(text)
             self.assertIn("symbols", data["result"])
 

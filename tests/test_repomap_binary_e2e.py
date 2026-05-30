@@ -68,6 +68,7 @@ class RepoMapBinaryE2ETests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         # 默认输出 JSON 格式
         import json
+
         data = json.loads(result.stdout)
         self.assertIn("python", data["result"]["parsers"])
 
