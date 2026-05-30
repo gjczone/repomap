@@ -33,6 +33,37 @@ from ..handlers import (
 from ...state_map import find_state_definitions
 
 
+def _collect_state_map_for_symbol(engine: RepoMapEngine, symbol_name: str) -> list[dict] | None:
+    """收集符号的状态映射信息，用于 query-symbol 报告。"""
+    try:
+        defs = find_state_definitions(engine, symbol=symbol_name)
+        if not defs:
+            return None
+        return [
+            {
+                "symbol_name": d.symbol_name,
+                "file": d.file,
+                "line": d.line,
+                "kind": d.kind,
+                "values": [
+                    {"name": v.name, "file": v.file, "line": v.line}
+                    for v in d.values
+                ],
+                "writers": [
+                    {"name": w.name, "file": w.file, "line": w.line}
+                    for w in d.writers
+                ],
+                "readers": [
+                    {"name": r.name, "file": r.file, "line": r.line}
+                    for r in d.readers
+                ],
+            }
+            for d in defs
+        ]
+    except Exception:
+        return None
+
+
 def _group_symbol_matches(
     results: list[Any], symbol: str
 ) -> tuple[list[Any], list[Any]]:
@@ -226,6 +257,10 @@ def run_query_symbol(
                 payload["lsp"] = _collect_lsp_evidence_for_symbol(
                     engine, selected, lsp_timeout
                 )
+                # 自动收集状态映射信息（枚举/常量时）
+                state_map = _collect_state_map_for_symbol(engine, symbol)
+                if state_map:
+                    payload["stateMap"] = state_map
             print(json_envelope("query-symbol", str(engine.project_root), payload))
             return 0
 
