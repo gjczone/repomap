@@ -9,8 +9,8 @@
 **编程代理获得的能力**：结构化仓库上下文，替代 grep + 原始文件读取：
 
 - **从哪里开始**：`overview`、`query`（同义词扩展）、`routes`
-- **什么会被破坏**：`impact`（含类型级）、`call-chain`、`refs`、`state-map`
-- **遗漏了什么**：`verify`（合约风险 + 漏改检测）、`check`、`orphan`
+- **什么会被破坏**：`impact`（含类型级）、`call-chain`（含引用信息）
+- **遗漏了什么**：`verify`（合约风险 + 漏改检测 + 孤儿符号）、`check`
 - **自动修复与就绪检查**：`fix`（ruff + eslint 自动修复）、`ready`（提交前检查）
 - **编码自动检测**：UTF-8 → GBK → GB2312 回退，消除老项目扫描盲区
 - **自适应搜索**：永不返回空结果 — 关键词扩展 → 热点兜底
@@ -37,7 +37,7 @@ repomap doctor --project .
 
 **效果**：代理读取 `~/.claude/skills/repomap/SKILL.md`，在恰当的时机自动调用 `repomap overview`、`repomap impact`、`repomap verify`。也可以直接使用 CLI 进行手动分析。
 
-> **注意**：`--project` 是所有命令的必传参数（`build-binary` 除外），请始终传入绝对路径。
+> **注意**：`--project` 是可选参数。如果未指定，repomap 会自动检测 git 根目录。
 
 ---
 
@@ -110,17 +110,13 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `search --query <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数 |
 | `file-detail --file-path <文件>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
-| `call-chain --symbol <名称>` | 调用者和被调用者，支持配置深度；`--direction`；`--json` |
+| `call-chain --symbol <名称>` | 调用者、被调用者和引用，支持配置深度；`--direction`；`--json` |
 | `query-symbol --symbol <名称>` | 精确/模糊符号查找；默认获取 LSP hover + 定义/引用证据；`--json` |
-| `refs --symbol <名称>` | 符号的所有引用；默认获取 LSP 精确跨文件结果；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
-| `state-map --symbol <名称>` | 枚举/常量状态值、写入者、读取者 |
-| `verify [--quick] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、漏改检测 |
+| `verify [--quick] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号 |
 | `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
 | `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
-| `orphan [--json]` | 死代码候选发现，含置信度分级 |
-| `hotspots` | 按复杂度排名的高密度文件 |
 | `cache save` / `diff` | 图基线保存 + 与基线对比 |
 | `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
 | `lsp setup [--dry-run]` | 自动安装缺失的 LSP 服务器 |
@@ -133,19 +129,18 @@ repomap lsp setup --project .             # 安装缺失的服务器
 
 ```bash
 # 编辑前
-repomap overview --project .                          # 初次接触
-repomap query --project . --query "auth token"        # 按关键词查找
-repomap file-detail --project . --file-path src/auth/login.ts
-repomap impact --project . --files src/auth/login.ts --with-symbols
-repomap routes --project . --with-consumers           # API 消费者映射
-repomap call-chain --project . --symbol refreshToken
+repomap overview                                      # 初次接触
+repomap query --query "auth token"                    # 按关键词查找
+repomap file-detail --file-path src/auth/login.ts
+repomap impact --files src/auth/login.ts --with-symbols
+repomap routes --with-consumers                       # API 消费者映射
+repomap call-chain --symbol refreshToken
 
 # 编辑后
-repomap verify --project .                            # 完整证据门（含漏改检测）
-repomap fix --project .                               # 自动修复 lint 问题
-repomap ready --project .                             # 提交就绪检查
-repomap check --project .                             # 编译器诊断
-repomap orphan --project . --min-confidence 70        # 死代码检查
+repomap verify                                        # 完整证据门（含孤儿符号）
+repomap fix                                           # 自动修复 lint 问题
+repomap ready                                         # 提交就绪检查
+repomap check                                         # 编译器诊断
 ```
 
 ---

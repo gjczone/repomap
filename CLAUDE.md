@@ -1,6 +1,6 @@
 # RepoMap — Skill + CLI for AI-Agent Repository Intelligence
 
-> **用 repomap 查 repomap，用 repomap 优化 repomap。** 开发和审查本项目时，必须使用 repomap 自身的命令（`overview`、`impact`、`refs`、`call-chain`、`verify`、`orphan`、`check`）来理解代码、评估变更影响、发现死代码和验证修改。这是 dogfooding 原则——自己吃自己的狗粮。
+> **用 repomap 查 repomap，用 repomap 优化 repomap。** 开发和审查本项目时，必须使用 repomap 自身的命令（`overview`、`impact`、`call-chain`、`verify`、`check`）来理解代码、评估变更影响、发现死代码和验证修改。这是 dogfooding 原则——自己吃自己的狗粮。
 
 `repomap` is a **skill + CLI tool**. AI agents (Claude Code, Codex, OpenCode) invoke it via the skill definition in `skills/repomap/SKILL.md`. The skill tells the agent _when_ to call `repomap`; the CLI binary does the actual work: tree-sitter AST scanning, dependency graph building, PageRank ranking, and structured report generation.
 
@@ -17,7 +17,7 @@
 
 ## Commands
 
-All via `repomap <subcommand> --project <path>`.
+All via `repomap <subcommand> [--project <path>]`.
 
 | Command                                | Purpose                                                                  |
 | -------------------------------------- | ------------------------------------------------------------------------ |
@@ -26,15 +26,11 @@ All via `repomap <subcommand> --project <path>`.
 | `search --query "text"`                | BM25 semantic symbol search with keyword fallback                        |
 | `file-detail --file-path <f>`          | Symbols and structure of a known file                                    |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning                                    |
-| `query-symbol --symbol <name>`         | Exact/fuzzy symbol lookup                                                |
-| `call-chain --symbol <name>`           | Caller/callee context                                                    |
-| `refs --symbol <name>`                 | Reference discovery                                                      |
-| `verify [--quick] [--with-diff]`       | Post-edit evidence gate with missed-files detection                      |
+| `query-symbol --symbol <name>`         | Exact/fuzzy symbol lookup + state map for enums                          |
+| `call-chain --symbol <name>`           | Caller/callee context + references                                       |
+| `verify [--quick] [--with-diff]`       | Post-edit evidence gate + orphan symbols                                 |
 | `check`                                | Compiler/type/lint diagnostics                                           |
 | `routes [--json] [--with-consumers]`   | HTTP/API route inventory + consumer mapping                              |
-| `state-map --symbol <name>`            | Enum/const state values, writers, and readers                            |
-| `orphan [--json]`                      | Dead-code candidate discovery                                            |
-| `hotspots`                             | Dense-file inventory                                                     |
 | `cache save` / `diff`                  | Graph baseline + comparison                                              |
 | `lsp setup`                            | Auto-install LSP servers for detected languages                          |
 | `doctor`                               | Validate runtime + check LSP availability with `--lsp`                   |
@@ -63,11 +59,11 @@ src/                    # Python package (flat)
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~780 lines)
 │   ├── handlers.py         # Shared helpers: constants, scan engine, session cache, symbol resolution (~710 lines)
 │   └── commands/           # Per-command-group implementations (~3300 lines)
-│       ├── overview.py     # run_overview, run_scan, run_hotspots
+│       ├── overview.py     # run_overview, run_scan
 │       ├── query.py        # run_query, run_search
-│       ├── symbol.py       # run_call_chain, run_refs, run_query_symbol, run_file_detail, run_state_map
+│       ├── symbol.py       # run_call_chain, run_query_symbol, run_file_detail
 │       ├── impact.py       # run_impact + edit-planning helpers
-│       ├── verify.py       # run_verify, run_check, run_orphan + evidence-gate helpers
+│       ├── verify.py       # run_verify, run_check + evidence-gate + orphan helpers
 │       ├── cache.py        # run_cache, run_diff
 │       ├── routes.py       # run_routes
 │       ├── fix.py          # run_fix, run_ready
@@ -104,7 +100,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 ## Change Map
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
-- **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`, `hotspots`
+- **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query-symbol`, `impact`
 - **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter)
 - **Type inference**: `src/type_inference.py` → `query-symbol` return_type/params (11 languages)
 - **Search**: `src/search.py` → `search` command (BM25 + keyword fallback)
@@ -117,7 +113,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `diff`, `verify --with-diff`
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
-- **State map**: `src/state_map.py` → `state-map --symbol/--query`
+- **State map**: `src/state_map.py` → integrated into `query-symbol` for enum/const symbols
 - **LSP**: `src/lsp.py` → auto-enabled, affects `query-symbol`, `file-detail`, `verify`, `check`, `doctor --lsp`, `lsp setup`
 - **JSON output**: `src/cli/handlers.py::json_envelope()` → unified `{schema_version, command, project, status, result}` envelope; all commands support `--json`
 
@@ -318,7 +314,7 @@ repomap overview --project .
 
 # 3.5. Smoke test with local projects (MANDATORY before release)
 #    - Test in at least 2-3 local projects of different languages/frameworks
-#    - Verify: overview, query, file-detail, call-chain, refs, verify --quick
+#    - Verify: overview, query, file-detail, call-chain, verify --quick
 #    - Verify: lsp setup --dry-run detects languages correctly
 #    - Verify: doctor --lsp finds available servers
 
@@ -413,7 +409,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 
 - **MANDATORY**: smoke test with at least 2-3 local projects before any release commit
 - Test in projects with different language mixes (pure Python, TS+Python, etc.)
-- Key commands to verify: `overview`, `query`, `file-detail`, `call-chain`, `refs`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
+- Key commands to verify: `overview`, `query`, `file-detail`, `call-chain`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
 - If any command fails, fix before proceeding with the release
 - If any test, diagnostic, or verify step is skipped/unknown, document why it is acceptable and which non-skipped evidence covers the same risk.
 

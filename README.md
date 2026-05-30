@@ -9,8 +9,8 @@
 **What agents get**: structured repo context instead of grep + raw reads:
 
 - **Where to start**: `overview`, `query` (synonym expansion), `routes`
-- **What will break**: `impact` (incl. type-level), `call-chain`, `refs`, `state-map`
-- **What was missed**: `verify` (contract risk + missed-files), `check`, `orphan`
+- **What will break**: `impact` (incl. type-level), `call-chain` (incl. references)
+- **What was missed**: `verify` (contract risk + missed-files + orphan symbols), `check`
 - **Auto-fix & ready**: `fix` (ruff + eslint auto-fix), `ready` (pre-commit check)
 - **Encoding auto-detect**: UTF-8 → GBK → GB2312 fallback for legacy projects
 - **Adaptive search**: never returns empty — keyword expansion → hotspot fallback
@@ -37,7 +37,7 @@ repomap doctor --project .
 
 **Result**: The agent reads `~/.claude/skills/repomap/SKILL.md` and automatically calls `repomap overview`, `repomap impact`, `repomap verify` at the right moments. Use the CLI directly for manual analysis.
 
-> **Note**: `--project` is a required argument for all commands (except `build-binary`). Always pass it as an absolute path.
+> **Note**: `--project` is optional. If not specified, repomap auto-detects the git root directory.
 
 ---
 
@@ -110,15 +110,11 @@ LSP-backed commands automatically use local LSP servers when available. All comm
 | `search --query <text>` | BM25 semantic symbol search; `--top-k <N>` for result count |
 | `file-detail --file-path <f>` | File symbols + signatures + callers; LSP symbol tree by default; `--json` |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
-| `call-chain --symbol <name>` | Callers and callees with configurable depth; `--direction`; `--json` |
+| `call-chain --symbol <name>` | Callers, callees, and references with configurable depth; `--direction`; `--json` |
 | `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference evidence by default; `--json` |
-| `refs --symbol <name>` | All references to a symbol; LSP precision by default; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
-| `state-map --symbol <name>` | Enum/const state values, writers, readers |
-| `verify [--quick] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, missed-files detection |
+| `verify [--quick] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols |
 | `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
-| `orphan [--json]` | Dead-code candidates with confidence tiers |
-| `hotspots` | High-density files ranked by complexity |
 | `cache save` / `diff` | Graph baseline save + comparison against baseline |
 | `doctor [--lsp]` | Health check: parsers, runtime, LSP availability |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
@@ -133,19 +129,18 @@ The agent follows this pattern automatically (guided by the skill instructions):
 
 ```bash
 # Before editing
-repomap overview --project .                          # first contact
-repomap query --project . --query "auth token"        # find by keywords
-repomap file-detail --project . --file-path src/auth/login.ts
-repomap impact --project . --files src/auth/login.ts --with-symbols
-repomap routes --project . --with-consumers           # API consumer map
-repomap call-chain --project . --symbol refreshToken
+repomap overview                                      # first contact
+repomap query --query "auth token"                    # find by keywords
+repomap file-detail --file-path src/auth/login.ts
+repomap impact --files src/auth/login.ts --with-symbols
+repomap routes --with-consumers                       # API consumer map
+repomap call-chain --symbol refreshToken
 
 # After editing
-repomap verify --project .                            # full evidence gate (incl. missed-files)
-repomap fix --project .                               # auto-fix lint issues
-repomap ready --project .                             # pre-commit readiness check
-repomap check --project .                             # compiler diagnostics
-repomap orphan --project . --min-confidence 70        # dead code check
+repomap verify                                        # full evidence gate (incl. orphan symbols)
+repomap fix                                           # auto-fix lint issues
+repomap ready                                         # pre-commit readiness check
+repomap check                                         # compiler diagnostics
 ```
 
 ---
