@@ -179,6 +179,8 @@ def run_impact(
     with_symbols: bool = False,
     depth: int = 1,
     incremental: bool = False,
+    compact: bool = False,
+    top_n: int = 5,
 ) -> int:
     if depth > _IMPACT_MAX_DEPTH:
         print(
@@ -309,12 +311,20 @@ def run_impact(
         if as_json:
             from ..handlers import json_envelope
 
-            result = {
+            # compact 模式：限制 affectedFiles 数量，添加总数摘要
+            if compact:
+                total_affected = len(affected_list)
+                display_affected = affected_list[:top_n]
+            else:
+                total_affected = None
+                display_affected = affected_list
+
+            result: dict[str, Any] = {
                 "scan_stats": _scan_stats_payload(engine),
                 "input_files": target_files,
                 "affected_files": [
                     {"file": f, "why": why, "confidence": conf}
-                    for f, why, conf in affected_list
+                    for f, why, conf in display_affected
                 ],
                 "tests": [
                     {
@@ -332,6 +342,8 @@ def run_impact(
                 "lsp_hint": lsp_hint,
                 "type_impacts": type_impacts,
             }
+            if total_affected is not None:
+                result["affectedFilesCount"] = total_affected
             if session_warning:
                 result["session_warning"] = session_warning
             print(json_envelope("impact", str(engine.project_root), result))
@@ -348,6 +360,8 @@ def run_impact(
                 key_symbols=key_symbols,
                 read_next=read_next,
                 lsp_hint=lsp_hint,
+                compact=compact,
+                top_n=top_n,
             )
         )
         # Print type-level impacts

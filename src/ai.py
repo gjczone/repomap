@@ -965,6 +965,8 @@ def render_impact_report(
     key_symbols: list[dict[str, Any]] | None = None,
     read_next: list[dict[str, str]] | None = None,
     lsp_hint: dict[str, Any] | None = None,
+    compact: bool = False,
+    top_n: int = 5,
 ) -> str:
     lines: list[str] = []
     lines.append("# Impact Analysis\n")
@@ -1017,11 +1019,20 @@ def render_impact_report(
 
     if affected_files:
         lines.append("## Likely Affected Files\n")
-        lines.append("| File | Why | Confidence |")
-        lines.append("| --- | --- | --- |")
-        for f, why, conf in affected_files[:20]:
-            lines.append(f"| `{f}` | {why} | {conf} |")
-        lines.append("")
+        if compact:
+            total = len(affected_files)
+            lines.append(
+                f"**{total}** affected file(s) total. Top {min(top_n, total)}:\n"
+            )
+            for f, why, conf in affected_files[:top_n]:
+                lines.append(f"- `{f}` ({conf}): {why}")
+            lines.append("")
+        else:
+            lines.append("| File | Why | Confidence |")
+            lines.append("| --- | --- | --- |")
+            for f, why, conf in affected_files[:20]:
+                lines.append(f"| `{f}` | {why} | {conf} |")
+            lines.append("")
 
     areas = _extract_impact_areas(target_files, affected_files)
     if areas:

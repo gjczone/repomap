@@ -146,28 +146,36 @@ def _collect_changed_files(project_root: str | Path) -> tuple[list[str], str | N
 def _detect_contract_risks(
     engine: RepoMapEngine, changed_files: list[str]
 ) -> list[dict[str, str]]:
-    """Detect contract-level risks from changed files: route changes, signature changes, test gaps."""
+    """Detect contract-level risks from changed files: route changes, signature changes, test gaps.
+
+    返回结构每项包含 level/message/confidence 字段。
+    - level: HIGH/MED/LOW（用于 --risk-threshold 过滤）
+    - confidence: export/internal/config（区分风险来源）
+    - 同类型风险分组去重，避免 N 个相似警告刷屏
+    """
     warnings: list[dict[str, str]] = []
     routes = engine.list_routes()
     changed_set = set(changed_files)
 
-    # Route/API risks
+    # Route/API risks — HIGH（API 契约变更始终高优先级）
     for route in routes:
         if route.file in changed_set:
             warnings.append(
                 {
-                    "level": "MED",
+                    "level": "HIGH",
                     "message": f"Route `{route.method} {route.path}` (handler in `{route.file}`) changed; review consumers and related tests.",
+                    "confidence": "export",
                 }
             )
 
-    # Symbol/public surface risks: check exported/public symbols in changed files
+    # Symbol/public surface risks: 分组收集，避免逐个输出
+    exported_high_refs: list[str] = []  # ≥20 cross-file refs → HIGH
+    exported_med_refs: list[str] = []  # 3-19 refs → MED
     for file_path in changed_files:
         for sid in engine.graph.file_symbols.get(file_path, []):
             sym = engine.graph.symbols.get(sid)
             if not sym:
                 continue
-            # Count cross-file incoming edges only (import + call references from other files)
             cross_file_refs = [
                 e
                 for e in engine.graph.incoming.get(sid, [])
@@ -176,21 +184,33 @@ def _detect_contract_risks(
             ]
             ref_count = len(cross_file_refs)
             if sym.visibility in ("exported", "public") and ref_count >= 3:
-                warnings.append(
-                    {
-                        "level": "MED",
-                        "message": f"Exported symbol `{sym.name}` in `{sym.file}` has {ref_count} cross-file references.",
-                    }
-                )
+                desc = f"`{sym.name}` ({ref_count} refs)"
+                if ref_count >= 20:
+                    exported_high_refs.append(desc)
+                else:
+                    exported_med_refs.append(desc)
             elif ref_count >= 10:
-                warnings.append(
-                    {
-                        "level": "MED",
-                        "message": f"Heavily referenced symbol `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {ref_count} cross-file references.",
-                    }
-                )
+                exported_med_refs.append(f"`{sym.name}` ({sym.kind}, {ref_count} refs)")
 
-    # Enum/type risks
+    if exported_high_refs:
+        warnings.append(
+            {
+                "level": "HIGH",
+                "message": f"{len(exported_high_refs)} exported symbol(s) with ≥20 cross-file refs changed: {', '.join(exported_high_refs[:5])}.",
+                "confidence": "export",
+            }
+        )
+    if exported_med_refs:
+        warnings.append(
+            {
+                "level": "MED",
+                "message": f"{len(exported_med_refs)} exported/heavily-referenced symbol(s) changed: {', '.join(exported_med_refs[:5])}.",
+                "confidence": "export",
+            }
+        )
+
+    # Enum/type risks — 分组去重
+    type_risk_items: list[str] = []
     for file_path in changed_files:
         for sid in engine.graph.file_symbols.get(file_path, []):
             sym = engine.graph.symbols.get(sid)
@@ -202,12 +222,19 @@ def _detect_contract_risks(
                     and engine.graph.symbols[e.source].file != sym.file
                 ]
                 if cross_file_refs:
-                    warnings.append(
-                        {
-                            "level": "MED",
-                            "message": f"Type `{sym.name}` `({sym.kind})` in `{sym.file}` changed; {len(cross_file_refs)} cross-file references.",
-                        }
+                    type_risk_items.append(
+                        f"`{sym.name}` ({sym.kind}, {len(cross_file_refs)} refs)"
                     )
+
+    if type_risk_items:
+        level = "HIGH" if len(type_risk_items) >= 5 else "MED"
+        warnings.append(
+            {
+                "level": level,
+                "message": f"{len(type_risk_items)} type(s) changed with cross-file references: {', '.join(type_risk_items[:5])}.",
+                "confidence": "export",
+            }
+        )
 
     # Test/implementation mismatch
     test_files = [f for f in changed_files if is_test_like_file(f)]
@@ -224,6 +251,7 @@ def _detect_contract_risks(
             {
                 "level": "LOW",
                 "message": f"Only test files changed ({len(test_files)} file(s)); verify tests are intentional.",
+                "confidence": "internal",
             }
         )
     if impl_files and not test_files:
@@ -231,6 +259,7 @@ def _detect_contract_risks(
             {
                 "level": "MED",
                 "message": f"Implementation file(s) changed ({len(impl_files)} file(s)) without related tests.",
+                "confidence": "internal",
             }
         )
 
@@ -253,6 +282,7 @@ def _detect_contract_risks(
             {
                 "level": "MED",
                 "message": f"Config/runtime files changed: {', '.join(f'`{f}`' for f in config_files[:3])}.",
+                "confidence": "config",
             }
         )
 
@@ -634,6 +664,7 @@ def run_verify(
     quick: bool = False,
     incremental: bool = False,
     max_chars: int = 16000,
+    risk_threshold: str = "MED",
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -645,6 +676,15 @@ def run_verify(
         engine = _scan_engine(project_root, DEFAULT_MAX_FILES, incremental=incremental)
         evidence = _diff_risk_evidence(engine, changed_files)
         contract_risks = _detect_contract_risks(engine, changed_files)
+
+        # 按 risk_threshold 过滤 contractRisks
+        _LEVEL_ORDER = {"HIGH": 3, "MED": 2, "LOW": 1}
+        threshold_rank = _LEVEL_ORDER.get(risk_threshold, 2)
+        contract_risks = [
+            cr
+            for cr in contract_risks
+            if _LEVEL_ORDER.get(cr.get("level", "MED"), 2) >= threshold_rank
+        ]
 
         if quick:
             check_payload = {

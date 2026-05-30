@@ -154,6 +154,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force full scan instead of incremental.",
     )
+    impact_parser.add_argument(
+        "--compact",
+        action="store_true",
+        default=False,
+        help="Compact output: only risk summary, affectedFiles count, and top-N files.",
+    )
+    impact_parser.add_argument(
+        "--top-n",
+        type=int,
+        default=5,
+        help="Number of top affected files to show in compact mode (default 5).",
+    )
 
     verify_parser = subparsers.add_parser(
         "verify", help="Aggregate post-edit evidence before final handoff."
@@ -206,6 +218,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--quick",
         action="store_true",
         help="Risk-only mode for current Git changes; skips compiler and LSP checks.",
+    )
+    verify_parser.add_argument(
+        "--risk-threshold",
+        choices=["HIGH", "MED", "LOW"],
+        default="MED",
+        help="Minimum contract risk level to display (default: MED).",
     )
 
     cache_parser = subparsers.add_parser(
@@ -481,6 +499,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             getattr(args, "with_symbols", False),
             depth=getattr(args, "depth", 1),
             incremental=not getattr(args, "no_incremental", False),
+            compact=getattr(args, "compact", False),
+            top_n=getattr(args, "top_n", 5),
         )
     if command == "verify":
         return run_verify(
@@ -495,6 +515,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             quick=args.quick,
             incremental=not getattr(args, "no_incremental", False),
             max_chars=args.max_chars,
+            risk_threshold=getattr(args, "risk_threshold", "MED"),
         )
     if command == "cache":
         return run_cache(args.project, args.action, getattr(args, "json", False))
