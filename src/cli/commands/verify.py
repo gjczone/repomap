@@ -736,7 +736,7 @@ def run_verify(
                 )
             )
         else:
-            print(render_verify_report(payload, max_chars=max_chars))
+            print(render_verify_report({"result": payload}, max_chars=max_chars))
 
         # 如果没有 git 变更，给出下一步建议
         if not changed_files:
