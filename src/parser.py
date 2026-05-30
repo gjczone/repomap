@@ -543,7 +543,7 @@ class TreeSitterAdapter:
         # 检测异常内容模式（可能导致解析器崩溃）
         try:
             # 检查是否包含可能导致解析器栈溢出的极端嵌套模式
-            content_str = content.decode("utf-8", errors="ignore")
+            content_str = content.decode("utf-8", errors="replace")
             # 检测极端深度的括号嵌套（可能导致递归溢出）
             max_nesting = 0
             current_nesting = 0
