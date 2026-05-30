@@ -534,7 +534,7 @@ class StdioLspClient:
         self._notifications: list[dict[str, Any]] = []
         self._reader: threading.Thread | None = None
         self._stderr_reader: threading.Thread | None = None
-        self._stop_reader = False
+        self._stop_event = threading.Event()
         self.server_capabilities: dict[str, Any] = {}
         self._opened_files: set[str] = set()  # 已成功 did_open 的文件路径
 
@@ -546,7 +546,7 @@ class StdioLspClient:
         self.close()
 
     def start(self) -> None:
-        self._stop_reader = False
+        self._stop_event.clear()
         self.process = subprocess.Popen(
             self.command,
             cwd=self.workspace_root,
@@ -562,10 +562,12 @@ class StdioLspClient:
     def _read_loop(self) -> None:
         if self.process is None or self.process.stdout is None:
             return
-        while not self._stop_reader:
+        while not self._stop_event.is_set():
             try:
                 message = _read_lsp_message(self.process.stdout)
             except Exception as exc:
+                if self._stop_event.is_set():
+                    return  # close() 触发的异常，正常退出
                 logger.warning(
                     "LSP message read error: %s (reader thread continues)", exc
                 )
@@ -582,12 +584,14 @@ class StdioLspClient:
         """Continuously drain stderr to prevent pipe buffer deadlock."""
         if self.process is None or self.process.stderr is None:
             return
-        while not self._stop_reader:
+        while not self._stop_event.is_set():
             try:
                 chunk = self.process.stderr.read(4096)
                 if not chunk:
                     break
             except Exception:
+                if self._stop_event.is_set():
+                    return  # close() 触发的异常，正常退出
                 logger.debug("Stderr drain interrupted", exc_info=True)
                 break
 
@@ -879,7 +883,7 @@ class StdioLspClient:
                     except subprocess.TimeoutExpired:
                         logger.debug("LSP process did not terminate after kill")
         finally:
-            self._stop_reader = True
+            self._stop_event.set()
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is None:
                     continue
