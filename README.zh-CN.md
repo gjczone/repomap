@@ -58,21 +58,18 @@ cd repomap
 # 3. 安装依赖
 uv sync --all-extras
 
-# 4. 构建二进制
-uv run --with pyinstaller python -m src.cli build-binary --output dist
-
-# 5. 验证
-./dist/repomap doctor --project .
+# 4. 运行
+uv run repomap doctor --project .
 ```
 
-也可以不构建，直接用源码运行：`uv run repomap <command> --project <path>`
+也可以构建二进制：`uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py`
 
 ### LSP 设置
 
 为符号查找提供编译器级精度。代理自动处理：
 
 ```bash
-repomap doctor --lsp --project .          # 检查可用服务器
+repomap doctor --project .                # 检查运行时 + LSP 状态（默认）
 repomap lsp setup --dry-run --project .   # 预览安装计划
 repomap lsp setup --project .             # 安装缺失的服务器
 ```
@@ -107,18 +104,18 @@ repomap lsp setup --project .             # 安装缺失的服务器
 |------|------|
 | `overview` | 项目地图：入口点、热点、关键符号（PageRank）、阅读顺序 |
 | `query --query <关键词>` | 主题搜索（同义词扩展）；`--context-lines <N>` 显示匹配代码行；`--json` |
-| `search --query <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数 |
-| `file-detail --file-path <文件>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
+| `query --symbol <名称>` | 精确/模糊符号查找；LSP hover + 定义/引用 + 状态映射；`--json` |
+| `query --search <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数；`--json` |
+| `query --file <路径>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
 | `call-chain --symbol <名称>` | 调用者、被调用者和引用，支持配置深度；`--direction`；`--json` |
-| `query-symbol --symbol <名称>` | 精确/模糊符号查找；默认获取 LSP hover + 定义/引用证据；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
-| `verify [--quick] [--with-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号 |
+| `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异 |
 | `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
 | `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
-| `cache save` / `diff` | 图基线保存 + 与基线对比 |
-| `doctor [--lsp]` | 健康检查：解析器、运行时、LSP 可用性 |
+| `cache save` | 图基线保存（用于 diff 对比） |
+| `doctor [--no-lsp]` | 健康检查：解析器、运行时、LSP 状态（默认） |
 | `lsp setup [--dry-run]` | 自动安装缺失的 LSP 服务器 |
 
 ---
@@ -131,13 +128,13 @@ repomap lsp setup --project .             # 安装缺失的服务器
 # 编辑前
 repomap overview                                      # 初次接触
 repomap query --query "auth token"                    # 按关键词查找
-repomap file-detail --file-path src/auth/login.ts
+repomap query --file src/auth/login.ts                # 文件详情
 repomap impact --files src/auth/login.ts --with-symbols
 repomap routes --with-consumers                       # API 消费者映射
 repomap call-chain --symbol refreshToken
 
 # 编辑后
-repomap verify                                        # 完整证据门（含孤儿符号）
+repomap verify                                        # 完整证据门（含孤儿符号 + 图差异）
 repomap fix                                           # 自动修复 lint 问题
 repomap ready                                         # 提交就绪检查
 repomap check                                         # 编译器诊断

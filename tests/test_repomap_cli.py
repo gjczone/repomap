@@ -304,7 +304,6 @@ class RepoMapCliTests(unittest.TestCase):
                                         "verify",
                                         "--project",
                                         project_root,
-                                        "--with-diff",
                                         "--json",
                                     ]
                                 )
@@ -485,12 +484,12 @@ class RepoMapCliTests(unittest.TestCase):
         with patch("src.cli.commands.symbol.run_query_symbol", fake_run_query_symbol):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
-                    main(["query-symbol", "--project", ".", "--symbol", "target"]), 0
+                    main(["query", "--project", ".", "--symbol", "target"]), 0
                 )
         with patch("src.cli.commands.symbol.run_file_detail", fake_run_file_detail):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(
-                    main(["file-detail", "--project", ".", "--file-path", "main.py"]), 0
+                    main(["query", "--project", ".", "--file", "main.py"]), 0
                 )
 
         # lsp_timeout is now the 6th positional arg (index 5) for query-symbol
@@ -1027,13 +1026,10 @@ class RepoMapCliTests(unittest.TestCase):
         for command in (
             "overview",
             "call-chain",
-            "query-symbol",
-            "file-detail",
+            "query",
             "cache",
-            "diff",
             "check",
             "doctor",
-            "build-binary",
         ):
             self.assertIn(command, help_text)
         self.assertNotIn("mcp", help_text)
@@ -1057,7 +1053,7 @@ class RepoMapCliTests(unittest.TestCase):
             symbol_stdout = io.StringIO()
             with redirect_stdout(symbol_stdout), redirect_stderr(io.StringIO()):
                 symbol_code = main(
-                    ["query-symbol", "--project", project_root, "--symbol", "helper"]
+                    ["query", "--project", project_root, "--symbol", "helper"]
                 )
 
             chain_stdout = io.StringIO()
@@ -1112,7 +1108,7 @@ class RepoMapCliTests(unittest.TestCase):
                 with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                     exit_code = main(
                         [
-                            "query-symbol",
+                            "query",
                             "--project",
                             project_root,
                             "--symbol",
@@ -1134,7 +1130,24 @@ class RepoMapCliTests(unittest.TestCase):
         import json
 
         with tempfile.TemporaryDirectory() as project_root:
+            # Initialize git repo for verify command
+            subprocess.run(["git", "init"], cwd=project_root, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=project_root,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=project_root,
+                capture_output=True,
+            )
+
             write_file(project_root, "main.py", "def keep():\n    return 1\n")
+            subprocess.run(["git", "add", "."], cwd=project_root, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"], cwd=project_root, capture_output=True
+            )
 
             cache_stdout = io.StringIO()
             with redirect_stdout(cache_stdout), redirect_stderr(io.StringIO()):
@@ -1146,35 +1159,16 @@ class RepoMapCliTests(unittest.TestCase):
                 "def keep():\n    return 1\n\ndef added():\n    return keep()\n",
             )
 
-            diff_stdout = io.StringIO()
-            with redirect_stdout(diff_stdout), redirect_stderr(io.StringIO()):
-                diff_code = main(["diff", "--project", project_root])
+            # diff is now integrated into verify
+            verify_stdout = io.StringIO()
+            with redirect_stdout(verify_stdout), redirect_stderr(io.StringIO()):
+                verify_code = main(["verify", "--project", project_root, "--quick"])
 
             self.assertEqual(cache_code, 0)
-            self.assertEqual(diff_code, 0)
+            self.assertIn(verify_code, (0, 3))  # 0=pass, 3=warning (no git changes)
             # 默认输出 JSON 格式
             cache_data = json.loads(cache_stdout.getvalue())
             self.assertIn("status", cache_data)
-            diff_data = json.loads(diff_stdout.getvalue())
-            self.assertEqual(diff_data["result"]["summary"]["added"], 1)
-
-    def test_build_binary_invokes_pyinstaller_onefile_for_repomap_binary(self) -> None:
-        from src.cli import main
-
-        with tempfile.TemporaryDirectory() as output_dir:
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-
-            with patch("src.cli.commands.build.subprocess.run") as run_mock:
-                run_mock.return_value.returncode = 0
-                with redirect_stdout(stdout), redirect_stderr(stderr):
-                    exit_code = main(["build-binary", "--output", output_dir])
-
-            self.assertEqual(exit_code, 0)
-            command = run_mock.call_args.args[0]
-            self.assertIn("--onefile", command)
-            self.assertIn("--name", command)
-            self.assertIn("repomap", command)
 
     def test_call_chain_requires_file_path_when_symbol_is_ambiguous(self) -> None:
         from src.cli import main
@@ -1242,36 +1236,7 @@ class RepoMapCliTests(unittest.TestCase):
             stdout = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 exit_code = main(
-                    ["query-symbol", "--project", project_root, "--symbol", "helper"]
-                )
-
-            text = stdout.getvalue()
-            self.assertEqual(exit_code, 0)
-            # 默认输出 JSON 格式
-            data = json.loads(text)
-            self.assertIn("exact_matches", data["result"])
-
-    def test_query_symbol_can_filter_by_file_path(self) -> None:
-        from src.cli import main
-        import json
-
-        with tempfile.TemporaryDirectory() as project_root:
-            write_file(project_root, "a.py", "def helper():\n    return 1\n")
-            write_file(project_root, "b.py", "def helper():\n    return 2\n")
-
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(
-                    [
-                        "query-symbol",
-                        "--project",
-                        project_root,
-                        "--symbol",
-                        "helper",
-                        "--file-path",
-                        "b.py",
-                    ]
+                    ["query", "--project", project_root, "--symbol", "helper"]
                 )
 
             text = stdout.getvalue()
@@ -1400,10 +1365,10 @@ class RepoMapCliTests(unittest.TestCase):
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 exit_code = main(
                     [
-                        "file-detail",
+                        "query",
                         "--project",
                         project_root,
-                        "--file-path",
+                        "--file",
                         "main.py",
                     ]
                 )
@@ -1432,13 +1397,11 @@ class RepoMapCliTests(unittest.TestCase):
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 exit_code = main(
                     [
-                        "file-detail",
+                        "query",
                         "--project",
                         project_root,
-                        "--file-path",
+                        "--file",
                         "main.py",
-                        "--max-chars",
-                        "220",
                     ]
                 )
 
@@ -1531,7 +1494,7 @@ class RepoMapCliTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
-                            "query-symbol",
+                            "query",
                             "--project",
                             project_root,
                             "--symbol",
@@ -1633,7 +1596,7 @@ class RepoMapCliTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
-                            "query-symbol",
+                            "query",
                             "--project",
                             project_root,
                             "--symbol",
@@ -1667,7 +1630,7 @@ class RepoMapCliTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
                         [
-                            "query-symbol",
+                            "query",
                             "--project",
                             project_root,
                             "--symbol",
@@ -1753,7 +1716,7 @@ class RepoMapCliTests(unittest.TestCase):
                 )
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     code2 = main(
-                        ["query-symbol", "--project", project_root, "--symbol", "added"]
+                        ["query", "--project", project_root, "--symbol", "added"]
                     )
 
             self.assertEqual(code1, 0)

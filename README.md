@@ -58,21 +58,18 @@ cd repomap
 # 3. Install dependencies
 uv sync --all-extras
 
-# 4. Build binary
-uv run --with pyinstaller python -m src.cli build-binary --output dist
-
-# 5. Smoke test
-./dist/repomap doctor --project .
+# 4. Run from source
+uv run repomap doctor --project .
 ```
 
-Or run from source without building: `uv run repomap <command> --project <path>`
+Or build a binary: `uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py`
 
 ### LSP Setup
 
 Adds compiler-grade precision for symbol lookups. The agent handles this automatically:
 
 ```bash
-repomap doctor --lsp --project .          # check available servers
+repomap doctor --project .                # check runtime + LSP status (default)
 repomap lsp setup --dry-run --project .   # preview install plan
 repomap lsp setup --project .             # install missing servers
 ```
@@ -107,16 +104,16 @@ LSP-backed commands automatically use local LSP servers when available. All comm
 |---------|---------|
 | `overview` | Project map: entry points, hotspots, key symbols (PageRank), reading order |
 | `query --query <keywords>` | Topic search with synonym expansion; `--context-lines <N>` for matched code; `--json` |
-| `search --query <text>` | BM25 semantic symbol search; `--top-k <N>` for result count |
-| `file-detail --file-path <f>` | File symbols + signatures + callers; LSP symbol tree by default; `--json` |
+| `query --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference + state map; `--json` |
+| `query --search <text>` | BM25 semantic symbol search; `--top-k <N>` for result count; `--json` |
+| `query --file <path>` | File symbols + signatures + callers; LSP symbol tree by default; `--json` |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
 | `call-chain --symbol <name>` | Callers, callees, and references with configurable depth; `--direction`; `--json` |
-| `query-symbol --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference evidence by default; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
-| `verify [--quick] [--with-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols |
+| `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff |
 | `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
-| `cache save` / `diff` | Graph baseline save + comparison against baseline |
-| `doctor [--lsp]` | Health check: parsers, runtime, LSP availability |
+| `cache save` | Graph baseline save for diff comparison |
+| `doctor [--no-lsp]` | Health check: parsers, runtime, LSP status (default) |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
 | `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |
 | `ready` | Pre-commit readiness: verify + check + format in one command |
@@ -131,13 +128,13 @@ The agent follows this pattern automatically (guided by the skill instructions):
 # Before editing
 repomap overview                                      # first contact
 repomap query --query "auth token"                    # find by keywords
-repomap file-detail --file-path src/auth/login.ts
+repomap query --file src/auth/login.ts                # file detail
 repomap impact --files src/auth/login.ts --with-symbols
 repomap routes --with-consumers                       # API consumer map
 repomap call-chain --symbol refreshToken
 
 # After editing
-repomap verify                                        # full evidence gate (incl. orphan symbols)
+repomap verify                                        # full evidence gate (incl. orphan symbols + graph diff)
 repomap fix                                           # auto-fix lint issues
 repomap ready                                         # pre-commit readiness check
 repomap check                                         # compiler diagnostics

@@ -59,7 +59,31 @@ jobs:
 
          - name: Build binary
            shell: bash
-           run: uv run python -m src.cli build-binary --output dist
+           run: |
+              uv run --with pyinstaller python -m PyInstaller \
+                --noconfirm \
+                --onefile \
+                --name repomap \
+                --distpath dist \
+                --hidden-import tree_sitter \
+                --hidden-import tree_sitter_python \
+                --hidden-import tree_sitter_javascript \
+                --hidden-import tree_sitter_typescript \
+                --hidden-import tree_sitter_go \
+                --hidden-import tree_sitter_rust \
+                --hidden-import tree_sitter_html \
+                --hidden-import tree_sitter_css \
+                --hidden-import tree_sitter_json \
+                --hidden-import tree_sitter_c \
+                --hidden-import tree_sitter_java \
+                --hidden-import tree_sitter_kotlin \
+                --hidden-import tree_sitter_swift \
+                --hidden-import tree_sitter_cpp \
+                --hidden-import tree_sitter_c_sharp \
+                --hidden-import tree_sitter_php \
+                --hidden-import tree_sitter_ruby \
+                --hidden-import repomap_lsp \
+                src/cli/__main__.py
 
          - name: Smoke test binary (doctor)
            shell: bash
