@@ -181,20 +181,12 @@ QUERIES: dict[str, dict[str, str]] = {
             (mod_item name: (identifier) @name) @definition.module
         """,
         "import": """
-            ; 捕获 use crate::module::Item 中的 module 部分
+            ; 捕获完整 scoped_identifier（支持多段 use a::b::C）
             (use_declaration
-                argument: (scoped_identifier
-                    path: (identifier) @path
-                    name: (identifier) @name))
-            ; 捕获 use crate::module::{A, B} 中的 module 部分
+                argument: (scoped_identifier) @full_path)
+            ; 捕获 use crate::module::{A, B} 中的 scoped_use_list
             (use_declaration
-                argument: (scoped_use_list
-                    path: (identifier) @path))
-            ; 捕获 use module::Item 中的 module
-            (use_declaration
-                argument: (scoped_identifier
-                    path: (identifier) @path
-                    name: (identifier) @name))
+                argument: (scoped_use_list) @full_path)
             ; 捕获 extern crate name;
             (extern_crate_declaration name: (identifier) @name)
             ; 捕获 use module;
@@ -939,28 +931,22 @@ class TreeSitterAdapter:
             return []
         results = set()
 
-        # 对于Rust，需要特殊处理：优先使用path而不是name
+        # 对于Rust，需要特殊处理：捕获完整路径文本
         if lang == "rust":
-            paths_by_line: dict[int, str] = {}
-            names_by_line: dict[int, list[str]] = defaultdict(list)
-
             for cap_name, node in self._run_query(query, tree.root_node, lang):
                 text = self._text(node)
                 line = node.start_point[0] + 1
-                if cap_name == "path":
-                    paths_by_line[line] = text
+                if cap_name == "full_path":
+                    # 对于 scoped_use_list，提取路径前缀
+                    if node.type == "scoped_use_list":
+                        path_node = node.child_by_field_name("path")
+                        if path_node:
+                            results.add((self._text(path_node), line))
+                    else:
+                        # 对于 scoped_identifier，使用完整文本
+                        results.add((text, line))
                 elif cap_name == "name":
-                    names_by_line[line].append(text)
-
-            # 优先使用path（模块名），其次使用name
-            for line in sorted(
-                set(list(paths_by_line.keys()) + list(names_by_line.keys()))
-            ):
-                if line in paths_by_line:
-                    results.add((paths_by_line[line], line))
-                else:
-                    for name in names_by_line[line]:
-                        results.add((name, line))
+                    results.add((text, line))
         else:
             for cap_name, node in self._run_query(query, tree.root_node, lang):
                 if lang in ("javascript", "typescript", "tsx") and cap_name != "source":
