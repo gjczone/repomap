@@ -307,7 +307,7 @@ def run_query_symbol(
             if as_json:
                 print(
                     json_envelope(
-                        "query-symbol",
+                        "query",
                         str(engine.project_root),
                         {"matches": [], "query": symbol, "file_filter": file_path},
                         status="no_results",
@@ -363,7 +363,7 @@ def run_query_symbol(
                 state_map = _collect_state_map_for_symbol(engine, symbol)
                 if state_map:
                     payload["stateMap"] = state_map
-            print(json_envelope("query-symbol", str(engine.project_root), payload))
+            print(json_envelope("query", str(engine.project_root), payload))
             return 0
 
         lines = [f"Found {len(results)} matching results.\n"]
@@ -417,7 +417,7 @@ def run_query_symbol(
             print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
-        print(f"[{CLI_NAME}] query-symbol failed: {exc}", file=sys.stderr)
+        print(f"[{CLI_NAME}] query --symbol failed: {exc}", file=sys.stderr)
         return 1
 
 
@@ -488,7 +488,7 @@ def run_file_detail(
                 payload["lsp_symbol_tree"] = [dc_asdict(item) for item in lsp_tree]
             else:
                 payload["lsp_symbol_tree"] = []
-            print(json_envelope("file-detail", str(engine.project_root), payload))
+            print(json_envelope("query", str(engine.project_root), payload))
             return 0
 
         from ...lsp import collect_lsp_symbol_tree
@@ -514,7 +514,7 @@ def run_file_detail(
             print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
-        print(f"[{CLI_NAME}] file-detail failed: {exc}", file=sys.stderr)
+        print(f"[{CLI_NAME}] query --file failed: {exc}", file=sys.stderr)
         return 1
 
 

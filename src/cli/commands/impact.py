@@ -118,7 +118,7 @@ def _impact_lsp_hint(
             f"repomap check --project {shlex.quote(str(project_root))} --modified-file {files_arg}"
         )
         suggested.append(
-            f"repomap refs --project {shlex.quote(str(project_root))} --symbol <symbol> --file-path <file>"
+            f"repomap call-chain --project {shlex.quote(str(project_root))} --symbol <symbol>"
         )
     return {"available": available, "servers": servers, "suggestedCommands": suggested}
 

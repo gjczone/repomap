@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 def query_symbol_hint(match_count: int, has_file_filter: bool) -> list[str]:
-    """query-symbol 命令的运行时提示"""
+    """query --symbol 模式的运行时提示"""
     hints: list[str] = []
     if match_count == 0:
         hints.append(
@@ -79,7 +79,7 @@ def overview_hint(
 
 
 def file_detail_hint(has_symbols: bool, has_callers: bool) -> list[str]:
-    """file-detail 命令的运行时提示"""
+    """query --file 模式的运行时提示"""
     hints: list[str] = []
     if has_symbols:
         hints.append(

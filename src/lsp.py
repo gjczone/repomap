@@ -1351,9 +1351,16 @@ def collect_lsp_hover(
             col=character + 1,
             contents=_parse_hover_response(raw),
         )
-    except Exception:
+    except Exception as exc:
         logger.warning(
-            "LSP hover collection failed for %s:%d", file_path, line, exc_info=True
+            "LSP hover collection failed for %s:%d (symbol=%s, language=%s, server=%s): %s",
+            file_path,
+            line,
+            symbol_name,
+            language,
+            detection.server_name if detection else "?",
+            exc,
+            exc_info=True,
         )
         return None
 
