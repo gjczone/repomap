@@ -272,7 +272,7 @@ def _walk_ts_node(
 
 
 def _extract_jsx_component_name(node: Any) -> str:
-    """从 JSX 元素中提取组件名。"""
+    """从 JSX 元素中提取组件名。跳过小写 HTML 元素，支持命名空间组件。"""
     if node.type == "jsx_self_closing_element":
         name_node = node.child_by_field_name("name")
     elif node.type == "jsx_element":
@@ -283,7 +283,18 @@ def _extract_jsx_component_name(node: Any) -> str:
     if not name_node:
         return ""
     if name_node.type == "identifier":
-        return _node_text(name_node)
+        text = _node_text(name_node)
+        # 跳过小写开头的 HTML 原生元素（<div>, <span>, <input> 等）
+        if text and text[0].islower():
+            return ""
+        return text
+    # 命名空间组件：<foo:bar /> → foo:bar
+    if name_node.type == "jsx_namespace_name":
+        ns = name_node.child_by_field_name("namespace")
+        name = name_node.child_by_field_name("name")
+        if ns and name:
+            return f"{_node_text(ns)}:{_node_text(name)}"
+        return ""
     # 成员表达式：<Foo.Bar /> → Foo.Bar
     if name_node.type == "member_expression":
         obj = name_node.child_by_field_name("object")

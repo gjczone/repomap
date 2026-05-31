@@ -30,6 +30,8 @@ from ..gitignore import get_gitignore
 from ..parser import EXT_TO_LANG
 from ..topic import is_test_like_file
 
+from ..lsp import DEFAULT_LSP_TIMEOUT
+
 CLI_NAME = "repomap"
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -69,7 +71,6 @@ def clear_scan_cache() -> int:
 
 
 EXIT_NO_RESULTS = 3
-DEFAULT_LSP_TIMEOUT = 8.0  # 默认值；重型服务器用 lsp.lsp_timeout_for(language) 获取
 
 
 def json_envelope(command: str, project: str, result: dict, status: str = "ok") -> str:

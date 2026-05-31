@@ -909,10 +909,10 @@ def render_query_report(
         top_file = file_matches[0].path
         top_symbols = _rank_symbols_for_file(engine, top_file)
         lines.append("## Related Commands\n")
-        lines.append(f"- `repomap file-detail --project . --file-path {top_file}`")
+        lines.append(f"- `repomap query --file {top_file} --project .`")
         if top_symbols:
             lines.append(
-                f"- `repomap refs --project . --symbol {top_symbols[0]['name']}`"
+                f"- `repomap query --symbol {top_symbols[0]['name']} --project .`"
             )
             lines.append(
                 f"- `repomap call-chain --project . --symbol {top_symbols[0]['name']}`"
@@ -1100,12 +1100,12 @@ def render_impact_report(
     lines.append("## Related Commands\n")
     if target_files:
         lines.append(
-            f"- View target file details: `repomap file-detail --project . --file-path {target_files[0]}`"
+            f"- View target file details: `repomap query --file {target_files[0]} --project .`"
         )
     if affected_files:
         top_affected = affected_files[0][0]
         lines.append(
-            f"- Inspect top affected file: `repomap file-detail --project . --file-path {top_affected}`"
+            f"- Inspect top affected file: `repomap query --file {top_affected} --project .`"
         )
     lines.append("- Verify changes: `repomap verify --project .`")
     lines.append("")
