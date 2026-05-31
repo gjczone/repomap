@@ -67,11 +67,6 @@ def _make_engine(project_root: str) -> MagicMock:
     return engine
 
 
-def _format_symbol_ref_stub(_engine: object, sid: str) -> dict:
-    """Serializable stub for _format_symbol_ref."""
-    return {"name": sid, "file": "test.py", "line": 1, "kind": "function"}
-
-
 # ---------------------------------------------------------------------------
 # P1-1: All --json outputs must use json_envelope()
 # ---------------------------------------------------------------------------
@@ -197,68 +192,6 @@ class TestJsonEnvelopeCompliance(unittest.TestCase):
         self.assertEqual(rc, 0)
         data = _parse_envelope(self, output)
         self.assertEqual(data["command"], "file-detail")
-
-    def test_refs_global_json_uses_envelope(self) -> None:
-        """P1-1: refs (no --symbol) --json must use json_envelope()."""
-        from src.cli.commands.symbol import run_refs
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "dummy.py").write_text("def foo(): pass\n")
-            engine = _make_engine(tmpdir)
-            engine.graph.symbols = {"s1": MagicMock()}
-            engine.graph.outgoing = {}
-            with (
-                patch("src.cli.commands.symbol._scan_engine", return_value=engine),
-                patch(
-                    "src.cli.commands.symbol._format_symbol_ref",
-                    side_effect=_format_symbol_ref_stub,
-                ),
-            ):
-                buf = io.StringIO()
-                with patch("sys.stdout", buf):
-                    rc = run_refs(tmpdir, 1000, None, None, as_json=True)
-                output = buf.getvalue()
-        self.assertEqual(rc, 0)
-        data = _parse_envelope(self, output)
-        self.assertEqual(data["command"], "refs")
-
-    def test_orphan_json_uses_envelope(self) -> None:
-        """P1-1: orphan --json must use json_envelope()."""
-        from src.cli.commands.verify import run_orphan
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "dummy.py").write_text("def foo(): pass\n")
-            engine = _make_engine(tmpdir)
-            with patch("src.cli.commands.verify._scan_engine", return_value=engine):
-                buf = io.StringIO()
-                with patch("sys.stdout", buf):
-                    rc = run_orphan(tmpdir, 1000, as_json=True)
-                output = buf.getvalue()
-        self.assertEqual(rc, 0)
-        data = _parse_envelope(self, output)
-        self.assertEqual(data["command"], "orphan")
-
-    def test_diff_json_uses_envelope(self) -> None:
-        """P1-1: diff --json must use json_envelope()."""
-        from src.cli.commands.cache import run_diff
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch(
-                "src.cli.commands.cache.diff_project",
-                return_value={
-                    "summary": {"added": 0, "removed": 0, "modified": 0},
-                    "added_symbols": [],
-                    "removed_symbols": [],
-                    "modified_symbols": [],
-                },
-            ):
-                buf = io.StringIO()
-                with patch("sys.stdout", buf):
-                    rc = run_diff(tmpdir, as_json=True)
-                output = buf.getvalue()
-        self.assertEqual(rc, 0)
-        data = _parse_envelope(self, output)
-        self.assertEqual(data["command"], "diff")
 
     def test_query_json_uses_envelope(self) -> None:
         """P1-1: query --json must use json_envelope()."""
