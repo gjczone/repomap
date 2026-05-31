@@ -95,7 +95,9 @@ repomap <command> [--project <path>] [options]
 ## Critical Rules
 
 - `check` reports `unknown` → no diagnostic tool ran, investigate
+- `check` reports `parse_error` (truncated=True) → diagnostic tool ran but output could not be parsed; investigate project config or tool version
 - `verify` says "SKIPPED" → state limitation explicitly
+- `verify` says "NO_CHANGES" → no git changes detected, cannot assess risk; distinct from SKIPPED
 - `verify` reports contract risks → address each before claiming completion
 
 ### Session Flags

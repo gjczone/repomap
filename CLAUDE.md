@@ -227,6 +227,7 @@ The public README files serve different audiences than this document:
 | 5     | #41       | —                                                 | —   | LSP concurrency / core algorithms / type+route extraction / build+distribution |
 | 6     | #44       | 34+                                               | —   | 5-angle full coverage                                                          |
 | 7     | #46       | 94→24                                             | 3   | LLM interaction / boundaries / algorithms / performance / architecture         |
+| 8     | #115      | 20 items (5 P1 + 10 P2 + 5 P3)                   | 0   | callgraph OOP precision / type-inference overwrite / deterministic clusters / nesting check / BOM / silent errors / performance |
 
 **When to review**: After every non-trivial code change, before merge. Scope = changed files + files reported by `impact --files`.
 
