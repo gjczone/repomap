@@ -209,5 +209,5 @@ def run_doctor(project: str, show_lsp: bool = True, as_json: bool = False) -> in
                 print(f"  {d['language']}: {d['server']} — install: {d['install']}")
         else:
             print("\nAll LSP servers available.")
-        print("\nTip: run `repomap lsp setup --dry-run` to preview auto-install.")
+        print("\nTip: run `repomap lsp setup --dry-run` to preview installation instructions.")
     return 0
