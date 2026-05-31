@@ -19,6 +19,23 @@ logger = logging.getLogger("repomap.lsp")
 _MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max LSP message body
 _MAX_LSP_FILE_SIZE = 1_048_576  # 1 MiB，超过此大小的文件不送 LSP
 
+# 按语言区分的 LSP 超时（秒），重型服务器需要更长启动/响应时间
+_LSP_TIMEOUT_BY_LANGUAGE: dict[str, float] = {
+    "rust": 20.0,
+    "java": 15.0,
+    "kotlin": 15.0,
+    "swift": 15.0,
+    "cpp": 10.0,
+    "c": 10.0,
+    "csharp": 10.0,
+}
+DEFAULT_LSP_TIMEOUT = 8.0
+
+
+def lsp_timeout_for(language: str) -> float:
+    """返回适合语言的 LSP 超时值。"""
+    return _LSP_TIMEOUT_BY_LANGUAGE.get(language, DEFAULT_LSP_TIMEOUT)
+
 
 @dataclass(frozen=True)
 class LspServerSpec:

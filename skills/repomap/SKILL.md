@@ -47,7 +47,7 @@ repomap <command> [--project <path>] [options]
 
 ## Value-Added Features (Auto-Enabled)
 
-- **verify** automatically outputs high-confidence orphan symbols (≥70) and graph diff (when baseline exists)
+- **verify** automatically outputs high-confidence orphan symbols (≥70), call-graph consistency check (broken call/import edges), and graph diff (when baseline exists)
 - **query --symbol** automatically outputs state map for enum/const symbols and references
 - **call-chain** automatically outputs all references
 - **overview** automatically includes hotspot files

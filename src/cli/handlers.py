@@ -69,7 +69,7 @@ def clear_scan_cache() -> int:
 
 
 EXIT_NO_RESULTS = 3
-DEFAULT_LSP_TIMEOUT = 8.0
+DEFAULT_LSP_TIMEOUT = 8.0  # 默认值；重型服务器用 lsp.lsp_timeout_for(language) 获取
 
 
 def json_envelope(command: str, project: str, result: dict, status: str = "ok") -> str:

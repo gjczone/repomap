@@ -15,6 +15,15 @@
 - **Distribution**: skill (`skills/repomap/`) + CLI binary (`repomap`)
 - **No server/daemon**: LSP integration is opt-in, local-only, stdio-based
 
+## LLM-First Design
+
+**repomap is a pure LLM-consumed tool. Humans do not interact with it directly.** Every design decision — CLI argument defaults, output format, command naming, hint text, error messages — must optimize for LLM comprehension speed and token efficiency, not human readability.
+
+- `--json` defaults to `True` because LLMs consume structured output more efficiently than prose.
+- Command names are chosen for disambiguation in LLM reasoning, not for human CLI conventions.
+- All output goes through `json_envelope()` for consistent `{schema_version, command, project, status, result}` structure.
+- Hint text (stderr) guides LLM next-step decision; **every hint must reference only existing commands**.
+
 ## Commands
 
 All via `repomap <subcommand> [--project <path>]`.
@@ -28,9 +37,10 @@ All via `repomap <subcommand> [--project <path>]`.
 | `query --file <f>`                     | Symbols and structure of a known file                                    |
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning; `--compact` concise; `--top-n <N>` |
 | `call-chain --symbol <name>`           | Caller/callee context + references                                       |
+| `affected --files <f...>`              | CI test discovery: which test files are affected by source changes        |
 | `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | `check`                                | Compiler/type/lint diagnostics                                           |
-| `routes [--json] [--with-consumers]`   | HTTP/API route inventory + consumer mapping                              |
+| `routes [--with-consumers]`             | HTTP/API route inventory + consumer mapping                              |
 | `cache save`                           | Graph baseline save for diff comparison                                  |
 | `lsp setup`                            | Auto-install LSP servers for detected languages                          |
 | `doctor [--no-lsp]`                    | Validate runtime + LSP status (default)                                  |
@@ -58,13 +68,14 @@ src/                    # Python package (flat)
 │   ├── __main__.py        # python -m repomap entry
 │   ├── cli.py             # argparse CLI, dispatch, core constants (~780 lines)
 │   ├── handlers.py         # Shared helpers: constants, scan engine, session cache, symbol resolution (~710 lines)
-│   └── commands/           # Per-command-group implementations (~3300 lines)
+│   └── commands/           # Per-command-group implementations (~3400 lines)
 │       ├── overview.py     # run_overview, run_scan
 │       ├── query.py        # run_query, run_search
 │       ├── symbol.py       # run_call_chain, run_query_symbol, run_file_detail
 │       ├── impact.py       # run_impact + edit-planning helpers
 │       ├── verify.py       # run_verify, run_check + evidence-gate + orphan helpers
 │       ├── cache.py        # run_cache, run_diff
+│       ├── affected.py     # run_affected — CI test discovery from source changes
 │       ├── routes.py       # run_routes
 │       ├── fix.py          # run_fix, run_ready
 │       └── doctor.py       # run_doctor, run_lsp_doctor, run_lsp_setup
@@ -100,10 +111,11 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
 - **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query --symbol`, `impact`
-- **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter)
+- **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter + JSX component detection + Rust trait default methods)
 - **Type inference**: `src/type_inference.py` → `query --symbol` return_type/params (11 languages)
 - **Search**: `src/search.py` → `query --search` (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
+- **Affected files**: `src/cli/commands/affected.py` → `affected` — CI test discovery from source changes
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
 - **Reports**: `src/ai.py` → each `render_*` function owns one report type
@@ -113,7 +125,9 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `verify` (graph diff)
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
 - **State map**: `src/state_map.py` → integrated into `query --symbol` for enum/const symbols
-- **LSP**: `src/lsp.py` → auto-enabled, affects `query --symbol`, `query --file`, `verify`, `check`, `doctor`, `lsp setup`
+- **LSP**: `src/lsp.py` → auto-enabled, affects `query --symbol`, `query --file`, `verify`, `check`, `doctor`, `lsp setup`; per-language timeout via `lsp_timeout_for()`
+- **Call-graph consistency**: `src/cli/commands/verify.py` → `verify` broken call/import edges
+- **Call budget**: `src/hints.py` → `query_budget_hint()` outputs tip when queries exceed threshold
 - **JSON output**: `src/cli/handlers.py::json_envelope()` → unified `{schema_version, command, project, status, result}` envelope; all commands support `--json`
 
 ## Verification
@@ -154,6 +168,12 @@ The public README files serve different audiences than this document:
 # General Project Rules
 
 ## Coding Rules
+- **Docs sync is blocking**: after any behavior change, API change, command add/rename/delete, or config change, you MUST review these files and update every one that is stale — BEFORE committing:
+  - `skills/repomap/SKILL.md` — agent decision procedure
+  - `~/.agents/skills/repomap/SKILL.md` — local copy, must be byte-identical to the open-source version
+  - `README.md` + `README.zh-CN.md` — user-facing docs
+  - `AGENTS.md` (symlink to `CLAUDE.md`) — project rules and architecture
+  Stale docs are P1 bugs. Do not defer doc updates to a follow-up PR.
 
 - Source ownership: `src/cli/cli.py` owns all argparse definitions and subcommand dispatch.
 - Data structures: `src/__init__.py` is single source of truth for Symbol, Edge, RepoGraph, ScanStats, HttpRoute.
@@ -194,6 +214,7 @@ The public README files serve different audiences than this document:
 - `verify` suggests tests but does not run them. Agents must run tests explicitly.
 - Session cache version in `src/cli/cli.py` must be bumped when scan cache semantics change.
 - **Local binary only — do not `npm install -g repomap-bin` on developer machines.** The `repomap` command is a symlink to `dist/repomap` (local build). npm package `repomap-bin` is for cloud/CI environments only. During release, verify npm version is published and matches `pyproject.toml` version: `npm view repomap-bin version`.
+- **Hints synchronization**: when a command is added, renamed, or removed, `src/hints.py` MUST be updated in the same change. Each hint function must only reference currently valid commands. A stale hint is a P1 bug — LLMs follow them blindly.
 
 ## Data & State Rules
 
@@ -214,20 +235,17 @@ The public README files serve different audiences than this document:
 - verify --quick exit code: returning exit code 3 (EXIT_NO_RESULTS) when no git changes are detected is design behavior, not a bug. The WARNING status means "cannot assess risk without changes."
 - CI uv.lock variability: `uv.lock` may be auto-modified by CI during `uv run` / `uv pip install`. In the CI smoke test, `verify --quick` may return PASS or WARNING depending on whether `uv.lock` was modified — either outcome is acceptable.
 
-### Code Review Rules (based on 7 rounds of deep review)
+### Code Review Rules (based on 15+ rounds of deep review)
 
 **Review History**:
 
-| Round | Issue     | Findings                                          | P0  | Primary Dimensions                                                             |
-| ----- | --------- | ------------------------------------------------- | --- | ------------------------------------------------------------------------------ |
-| 1     | #5        | 3 HIGH + 4 MED + 370 dead lines + 8 dup constants | —   | LSP transport / dead code / constant dedup                                     |
-| 2     | #31       | 44 findings                                       | 2   | Full audit: shell injection / type mismatch / systemic silent swallowing       |
-| 3     | #33       | 53 findings                                       | 7   | Functional bugs / edge cases                                                   |
-| 4     | #36,39,40 | 12+ items                                         | —   | scan false-positive status / LSP process leaks / silent swallowing             |
-| 5     | #41       | —                                                 | —   | LSP concurrency / core algorithms / type+route extraction / build+distribution |
-| 6     | #44       | 34+                                               | —   | 5-angle full coverage                                                          |
-| 7     | #46       | 94→24                                             | 3   | LLM interaction / boundaries / algorithms / performance / architecture         |
-| 8     | #115      | 20 items (5 P1 + 10 P2 + 5 P3)                   | 0   | callgraph OOP precision / type-inference overwrite / deterministic clusters / nesting check / BOM / silent errors / performance |
+15+ rounds of deep review across ~130 issues since project inception. The pattern is well-established:
+
+- **Rounds 1–3** (#5, #31, #33): high P0/P1 density — shell injection, silent swallowing, LSP transport bugs, 370+ dead lines
+- **Rounds 4–7** (#36–#46): systemic weaknesses surface — cache eviction, resource caps, LLM interaction boundaries
+- **Rounds 8+** (#115, #117, #131): single-point P0/P1 rare; findings shift to design coherence (command UX, hints drift, output format consistency, stale documentation)
+
+Representative issues: #5 (first structured review), #31 (shell injection), #33 (7 P0), #46 (LLM boundaries), #115 (callgraph precision), #131 (LLM-first UX).
 
 **When to review**: After every non-trivial code change, before merge. Scope = changed files + files reported by `impact --files`.
 
@@ -252,6 +270,10 @@ The public README files serve different audiences than this document:
 - `except Exception` in top-level CLI handlers → intentional crash guard
 - `_deprecated_*` prefixed unused variables → kept for backward compatibility
 - Pyright `reportAttributeAccessIssue` on dynamic attributes → correct at runtime
+- `repomap verify --quick` exit code 3 on no git changes → WARNING is "cannot assess risk without changes" (ref: B1, round 9)
+- Swift `struct_declaration` query warnings → tree-sitter-swift grammar bug, not repomap bug
+- Git porcelain 1-char + 2-char status formats both appear in real output → don't simplify parser
+- `uv.lock` auto-modified by CI → `verify --quick` may return PASS or WARNING; both acceptable
 
 **Systemic weaknesses (high-recurrence areas — check every review)**:
 
@@ -259,6 +281,10 @@ The public README files serve different audiences than this document:
 - Unbounded caches: gitignore / topic co-change / LSP notifications caches have no eviction
 - Missing resource caps: file reads, AST walks, rglob, git history queries lack upper bounds
 - Security gaps: shell injection (#31), argument injection, lax path validation concentrated in CLI layer
+- **Hints drift**: when commands are added/renamed/removed, `src/hints.py` consistently lags behind — stale hints are P1 bugs because LLMs follow them blindly
+- **LSP timeout inflexibility**: single `DEFAULT_LSP_TIMEOUT = 8.0` inadequate for heavy servers (rust-analyzer needs 15-30s)
+- **Session cache persistence**: cached `size` field not persisted caused total restore failure (#58); cache format changes need version bump
+- **JSON output contract drift**: `--json` output occasionally mixed with text (#60); every command must go through `json_envelope()`
 
 **Fix discipline**:
 
@@ -266,12 +292,16 @@ The public README files serve different audiences than this document:
 - Fixes touching `resolver`/`lsp`/`git` core paths carry the highest risk — validate extra carefully
 - Do not over-engineer a "fix" — if the original code is correct but improvable, file as P3, do not change it now
 - Fix P0/P1 items one at a time in priority order; verify each before moving to the next; never batch-fix
+- **When deleting/renaming commands**: grep for references in `src/hints.py`, `CLAUDE.md`, `SKILL.md`, `README*.md`, and `.github/workflows/*.yml` before committing
+- **Cache format changes**: bump session cache version in `src/cli/cli.py` and test restore from old format
 
 **Diminishing returns**:
 
 - Rounds 1–3: find ~80% of bugs, P0/P1 dense
 - Rounds 4–5: find ~15%, systemic weaknesses (not single-point bugs) dominate
 - Rounds 6–7: find ~5%, false-positive rate rises to 10–15%
+- Rounds 8+: single-point P0/P1 become rare; findings shift to "design coherence" (command naming, LLM UX, output format consistency, stale hints)
+- Rounds 12+: mostly P2/P3 code organization and test coverage gaps
 - After 4+ rounds with zero P0/P1, shift effort to writing regression tests rather than chasing diminishing P2/P3
 
 ## Agent Boundary Discovery
@@ -300,7 +330,7 @@ uv run python -m unittest discover -s tests -v
 uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q
 
 # 2. Rebuild binary
-uv run --with pyinstaller python -m src.cli build-binary --output dist
+uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py
 
 # 2.5. Verify binary version matches pyproject.toml (MANDATORY)
 #    - If version is wrong, npm will publish a broken package that cannot be overwritten
@@ -313,23 +343,18 @@ repomap doctor --project .
 repomap overview --project .
 
 # 3.5. Smoke test with local projects (MANDATORY before release)
-#    - Test in at least 2-3 local projects of different languages/frameworks
-#    - Verify: overview, query, file-detail, call-chain, verify --quick
+#    - Verify: overview, query --file, call-chain, affected, verify --quick
 #    - Verify: lsp setup --dry-run detects languages correctly
-#    - Verify: doctor --lsp finds available servers
+#    - Verify: lsp doctor finds available servers
 
-# 4. Evaluate: does SKILL.md need updating?
-#    - New commands or changed options → update Command selection table
-#    - Changed behavior → update Boundaries section
-#    - New limitations discovered → update Boundaries section
+# 4. Evaluate: do SKILL.md, README.md, README.zh-CN.md, or CLAUDE.md (AGENTS.md symlink) need updating?
+#    - New/changed/removed commands → update command table, docs, and Change Map in all files
+#    - Changed behavior → update relevant sections in all files
+#    - New limitations discovered → update Boundaries section in SKILL.md
 #    See skills/repomap/SKILL.md
-
-
+#
 # 4.5. Sync local skill directory to ~/.agents/skills/repomap/
 #      cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
-# 5. Evaluate: do ~/.A1/ai/AGENTS.md or ~/.claude/CLAUDE.md need updating?
-#    - New repomap commands → update Section 8.1 command lists
-#    - Changed distribution method → update availability description
 
 # 6. Bump version in pyproject.toml
 
@@ -409,7 +434,7 @@ When the user asks to release a new version, follow this automated flow. **No ma
 
 - **MANDATORY**: smoke test with at least 2-3 local projects before any release commit
 - Test in projects with different language mixes (pure Python, TS+Python, etc.)
-- Key commands to verify: `overview`, `query`, `file-detail`, `call-chain`, `verify --quick`, `doctor --lsp`, `lsp setup --dry-run`
+- Key commands to verify: `overview`, `query --file`, `call-chain`, `affected`, `verify --quick`, `lsp doctor`, `lsp setup --dry-run`
 - If any command fails, fix before proceeding with the release
 - If any test, diagnostic, or verify step is skipped/unknown, document why it is acceptable and which non-skipped evidence covers the same risk.
 
@@ -484,7 +509,7 @@ RELEASE_NOTES
 grep "repomap " .github/workflows/build-binaries.yml
 
 # 2. Confirm no missing --project args (all commands except build-binary require --project)
-grep -E "repomap (doctor|overview|verify|check)" .github/workflows/build-binaries.yml | grep -v "\-\-project"
+grep -E "repomap (doctor|overview|verify|check|affected)" .github/workflows/build-binaries.yml | grep -v "\-\-project"
 
 # 3. Confirm npm package names are correct (wrapper + 3 platform packages, all scoped)
 grep '"name"' npm/wrapper/package.json npm/platforms/*/package.json

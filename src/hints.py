@@ -21,7 +21,8 @@ def query_symbol_hint(match_count: int, has_file_filter: bool) -> list[str]:
             " to see callers and callees"
         )
         hints.append(
-            "> Next: `repomap refs --symbol <name> --project .` to find all references"
+            "> Next: `repomap query --symbol <name> --project .`"
+            " to see type info and references"
         )
     elif match_count > 1 and not has_file_filter:
         hints.append("> Tip: Use `--file-path <file>` to narrow to a specific file")
@@ -40,12 +41,12 @@ def call_chain_hint(caller_count: int, callee_count: int) -> list[str]:
         hints.append("> Tip: Use `--direction callees` to see only callees")
     if caller_count <= 2 and callee_count <= 2:
         hints.append(
-            "> Next: `repomap refs --symbol <name> --project .`"
-            " to find all references including non-call usage"
+            "> Next: `repomap query --symbol <name> --project .`"
+            " to see type info and references including non-call usage"
         )
     if not hints:
         hints.append(
-            "> Next: `repomap refs --symbol <name> --project .` to find all references"
+            "> Next: `repomap query --symbol <name> --project .` to see type info and references"
         )
     return hints[:3]
 
@@ -57,7 +58,7 @@ def overview_hint(
     hints: list[str] = []
     if has_hotspots:
         hints.append(
-            "> Next: `repomap file-detail --file-path <top-hotspot> --project .`"
+            "> Next: `repomap query --file <top-hotspot> --project .`"
             " to understand the densest file before editing"
         )
     if has_reading_order:
@@ -72,7 +73,7 @@ def overview_hint(
         )
     if not hints:
         hints.append(
-            "> Next: `repomap file-detail --file-path <file> --project .`"
+            "> Next: `repomap query --file <file> --project .`"
             " to inspect a file"
         )
     return hints[:3]
@@ -143,7 +144,7 @@ def query_hint(file_match_count: int) -> list[str]:
     hints: list[str] = []
     if file_match_count > 0:
         hints.append(
-            "> Next: `repomap file-detail --file-path <top-result> --project .`"
+            "> Next: `repomap query --file <top-result> --project .`"
             " to understand the file structure"
         )
     return hints[:3]
@@ -154,7 +155,7 @@ def search_hint(symbol_match_count: int) -> list[str]:
     hints: list[str] = []
     if symbol_match_count > 0:
         hints.append(
-            "> Next: `repomap query-symbol --symbol <name> --project .`"
+            "> Next: `repomap query --symbol <name> --project .`"
             " for precise symbol lookup with LSP"
         )
     return hints[:3]
@@ -165,7 +166,24 @@ def routes_hint(has_routes: bool) -> list[str]:
     hints: list[str] = []
     if has_routes:
         hints.append(
-            "> Next: `repomap refs --symbol <handler> --project .`"
-            " to find all callers of a specific route handler"
+            "> Next: `repomap call-chain --symbol <handler> --project .`"
+            " to trace callers of a specific route handler"
         )
     return hints[:3]
+
+
+# 会话级 query 调用计数，用于 Call Budget 提示（P3.12）
+_query_call_count = 0
+_QUERY_BUDGET_THRESHOLD = 3
+
+
+def query_budget_hint() -> list[str]:
+    """当 query 类命令被频繁调用时输出预算提示。"""
+    global _query_call_count
+    _query_call_count += 1
+    if _query_call_count > _QUERY_BUDGET_THRESHOLD:
+        return [
+            "> Tip: you've made several queries. "
+            "Use `repomap overview --project .` to see the big picture"
+        ]
+    return []
