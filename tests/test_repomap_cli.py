@@ -1027,6 +1027,7 @@ class RepoMapCliTests(unittest.TestCase):
             "overview",
             "call-chain",
             "query",
+            "affected",
             "cache",
             "check",
             "doctor",
@@ -1955,6 +1956,47 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertNotIn(
                 "source", sym2, "source should not exist without --include-source"
             )
+
+    def test_affected_discovers_test_files_from_source_changes(self) -> None:
+        """affected command should discover test files that depend on changed sources."""
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(project_root, "src/core.py", "def scan():\n    return 1\n")
+            write_file(
+                project_root,
+                "src/cli.py",
+                "from src.core import scan\n\ndef main():\n    return scan()\n",
+            )
+            write_file(
+                project_root,
+                "tests/test_core.py",
+                "from src.core import scan\n\ndef test_scan():\n    assert scan() == 1\n",
+            )
+            write_file(
+                project_root,
+                "tests/test_cli.py",
+                "from src.cli import main\n\ndef test_main():\n    assert main() == 1\n",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                exit_code = main(
+                    [
+                        "affected",
+                        "--project",
+                        project_root,
+                        "--files",
+                        "src/core.py",
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            result = payload["result"]
+            self.assertIn("changed_files", result)
+            self.assertIn("affected_tests", result)
 
 
 class DiagnosticWarningTests(unittest.TestCase):
