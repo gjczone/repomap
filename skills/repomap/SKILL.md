@@ -34,6 +34,7 @@ repomap <command> [--project <path>] [options]
 | BM25 search | `query --search <text>` | BM25 symbol ranking |
 | Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
 | Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` concise output; `--top-n <N>` limit files |
+| Discover affected tests | `affected --files <f...>` | Reverse dependency tracing from changed files; `--stdin` for pipe mode, `--filter` for custom pattern |
 | Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | Quick check | `verify --quick` | Git changes + risk only |
 | Lint diagnostics | `check` | Compiler/lint errors |

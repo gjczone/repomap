@@ -196,6 +196,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of top affected files to show in compact mode (default 5).",
     )
 
+    # ── affected: CI 友好的变更影响测试发现 ────────────────────────────────────
+    affected_parser = subparsers.add_parser(
+        "affected", help="Discover affected test files from changed source files."
+    )
+    _add_project_args(affected_parser)
+    affected_parser.add_argument(
+        "--files", nargs="+", help="Changed files to analyze (one or more)."
+    )
+    affected_parser.add_argument(
+        "--stdin", action="store_true", help="Read changed file paths from stdin."
+    )
+    affected_parser.add_argument(
+        "--filter",
+        dest="filter_pattern",
+        help="Custom test file glob pattern (e.g. 'test_*.py').",
+    )
+    affected_parser.add_argument(
+        "--depth",
+        type=int,
+        default=2,
+        help="Transitive dependency depth (default 2).",
+    )
+
     verify_parser = subparsers.add_parser(
         "verify", help="Aggregate post-edit evidence before final handoff."
     )
@@ -426,6 +449,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .commands.symbol import run_file_detail  # noqa: PLC0415
     from .commands.query import run_query, run_search  # noqa: PLC0415
     from .commands.impact import run_impact  # noqa: PLC0415
+    from .commands.affected import run_affected  # noqa: PLC0415
     from .commands.verify import run_verify, run_check  # noqa: PLC0415
     from .commands.cache import run_cache  # noqa: PLC0415
     from .commands.routes import run_routes  # noqa: PLC0415
@@ -543,6 +567,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             incremental=not getattr(args, "no_incremental", False),
             compact=getattr(args, "compact", False),
             top_n=getattr(args, "top_n", 5),
+        )
+    if command == "affected":
+        target_files = getattr(args, "files", None)
+        use_stdin = getattr(args, "stdin", False)
+        if not target_files and not use_stdin:
+            print(
+                "[repomap] error: --files or --stdin is required",
+                file=sys.stderr,
+            )
+            return 2
+        return run_affected(
+            args.project,
+            args.max_files,
+            target_files or [],
+            args.json,
+            stdin=use_stdin,
+            filter_pattern=getattr(args, "filter_pattern", None),
+            depth=getattr(args, "depth", 2),
         )
     if command == "verify":
         return run_verify(
