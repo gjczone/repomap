@@ -130,6 +130,142 @@ class GraphAnalyzer:
             result["callees"] = self._bfs(symbol_id, "outgoing", max_depth, {"call"})
         return result
 
+    def find_path(
+        self,
+        source_id: str,
+        target_id: str,
+        max_depth: int = 10,
+        allowed_kinds: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """BFS 路径查找：从 source_id 到 target_id 的最短调用路径。
+
+        返回 {"path_found": bool, "path": list[dict], "hop_count": int}
+        path 中每个节点包含: symbol_name, file, line, kind, call_name
+        """
+        if source_id == target_id:
+            src_sym = self.graph.symbols.get(source_id)
+            return {
+                "path_found": True,
+                "path": [self._symbol_path_item(source_id, "")] if src_sym else [],
+                "hop_count": 0,
+            }
+
+        # BFS with parent tracking
+        visited: set[str] = {source_id}
+        queue: deque[tuple[str, int]] = deque([(source_id, 0)])
+        parent: dict[str, tuple[str, str]] = {}  # child -> (parent_id, edge_kind)
+
+        MAX_QUEUE_SIZE = 10000
+
+        while queue:
+            if len(queue) > MAX_QUEUE_SIZE:
+                logger.warning("find_path queue size exceeded limit, truncating")
+                break
+
+            cur_id, depth = queue.popleft()
+            if depth >= max_depth:
+                continue
+
+            for edge in self.graph.outgoing.get(cur_id, []):
+                if allowed_kinds is not None and edge.kind not in allowed_kinds:
+                    continue
+                nxt = edge.target
+                if nxt in visited:
+                    continue
+                visited.add(nxt)
+                parent[nxt] = (cur_id, edge.kind)
+                if nxt == target_id:
+                    # 找到目标，重建路径
+                    return self._reconstruct_path(
+                        source_id, target_id, parent, edge.kind
+                    )
+                queue.append((nxt, depth + 1))
+
+        # 未找到路径：列出来源和目标的邻居
+        source_neighbors = self._collect_neighbors(source_id, allowed_kinds)
+        target_neighbors = self._collect_neighbors(target_id, allowed_kinds)
+        return {
+            "path_found": False,
+            "path": [],
+            "hop_count": 0,
+            "source": self._symbol_path_item(source_id, ""),
+            "source_neighbors": source_neighbors[:10],
+            "target": self._symbol_path_item(target_id, ""),
+            "target_neighbors": target_neighbors[:10],
+        }
+
+    def _symbol_path_item(
+        self, symbol_id: str, call_name: str
+    ) -> dict[str, Any] | None:
+        sym = self.graph.symbols.get(symbol_id)
+        if not sym:
+            return None
+        return {
+            "symbol": sym.name,
+            "file": sym.file,
+            "line": sym.line,
+            "kind": sym.kind,
+            "call_name": call_name,
+        }
+
+    def _reconstruct_path(
+        self,
+        source_id: str,
+        target_id: str,
+        parent: dict[str, tuple[str, str]],
+        final_edge_kind: str,
+    ) -> dict[str, Any]:
+        """从 parent 映射反向重建路径。"""
+        path: list[dict[str, Any]] = []
+        cur = target_id
+        while cur != source_id:
+            parent_id, edge_kind = parent[cur]
+            # 查找此调用对应的符号名（在 parent 符号的 outgoing 边中找）
+            call_name = ""
+            for edge in self.graph.outgoing.get(parent_id, []):
+                if edge.target == cur:
+                    tgt_sym = self.graph.symbols.get(cur)
+                    call_name = tgt_sym.name if tgt_sym else ""
+                    break
+            item = self._symbol_path_item(cur, call_name)
+            if item:
+                path.append(item)
+            cur = parent_id
+        # 添加源节点
+        src_item = self._symbol_path_item(source_id, "")
+        if src_item:
+            path.append(src_item)
+        path.reverse()
+        return {
+            "path_found": True,
+            "path": path,
+            "hop_count": len(path) - 1,
+        }
+
+    def _collect_neighbors(
+        self, symbol_id: str, allowed_kinds: set[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """收集符号的邻居（调用者和被调用者）。"""
+        neighbors: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for edge in self.graph.outgoing.get(symbol_id, []):
+            if allowed_kinds is not None and edge.kind not in allowed_kinds:
+                continue
+            if edge.target not in seen:
+                seen.add(edge.target)
+                item = self._symbol_path_item(edge.target, "")
+                if item:
+                    neighbors.append(item)
+        for edge in self.graph.incoming.get(symbol_id, []):
+            if allowed_kinds is not None and edge.kind not in allowed_kinds:
+                continue
+            if edge.source not in seen:
+                seen.add(edge.source)
+                item = self._symbol_path_item(edge.source, "")
+                if item:
+                    neighbors.append(item)
+        return neighbors
+
     def _bfs(
         self,
         start: str,

@@ -223,11 +223,15 @@ def run_impact(
                         )
 
         # 传递影响展开：用 BFS 从已影响文件的符号出发，找更深层的文件
+        # 同时构建按 hop 分组的影响半径数据
+        impact_radius: list[dict[str, Any]] = []
         if depth > 1 and affected_files:
             processed_files = set(target_files) | set(affected_files)
             frontier: set[str] = set(affected_files)
             for current_depth in range(1, depth):
                 next_frontier: set[str] = set()
+                hop_files: list[str] = []
+                hop_symbols: list[str] = []
                 for affected_file in frontier:
                     for sid in engine.graph.file_symbols.get(affected_file, []):
                         # 谁调用了这个受影响文件的符号？
@@ -240,6 +244,8 @@ def run_impact(
                                         f"transitive impact depth={current_depth + 1}: calls {affected_file} in {src_sym.name}",
                                         "low",
                                     )
+                                    hop_files.append(src_sym.file)
+                                    hop_symbols.append(src_sym.name)
                         # 这个受影响文件的符号调用了谁？
                         for edge in engine.graph.outgoing.get(sid, []):
                             tgt_sym = engine.graph.symbols.get(edge.target)
@@ -250,6 +256,16 @@ def run_impact(
                                         f"transitive impact depth={current_depth + 1}: called by {affected_file} in {_sym_name(engine, sid)}",
                                         "low",
                                     )
+                                    hop_files.append(tgt_sym.file)
+                                    hop_symbols.append(tgt_sym.name)
+                if hop_files:
+                    impact_radius.append(
+                        {
+                            "hop": current_depth + 1,
+                            "files": sorted(set(hop_files)),
+                            "symbols": sorted(set(hop_symbols)),
+                        }
+                    )
                 processed_files |= next_frontier
                 frontier = next_frontier
                 if not frontier:
@@ -322,6 +338,8 @@ def run_impact(
             result: dict[str, Any] = {
                 "scan_stats": _scan_stats_payload(engine),
                 "input_files": target_files,
+                "depth": depth,
+                "impact_radius": impact_radius,
                 "affected_files": [
                     {"file": f, "why": why, "confidence": conf}
                     for f, why, conf in display_affected

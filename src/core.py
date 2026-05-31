@@ -946,6 +946,16 @@ class RepoMapEngine:
             raise ValueError("direction must be 'callers', 'callees', or 'both'")
         return self._analyzer.call_chain(symbol_id, direction, max_depth)
 
+    def trace_path(
+        self,
+        source_id: str,
+        target_id: str,
+        max_depth: int = 10,
+        allowed_kinds: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """查找从 source_id 到 target_id 的最短调用路径。"""
+        return self._analyzer.find_path(source_id, target_id, max_depth, allowed_kinds)
+
     def hotspots(self, limit: int = 15) -> list[dict]:
         """识别高密度文件。"""
         return self._analyzer.hotspots(limit)

@@ -149,6 +149,7 @@ def run_call_chain(
     as_json: bool = True,
     include_source: bool = False,
     max_source_lines: int = 80,
+    trace_pattern: str | None = None,
 ) -> int:
     if depth > _CALL_CHAIN_MAX_DEPTH:
         print(
@@ -172,6 +173,26 @@ def run_call_chain(
             # 收集引用信息
             references = _collect_references_for_symbol(engine, selected)
 
+            # 路径追踪：从 source symbol 到 target symbol
+            trace_result: dict[str, Any] | None = None
+            if trace_pattern:
+                target_matches = engine.query_symbol(trace_pattern)
+                if target_matches:
+                    target_id = target_matches[0].id
+                    trace_result = engine.trace_path(
+                        selected.id,
+                        target_id,
+                        max_depth=depth,
+                        allowed_kinds={"call", "method_call", "import_call"},
+                    )
+                else:
+                    trace_result = {
+                        "path_found": False,
+                        "path": [],
+                        "hop_count": 0,
+                        "error": f"target symbol not found: {trace_pattern}",
+                    }
+
             payload = {
                 "symbol": {
                     "id": selected.id,
@@ -192,6 +213,8 @@ def run_call_chain(
                 ],
                 "references": references,
             }
+            if trace_result is not None:
+                payload["trace"] = trace_result
             if include_source and max_source_lines > 0:
                 from ...ai import _read_symbol_source
 

@@ -101,6 +101,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_SOURCE_LINES,
         help="Max source lines per symbol (default 80).",
     )
+    chain_parser.add_argument(
+        "--trace",
+        help="Target symbol name for path tracing from --symbol to this target.",
+    )
 
     # ── query: 统一查询入口（主题搜索 + 符号查询 + BM25 搜索 + 文件详情）──
     topic_query_parser = subparsers.add_parser(
@@ -466,6 +470,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_source_lines=getattr(
                 args, "max_source_lines", DEFAULT_MAX_SOURCE_LINES
             ),
+            trace_pattern=getattr(args, "trace", None),
         )
     if command == "query":
         # 符号查询模式
