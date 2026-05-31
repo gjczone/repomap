@@ -126,7 +126,7 @@ class TestJsonEnvelopeCompliance(unittest.TestCase):
         self.assertEqual(data["command"], "call-chain")
 
     def test_query_symbol_json_uses_envelope(self) -> None:
-        """P1-1: query-symbol --json must use json_envelope()."""
+        """P1-1: query --symbol --json must use json_envelope()."""
         from src.cli.commands.symbol import run_query_symbol
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -155,10 +155,10 @@ class TestJsonEnvelopeCompliance(unittest.TestCase):
                 output = buf.getvalue()
         self.assertEqual(rc, 0)
         data = _parse_envelope(self, output)
-        self.assertEqual(data["command"], "query-symbol")
+        self.assertEqual(data["command"], "query")
 
     def test_file_detail_json_uses_envelope(self) -> None:
-        """P1-1: file-detail --json must use json_envelope()."""
+        """P1-1: query --file --json must use json_envelope()."""
         from src.cli.commands.symbol import run_file_detail
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -191,7 +191,7 @@ class TestJsonEnvelopeCompliance(unittest.TestCase):
                 output = buf.getvalue()
         self.assertEqual(rc, 0)
         data = _parse_envelope(self, output)
-        self.assertEqual(data["command"], "file-detail")
+        self.assertEqual(data["command"], "query")
 
     def test_query_json_uses_envelope(self) -> None:
         """P1-1: query --json must use json_envelope()."""
