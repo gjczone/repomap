@@ -96,9 +96,7 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         call_name = self._extract_call_name(node.func)
         if call_name:
-            # 根据函数名栈判断当前函数上下文
             if self._func_stack:
-                # 类方法内部：拼接类名.方法名；普通函数：拼接函数栈
                 if self._current_class and self._func_stack:
                     caller = f"{self._current_class[-1]}.{self._func_stack[-1]}"
                 elif self._current_class:
@@ -107,8 +105,11 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
                     caller = ".".join(self._func_stack)
                 self.info.calls.append((call_name, caller, node.lineno))
             else:
-                # 在模块级别，记录调用
                 self.info.calls.append((call_name, "", node.lineno))
+        self.generic_visit(node)
+
+    def visit_Match(self, node: ast.AST) -> None:
+        """Python 3.10+ match/case: visit subject and all case bodies for calls."""
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
@@ -258,8 +259,38 @@ def _walk_ts_node(
                 (call_name, current_class[0] or "", node.start_point[0] + 1)
             )
 
+    # JSX 组件调用：<Component prop={value} /> 或 <Component>...</Component>
+    if node.type in ("jsx_self_closing_element", "jsx_element"):
+        jsx_name = _extract_jsx_component_name(node)
+        if jsx_name:
+            info.calls.append(
+                (jsx_name, current_class[0] or "", node.start_point[0] + 1)
+            )
+
     for child in node.children:
         _walk_ts_node(child, info, current_class, depth + 1)
+
+
+def _extract_jsx_component_name(node: Any) -> str:
+    """从 JSX 元素中提取组件名。"""
+    if node.type == "jsx_self_closing_element":
+        name_node = node.child_by_field_name("name")
+    elif node.type == "jsx_element":
+        open_tag = node.child_by_field_name("open_tag")
+        name_node = open_tag.child_by_field_name("name") if open_tag else None
+    else:
+        return ""
+    if not name_node:
+        return ""
+    if name_node.type == "identifier":
+        return _node_text(name_node)
+    # 成员表达式：<Foo.Bar /> → Foo.Bar
+    if name_node.type == "member_expression":
+        obj = name_node.child_by_field_name("object")
+        prop = name_node.child_by_field_name("property")
+        if obj and prop:
+            return f"{_node_text(obj)}.{_node_text(prop)}"
+    return ""
 
 
 def _extract_ts_call_name(node: Any) -> str:
@@ -474,6 +505,26 @@ def _walk_rust_node(
         name_node = _find_child_by_type(node, "identifier")
         if name_node and not current_impl[0]:
             info.functions[_node_text(name_node)] = node.start_point[0] + 1
+
+    if node.type == "trait_item":
+        trait_name_node = node.child_by_field_name("name")
+        trait_name = _node_text(trait_name_node) if trait_name_node else ""
+        for child in node.children:
+            if child.type == "function_item":
+                fn_name_node = _find_child_by_type(child, "identifier")
+                if fn_name_node:
+                    fn_name = _node_text(fn_name_node)
+                    if trait_name and trait_name not in info.classes:
+                        info.classes[trait_name] = ClassInfo(trait_name)
+                    if trait_name:
+                        info.classes[trait_name].methods[fn_name] = (
+                            child.start_point[0] + 1
+                        )
+                    # 递归处理默认方法体内的调用
+                    _walk_rust_node(child, info, current_impl, depth + 1)
+            else:
+                _walk_rust_node(child, info, current_impl, depth + 1)
+        return
 
     if node.type == "impl_item":
         type_node = node.child_by_field_name("type")

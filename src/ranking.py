@@ -329,6 +329,23 @@ class GraphAnalyzer:
             if allowed_kinds is None or edge.kind in allowed_kinds
         )
 
+    def confidence_for(self, s_id: str, neighbor_id: str, direction: str) -> float:
+        """返回 s_id 到 neighbor_id 之间调用边的置信度（取最小值）。"""
+        min_confidence = 1.0
+        if direction == "caller":
+            edges = self.graph.outgoing.get(neighbor_id, [])
+            for e in edges:
+                if e.target == s_id and e.kind == "call":
+                    if e.confidence < min_confidence:
+                        min_confidence = e.confidence
+        else:
+            edges = self.graph.outgoing.get(s_id, [])
+            for e in edges:
+                if e.target == neighbor_id and e.kind == "call":
+                    if e.confidence < min_confidence:
+                        min_confidence = e.confidence
+        return min_confidence
+
     def _summary_symbol_score(self, symbol: Symbol) -> float:
         incoming_calls = self._edge_count(symbol.id, "incoming", {"call"})
         outgoing_calls = self._edge_count(symbol.id, "outgoing", {"call"})

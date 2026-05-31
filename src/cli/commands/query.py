@@ -22,7 +22,7 @@ from ..handlers import (
     _path_matches_prefix,
     _scan_stats_payload,
 )
-from ...hints import query_hint, search_hint
+from ...hints import query_budget_hint, query_hint, search_hint
 from ...topic import (
     FileMatch,
     TestMatch,
@@ -265,6 +265,8 @@ def run_query(
             )
         )
         for hint in query_hint(file_match_count=len(top_matches)):
+            print(hint, file=sys.stderr)
+        for hint in query_budget_hint():
             print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
@@ -540,6 +542,8 @@ def run_search(
                 lines.append(f"  - sig: `{sym.signature}`")
         print("\n".join(lines))
         for hint in search_hint(symbol_match_count=len(results)):
+            print(hint, file=sys.stderr)
+        for hint in query_budget_hint():
             print(hint, file=sys.stderr)
         return 0
     except Exception as exc:

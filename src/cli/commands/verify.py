@@ -93,6 +93,43 @@ def _parse_git_status_porcelain_paths(output: str) -> list[str]:
     return paths
 
 
+def _call_graph_consistency_check(engine: RepoMapEngine) -> dict[str, Any]:
+    """检查调用图一致性：边引用的符号是否存在、导入目标是否可解析。"""
+    symbol_ids = set(engine.graph.symbols.keys())
+    broken_calls: list[dict[str, str]] = []
+    broken_imports: list[dict[str, str]] = []
+
+    for source_id, edges in engine.graph.outgoing.items():
+        source_sym = engine.graph.symbols.get(source_id)
+        source_name = source_sym.name if source_sym else source_id
+        for edge in edges:
+            if edge.kind == "call" and edge.target not in symbol_ids:
+                broken_calls.append(
+                    {
+                        "source": source_name,
+                        "target": edge.target,
+                        "file": source_sym.file if source_sym else "unknown",
+                        "line": str(source_sym.line if source_sym else 0),
+                    }
+                )
+            elif edge.kind == "import" and edge.target not in symbol_ids:
+                broken_imports.append(
+                    {
+                        "source": source_name,
+                        "target": edge.target,
+                        "file": source_sym.file if source_sym else "unknown",
+                        "line": str(source_sym.line if source_sym else 0),
+                    }
+                )
+
+    return {
+        "brokenCalls": broken_calls[:50],
+        "brokenImports": broken_imports[:50],
+        "totalBrokenCalls": len(broken_calls),
+        "totalBrokenImports": len(broken_imports),
+    }
+
+
 def _child_git_project_candidates(project_path: Path, limit: int = 8) -> list[Path]:
     candidates: list[Path] = []
     try:
@@ -675,6 +712,9 @@ def run_verify(
         engine = _scan_engine(project_root, DEFAULT_MAX_FILES, incremental=incremental)
         evidence = _diff_risk_evidence(engine, changed_files)
         contract_risks = _detect_contract_risks(engine, changed_files)
+        call_graph_consistency = (
+            _call_graph_consistency_check(engine) if not quick else None
+        )
 
         # 按 risk_threshold 过滤 contractRisks
         _LEVEL_ORDER = {"HIGH": 3, "MED": 2, "LOW": 1}
@@ -770,6 +810,7 @@ def run_verify(
             "lsp": lsp_payload,
             "graphDiff": graph_diff_payload,
             "contractRisks": contract_risks,
+            "callGraphConsistency": call_graph_consistency,
             "impactSession": impact_session_payload,
         }
         if as_json:

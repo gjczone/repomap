@@ -956,6 +956,10 @@ class RepoMapEngine:
         """查找从 source_id 到 target_id 的最短调用路径。"""
         return self._analyzer.find_path(source_id, target_id, max_depth, allowed_kinds)
 
+    def confidence_for(self, s_id: str, neighbor_id: str, direction: str) -> float:
+        """返回调用边的置信度。"""
+        return self._analyzer.confidence_for(s_id, neighbor_id, direction)
+
     def hotspots(self, limit: int = 15) -> list[dict]:
         """识别高密度文件。"""
         return self._analyzer.hotspots(limit)

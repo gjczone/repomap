@@ -19,7 +19,7 @@ class TestQuerySymbolHints(unittest.TestCase):
         self.assertGreaterEqual(len(hints), 1)
         self.assertLessEqual(len(hints), 3)
         self.assertTrue(any("call-chain" in h for h in hints))
-        self.assertTrue(any("refs" in h for h in hints))
+        self.assertTrue(any("query --symbol" in h for h in hints))
 
     def test_multiple_matches_without_filter_suggests_file_path(self) -> None:
         from src.hints import query_symbol_hint
@@ -67,7 +67,7 @@ class TestCallChainHints(unittest.TestCase):
         from src.hints import call_chain_hint
 
         hints = call_chain_hint(caller_count=2, callee_count=1)
-        self.assertTrue(any("refs" in h for h in hints))
+        self.assertTrue(any("query --symbol" in h for h in hints))
 
     def test_all_hints_start_with_arrow(self) -> None:
         from src.hints import call_chain_hint
@@ -87,7 +87,7 @@ class TestOverviewHints(unittest.TestCase):
         hints = overview_hint(
             has_hotspots=True, has_reading_order=False, has_modules=False
         )
-        self.assertTrue(any("file-detail" in h for h in hints))
+        self.assertTrue(any("query --file" in h for h in hints))
 
     def test_has_reading_order_suggests_impact(self) -> None:
         from src.hints import overview_hint
@@ -224,11 +224,11 @@ class TestCheckHints(unittest.TestCase):
 class TestQueryHints(unittest.TestCase):
     """query 命令的运行时提示"""
 
-    def test_found_files_suggests_file_detail(self) -> None:
+    def test_found_files_suggests_query_file(self) -> None:
         from src.hints import query_hint
 
         hints = query_hint(file_match_count=5)
-        self.assertTrue(any("file-detail" in h for h in hints))
+        self.assertTrue(any("query --file" in h for h in hints))
 
     def test_all_hints_start_with_arrow(self) -> None:
         from src.hints import query_hint
@@ -246,7 +246,7 @@ class TestSearchHints(unittest.TestCase):
         from src.hints import search_hint
 
         hints = search_hint(symbol_match_count=5)
-        self.assertTrue(any("query-symbol" in h for h in hints))
+        self.assertTrue(any("query --symbol" in h for h in hints))
 
     def test_all_hints_start_with_arrow(self) -> None:
         from src.hints import search_hint
@@ -260,11 +260,11 @@ class TestSearchHints(unittest.TestCase):
 class TestRoutesHints(unittest.TestCase):
     """routes 命令的运行时提示"""
 
-    def test_has_routes_suggests_refs(self) -> None:
+    def test_has_routes_suggests_call_chain(self) -> None:
         from src.hints import routes_hint
 
         hints = routes_hint(has_routes=True)
-        self.assertTrue(any("refs" in h for h in hints))
+        self.assertTrue(any("call-chain" in h for h in hints))
 
     def test_all_hints_start_with_arrow(self) -> None:
         from src.hints import routes_hint
@@ -345,3 +345,57 @@ class TestHintFormat(unittest.TestCase):
                     self.assertIn(
                         "--project", h, f"Hint for {cmd} missing --project: {h}"
                     )
+
+    def test_all_hint_commands_exist(self) -> None:
+        """回归测试：确保所有 hint 引用的 repomap 命令真实存在。"""
+        import re
+        from src.cli.cli import build_parser
+
+        from src.hints import (
+            query_symbol_hint,
+            call_chain_hint,
+            overview_hint,
+            file_detail_hint,
+            impact_hint,
+            verify_hint,
+            check_hint,
+            query_hint,
+            search_hint,
+            routes_hint,
+        )
+
+        parser = build_parser()
+        valid_commands = set()
+        for action in parser._actions:
+            if hasattr(action, "choices") and action.choices:
+                valid_commands.update(action.choices.keys())
+
+        all_funcs = [
+            query_symbol_hint(match_count=1, has_file_filter=False),
+            call_chain_hint(caller_count=10, callee_count=10),
+            overview_hint(has_hotspots=True, has_reading_order=True, has_modules=True),
+            file_detail_hint(has_symbols=True, has_callers=True),
+            impact_hint(risk_level="high", has_suggested_tests=True),
+            verify_hint(status="passed", has_contract_risks=True),
+            check_hint(has_errors=True),
+            query_hint(file_match_count=5),
+            search_hint(symbol_match_count=5),
+            routes_hint(has_routes=True),
+        ]
+
+        hint_commands = set()
+        for hints in all_funcs:
+            for h in hints:
+                match = re.search(r"`repomap\s+(\S+)`", h)
+                if match:
+                    cmd = match.group(1)
+                    # 提取主命令（去掉 --flags 后的内容）
+                    main_cmd = cmd.split()[0]
+                    hint_commands.add(main_cmd)
+
+        unknown = hint_commands - valid_commands
+        self.assertEqual(
+            set(),
+            unknown,
+            f"Hint 引用了不存在的命令: {unknown}。有效命令: {sorted(valid_commands)}",
+        )

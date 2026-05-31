@@ -68,6 +68,9 @@ class RepoMapCliTests(unittest.TestCase):
                 "errors_by_file": {},
             }
 
+        def fake_lsp_payload(project_root, changed_files, timeout, max_files):
+            return {"enabled": True, "status": "skipped", "runs": [], "summary": {}}
+
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
             stdout = io.StringIO()
@@ -79,10 +82,17 @@ class RepoMapCliTests(unittest.TestCase):
                     fake_git_status_porcelain,
                 ):
                     with patch.object(RepoMapChecker, "check", fake_check):
-                        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                            exit_code = main(
-                                ["verify", "--project", project_root, "--json"]
-                            )
+                        with patch(
+                            "src.cli.commands.verify._verify_lsp_payload",
+                            fake_lsp_payload,
+                        ):
+                            with (
+                                redirect_stdout(stdout),
+                                redirect_stderr(io.StringIO()),
+                            ):
+                                exit_code = main(
+                                    ["verify", "--project", project_root, "--json"]
+                                )
 
         self.assertIn(exit_code, {0, 3})
         payload = json.loads(stdout.getvalue())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,15 @@ def _truncate_output(output: str, max_chars: int) -> str:
     )
 
 
+@functools.lru_cache(maxsize=64)
+def _read_file_cached(abs_path: str) -> list[str] | None:
+    """缓存文件读取，避免对同一文件重复 I/O。"""
+    try:
+        return Path(abs_path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+
+
 def _read_symbol_source(
     project_root: "str | Path",
     file_path: str,
@@ -52,17 +62,15 @@ def _read_symbol_source(
         return ""
     if end_line <= line:
         end_line = line + 5
-    try:
-        abs_path = Path(project_root) / file_path
-        text = abs_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    abs_path = str(Path(project_root) / file_path)
+    all_lines = _read_file_cached(abs_path)
+    if all_lines is None:
         return ""
-    all_lines = text.splitlines()
     start_idx = max(0, line - 1)
     end_idx = min(len(all_lines), end_line)
     lines = all_lines[start_idx:end_idx]
     if len(lines) > max_lines:
-        lines = lines[:max_lines]
+        lines = list(lines[:max_lines])
         lines.append(
             f"# ... (truncated, showing first {max_lines} of {end_idx - start_idx} lines)"
         )
@@ -636,28 +644,11 @@ def render_call_chain_report(
         "",
     ]
 
-    def _confidence_for(s_id: str, neighbor_id: str, direction: str) -> float:
-        """返回 s_id 到 neighbor_id 之间边的置信度（查找多条边，取最小值）。"""
-        min_confidence = 1.0
-        if direction == "caller":
-            edges = engine.graph.outgoing.get(neighbor_id, [])
-            for e in edges:
-                if e.target == s_id and e.kind == "call":
-                    if e.confidence < min_confidence:
-                        min_confidence = e.confidence
-        else:
-            edges = engine.graph.outgoing.get(s_id, [])
-            for e in edges:
-                if e.target == neighbor_id and e.kind == "call":
-                    if e.confidence < min_confidence:
-                        min_confidence = e.confidence
-        return min_confidence
-
     callers = chain["callers"]
     lines.append(f"### Called by ({len(callers)})\n")
     if callers:
         for caller in callers[:20]:
-            conf = _confidence_for(symbol.id, caller.id, "caller")
+            conf = engine.confidence_for(symbol.id, caller.id, "caller")
             heuristic = " (heuristic)" if conf < 1.0 else ""
             lines.append(
                 f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`{heuristic}"
@@ -671,7 +662,7 @@ def render_call_chain_report(
     lines.append(f"\n### Calls ({len(callees)})\n")
     if callees:
         for callee in callees[:20]:
-            conf = _confidence_for(symbol.id, callee.id, "callee")
+            conf = engine.confidence_for(symbol.id, callee.id, "callee")
             heuristic = " (heuristic)" if conf < 1.0 else ""
             lines.append(
                 f"- `{callee.name}` ({callee.kind}) — `{callee.file}:{callee.line}`{heuristic}"
