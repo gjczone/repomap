@@ -82,6 +82,16 @@ repomap <command> [--project <path>] [options]
 3. Edit
 4. `verify`
 
+## Call Budget
+
+| 项目规模 | 文件数 | 最大 query 次数 | 最大 call-chain 次数 | 建议策略 |
+|---------|--------|----------------|---------------------|---------|
+| 小型    | <500   | 3              | 2                   | 直接 query |
+| 中型    | <5000  | 5              | 3                   | 先 overview 缩小范围 |
+| 大型    | >=5000 | 4              | 2                   | 必须先 overview + impact |
+
+注意：数字基于 repomap 实时扫描的耗时，不是持久化图查询。
+
 ## Diagnostic Decision
 
 | After editing… | Use | Time | What it checks |
