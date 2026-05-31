@@ -168,6 +168,14 @@ def _impact_type_level(
 
 
 _IMPACT_MAX_DEPTH = 3
+_IMPACT_LARGE_FILE_SYMBOL_THRESHOLD = 50
+
+
+def _is_large_file(engine: RepoMapEngine, file_path: str) -> bool:
+    return (
+        len(engine.graph.file_symbols.get(file_path, []))
+        > _IMPACT_LARGE_FILE_SYMBOL_THRESHOLD
+    )
 
 
 def run_impact(
@@ -200,6 +208,19 @@ def run_impact(
         for f in target_files:
             for sid in engine.graph.file_symbols.get(f, []):
                 target_symbols.add(sid)
+
+        # 超大文件自动降级：跳过传递影响展开以避免超时
+        large_files = [f for f in target_files if _is_large_file(engine, f)]
+        if large_files and depth > 1:
+            large_list = ", ".join(f"`{f}`" for f in large_files[:3])
+            if len(large_files) > 3:
+                large_list += f" (+ {len(large_files) - 3} more)"
+            print(
+                f"[{CLI_NAME}] info: {large_list} has >{_IMPACT_LARGE_FILE_SYMBOL_THRESHOLD} symbols; "
+                f"limiting to depth=1 to avoid timeout",
+                file=sys.stderr,
+            )
+            depth = 1
 
         # 找出引用者有谁（incoming edges）
         affected_files: dict[str, tuple[str, str]] = {}  # file -> (why, confidence)
