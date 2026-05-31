@@ -107,10 +107,10 @@ LSP-backed commands automatically use local LSP servers when available. All comm
 | `query --symbol <name>` | Exact/fuzzy symbol lookup; LSP hover + definition/reference + state map; `--json` |
 | `query --search <text>` | BM25 semantic symbol search; `--top-k <N>` for result count; `--json` |
 | `query --file <path>` | File symbols + signatures + callers; LSP symbol tree by default; `--json` |
-| `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests |
+| `impact --files <f...> --with-symbols` | Pre-edit blast radius: key symbols, affected files, risk, suggested tests; `--compact` concise; `--top-n <N>` |
 | `call-chain --symbol <name>` | Callers, callees, and references with configurable depth; `--direction`; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
-| `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff |
+| `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
 | `cache save` | Graph baseline save for diff comparison |
 | `doctor [--no-lsp]` | Health check: parsers, runtime, LSP status (default) |

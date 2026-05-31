@@ -26,9 +26,9 @@ All via `repomap <subcommand> [--project <path>]`.
 | `query --symbol <name>`                | Exact/fuzzy symbol lookup + state map for enums + references             |
 | `query --search "text"`                | BM25 semantic symbol search with keyword fallback                        |
 | `query --file <f>`                     | Symbols and structure of a known file                                    |
-| `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning                                    |
+| `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning; `--compact` concise; `--top-n <N>` |
 | `call-chain --symbol <name>`           | Caller/callee context + references                                       |
-| `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff                    |
+| `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | `check`                                | Compiler/type/lint diagnostics                                           |
 | `routes [--json] [--with-consumers]`   | HTTP/API route inventory + consumer mapping                              |
 | `cache save`                           | Graph baseline save for diff comparison                                  |

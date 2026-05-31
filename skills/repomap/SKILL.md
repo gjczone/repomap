@@ -33,8 +33,8 @@ repomap <command> [--project <path>] [options]
 | Topic search | `query --query <keyword>` | Synonym expansion, relevance ranking |
 | BM25 search | `query --search <text>` | BM25 symbol ranking |
 | Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
-| Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests |
-| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff |
+| Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` concise output; `--top-n <N>` limit files |
+| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | Quick check | `verify --quick` | Git changes + risk only |
 | Lint diagnostics | `check` | Compiler/lint errors |
 | Auto-fix | `fix` | ruff --fix, eslint --fix |

@@ -107,10 +107,10 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `query --symbol <名称>` | 精确/模糊符号查找；LSP hover + 定义/引用 + 状态映射；`--json` |
 | `query --search <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数；`--json` |
 | `query --file <路径>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
-| `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试 |
+| `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试；`--compact` 精简输出；`--top-n <N>` |
 | `call-chain --symbol <名称>` | 调用者、被调用者和引用，支持配置深度；`--direction`；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
-| `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异 |
+| `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异；`--risk-threshold HIGH\|MED\|LOW` |
 | `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
 | `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
