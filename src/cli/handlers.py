@@ -90,7 +90,6 @@ def json_envelope(command: str, project: str, result: dict, status: str = "ok") 
             "status": status,
             "result": result,
         },
-        ensure_ascii=False,
         indent=2,
     )
 
@@ -503,7 +502,7 @@ def _save_session_engine(
             suffix=".tmp",
             delete=False,
         ) as handle:
-            json_dump(payload, handle, ensure_ascii=False, indent=2)
+            json_dump(payload, handle, indent=2)
             tmp_path = Path(handle.name)
         tmp_path.replace(cache_path)
         return True
@@ -843,7 +842,7 @@ def save_impact_session(
             suffix=".tmp",
             delete=False,
         ) as handle:
-            handle.write(json_dumps(payload, ensure_ascii=False, indent=2))
+            handle.write(json_dumps(payload, indent=2))
             tmp_path = Path(handle.name)
         tmp_path.replace(session_path)
     except Exception:

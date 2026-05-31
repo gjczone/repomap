@@ -203,6 +203,8 @@ class RepoMapEngine:
         self.routes: list = []
         self._gitignore: GitignoreParser | None = None
         self._search_index: Any | None = None
+        self._source_bytes: dict[str, bytes] = {}
+        self._inc_cache_loaded: bool = False
 
     @staticmethod
     def _read_max_file_bytes() -> int:
@@ -445,23 +447,26 @@ class RepoMapEngine:
         # 还原符号
         self.graph.file_symbols.setdefault(file_path, [])
         for sym_dict in entry.symbols_json:
-            sym = Symbol(
-                id=sym_dict["id"],
-                name=sym_dict["name"],
-                kind=sym_dict["kind"],
-                file=sym_dict["file"],
-                line=sym_dict["line"],
-                end_line=sym_dict.get("end_line", sym_dict["line"]),
-                col=sym_dict.get("col", 0),
-                visibility=sym_dict.get("visibility", "private"),
-                docstring=sym_dict.get("docstring", ""),
-                signature=sym_dict.get("signature", ""),
-                return_type=sym_dict.get("return_type", ""),
-                params=sym_dict.get("params", ""),
-                pagerank=sym_dict.get("pagerank", 0.0),
-            )
-            self.graph.symbols[sym.id] = sym
-            self.graph.file_symbols[file_path].append(sym.id)
+            try:
+                sym = Symbol(
+                    id=sym_dict["id"],
+                    name=sym_dict["name"],
+                    kind=sym_dict["kind"],
+                    file=sym_dict["file"],
+                    line=sym_dict["line"],
+                    end_line=sym_dict.get("end_line", sym_dict["line"]),
+                    col=sym_dict.get("col", 0),
+                    visibility=sym_dict.get("visibility", "private"),
+                    docstring=sym_dict.get("docstring", ""),
+                    signature=sym_dict.get("signature", ""),
+                    return_type=sym_dict.get("return_type", ""),
+                    params=sym_dict.get("params", ""),
+                    pagerank=sym_dict.get("pagerank", 0.0),
+                )
+                self.graph.symbols[sym.id] = sym
+                self.graph.file_symbols[file_path].append(sym.id)
+            except (KeyError, TypeError):
+                continue
 
         # 还原 imports
         self.graph.file_imports[file_path] = list(entry.imports)

@@ -281,6 +281,7 @@ class DiagnosticRunner:
     def _run_command(self, cmd: list[str], tool_name: str) -> tuple[int, str, int]:
         """运行命令并返回 (exit_code, stdout, duration_ms)"""
         start = self._now_ms()
+        process = None
         try:
             process = subprocess.Popen(
                 cmd,
@@ -300,8 +301,14 @@ class DiagnosticRunner:
                 output += "\n... [output truncated at 10MB]"
             return process.returncode, output, duration
         except subprocess.TimeoutExpired:
+            if process is not None:
+                process.kill()
+                process.wait()
             return -1, "Timeout after 120s", self._now_ms() - start
         except Exception as e:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
             return -1, str(e), self._now_ms() - start
 
     def _run_tsc(self) -> DiagnosticResult:

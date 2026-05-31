@@ -14,15 +14,15 @@ from unittest.mock import MagicMock, patch
 from src import json_dumps
 
 
-class P0_1_OrjsonEnsureAscii(unittest.TestCase):
-    """P0-1: ensure_ascii=False 不应使用 OPT_NON_STR_KEYS（语义错误）。
+class P0_1_OrjsonJsonDumps(unittest.TestCase):
+    """P1-2: json_dumps wrapper 不应设置 OPT_NON_STR_KEYS（语义错误）。
 
-    orjson 默认就是 UTF-8 输出，ensure_ascii=False 不需要额外选项。
+    orjson 使用显式参数替代 **kwargs，避免静默丢弃不支持的参数。
     原 bug 是错误地设置了 OPT_NON_STR_KEYS（允许非字符串 key，产生非法 JSON）。
     """
 
-    def test_ensure_ascii_false_does_not_set_non_str_keys(self) -> None:
-        """ensure_ascii=False 不应设置 OPT_NON_STR_KEYS。"""
+    def test_indent_does_not_set_non_str_keys(self) -> None:
+        """indent=2 应设置 OPT_INDENT_2 但不设置 OPT_NON_STR_KEYS。"""
         try:
             import orjson  # noqa: F811
         except ImportError:
@@ -37,14 +37,19 @@ class P0_1_OrjsonEnsureAscii(unittest.TestCase):
             return original_dumps(obj, option=option)
 
         with patch.object(orjson, "dumps", side_effect=spy_dumps):
-            json_dumps({"name": "中文"}, ensure_ascii=False)
+            json_dumps({"name": "中文"}, indent=2)
 
         self.assertTrue(len(captured_options) > 0, "orjson.dumps 应被调用")
         used_option = captured_options[0]
+        # OPT_INDENT_2 应被设置
+        self.assertTrue(
+            bool(used_option & orjson.OPT_INDENT_2),
+            f"indent=2 应设置 OPT_INDENT_2 (option={used_option})",
+        )
         # OPT_NON_STR_KEYS 不应被设置 — 它允许 int key，这是错误行为
         self.assertFalse(
             bool(used_option & orjson.OPT_NON_STR_KEYS),
-            f"ensure_ascii=False 不应设置 OPT_NON_STR_KEYS (option={used_option})",
+            f"indent=2 不应设置 OPT_NON_STR_KEYS (option={used_option})",
         )
 
 
