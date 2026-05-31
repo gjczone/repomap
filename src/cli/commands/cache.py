@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
 import sys
 
 from ..handlers import (
     CLI_NAME,
     _resolve_project,
 )
-from ...toolkit import diff_project, save_cache, scan_project
+from ...toolkit import save_cache, scan_project
 
 
 def run_cache(project: str, action: str, as_json: bool = False) -> int:
@@ -45,47 +44,3 @@ def run_cache(project: str, action: str, as_json: bool = False) -> int:
     except Exception as exc:
         print(f"[{CLI_NAME}] cache save failed: {exc}", file=sys.stderr)
         return 1
-
-
-def run_diff(project: str, as_json: bool) -> int:
-    result = diff_project(_resolve_project(project))
-    if "error" in result:
-        print(result["error"], file=sys.stderr)
-        return 1
-    if as_json:
-        from ..handlers import json_envelope
-
-        print(json_envelope("diff", _resolve_project(project), result))
-        return 0
-    lines = ["## Change Detection\n"]
-    lines.append(
-        f"**Compare**: {result.get('last_scan', 'unknown')} → {result.get('scan_time', datetime.now().isoformat())}\n"
-    )
-    summary = result.get("summary", {})
-    lines.append(f"- Added symbols: {summary.get('added', 0)}")
-    lines.append(f"- Removed symbols: {summary.get('removed', 0)}")
-    lines.append(f"- Modified symbols: {summary.get('modified', 0)}")
-    lines.append(f"- Added calls: {summary.get('edges_added', 0)}")
-    lines.append(f"- Removed calls: {summary.get('edges_removed', 0)}\n")
-    added_symbols = result.get("added_symbols", [])
-    if added_symbols:
-        lines.append("**Added symbols** (Top 10):")
-        for item in added_symbols[:10]:
-            lines.append(
-                f"  - `{item.get('name', '?')}` "
-                f"({item.get('file', '?')}:{item.get('line', '?')})"
-            )
-    call_chain_changes = result.get("call_chain_changes", {})
-    new_calls = call_chain_changes.get("new_calls", [])
-    if new_calls:
-        lines.append("\n**Added calls** (Top 10):")
-        for change in new_calls[:10]:
-            src_raw = change.get("from", "")
-            src_name = src_raw.split("::")[-2] if "::" in src_raw else src_raw
-            tgt_raw = change.get("to", "")
-            tgt_name = tgt_raw.split("::")[-2] if "::" in tgt_raw else tgt_raw
-            lines.append(
-                f"  - `{src_name}` -[{change.get('kind', '?')}]-> `{tgt_name}`"
-            )
-    print("\n".join(lines))
-    return 0

@@ -50,22 +50,6 @@ def call_chain_hint(caller_count: int, callee_count: int) -> list[str]:
     return hints[:3]
 
 
-def refs_hint(called_by_count: int) -> list[str]:
-    """refs 命令的运行时提示"""
-    hints: list[str] = []
-    if called_by_count > 0:
-        hints.append(
-            "> Next: `repomap call-chain --symbol <name> --project .`"
-            " to trace the full call flow"
-        )
-    else:
-        hints.append(
-            "> This symbol has no callers. Verify with"
-            " `repomap orphan --project .` for dead code candidates"
-        )
-    return hints[:3]
-
-
 def overview_hint(
     has_hotspots: bool, has_reading_order: bool, has_modules: bool
 ) -> list[str]:
@@ -154,32 +138,6 @@ def check_hint(has_errors: bool) -> list[str]:
     return hints[:3]
 
 
-def orphan_hint(has_high_confidence_candidates: bool) -> list[str]:
-    """orphan 命令的运行时提示"""
-    hints: list[str] = []
-    if has_high_confidence_candidates:
-        hints.append(
-            "> Verify each candidate: `repomap refs --symbol <name> --project .`"
-            " before deleting"
-        )
-    return hints[:3]
-
-
-def hotspots_hint(has_hotspots: bool) -> list[str]:
-    """hotspots 命令的运行时提示"""
-    hints: list[str] = []
-    if has_hotspots:
-        hints.append(
-            "> Next: `repomap file-detail --file-path <hotspot> --project .`"
-            " to understand the densest file"
-        )
-        hints.append(
-            "> Next: `repomap impact --files <hotspot> --with-symbols --project .`"
-            " to assess change impact"
-        )
-    return hints[:3]
-
-
 def query_hint(file_match_count: int) -> list[str]:
     """query 命令的运行时提示"""
     hints: list[str] = []
@@ -209,16 +167,5 @@ def routes_hint(has_routes: bool) -> list[str]:
         hints.append(
             "> Next: `repomap refs --symbol <handler> --project .`"
             " to find all callers of a specific route handler"
-        )
-    return hints[:3]
-
-
-def state_map_hint(has_writers: bool) -> list[str]:
-    """state-map 命令的运行时提示"""
-    hints: list[str] = []
-    if has_writers:
-        hints.append(
-            "> Next: `repomap refs --symbol <writer> --project .`"
-            " to trace who calls the state writer"
         )
     return hints[:3]

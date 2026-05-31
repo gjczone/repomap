@@ -7,46 +7,6 @@ from __future__ import annotations
 
 import inspect
 import unittest
-from unittest.mock import patch
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# P1-2: cache.py diff_project 结果 KeyError 防护
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestP1_2_CacheDiffKeyError(unittest.TestCase):
-    """P1-2: diff_project 结果应安全访问，不因缺失 key 而崩溃。"""
-
-    def test_diff_handles_missing_summary(self) -> None:
-        """验证 diff 结果缺少 summary 时不崩溃。"""
-        from src.cli.commands.cache import run_diff
-
-        # patch diff_project 返回一个没有 summary 的结果
-        with patch("src.cli.commands.cache.diff_project") as mock_diff:
-            mock_diff.return_value = {"scan_time": "2024-01-01"}
-            with patch("src.cli.commands.cache._resolve_project") as mock_resolve:
-                mock_resolve.return_value = "/tmp/test"
-                with patch("sys.stdout"):
-                    exit_code = run_diff("/tmp/test", False)
-
-            self.assertEqual(exit_code, 0)
-
-    def test_diff_handles_missing_keys_in_summary(self) -> None:
-        """验证 summary 中缺少个别 key 时使用默认值 0。"""
-        from src.cli.commands.cache import run_diff
-
-        with patch("src.cli.commands.cache.diff_project") as mock_diff:
-            mock_diff.return_value = {
-                "scan_time": "2024-01-01",
-                "summary": {"added": 5},
-            }
-            with patch("src.cli.commands.cache._resolve_project") as mock_resolve:
-                mock_resolve.return_value = "/tmp/test"
-                with patch("sys.stdout"):
-                    exit_code = run_diff("/tmp/test", False)
-
-            self.assertEqual(exit_code, 0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

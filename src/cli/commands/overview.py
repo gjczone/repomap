@@ -13,7 +13,7 @@ from ... import (
 from ...ai import (
     _get_hot_files,
 )
-from ...hints import overview_hint, hotspots_hint
+from ...hints import overview_hint
 from ..handlers import (
     CLI_NAME,
     _scan_engine,
@@ -124,36 +124,4 @@ def run_overview(
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] overview failed: {exc}", file=sys.stderr)
-        return 1
-
-
-def run_hotspots(
-    project: str, max_files: int, limit: int, as_json: bool = False
-) -> int:
-    try:
-        engine = _scan_engine(project, max_files)
-        hotspots = engine.hotspots(limit)
-        if as_json:
-            from ..handlers import json_envelope
-
-            print(
-                json_envelope(
-                    "hotspots",
-                    project,
-                    {"hotspots": hotspots},
-                )
-            )
-            return 0
-        risk_mark = {"high": "🔴", "medium": "🟡", "low": "🟢"}
-        lines = ["## High-Density Files (by symbol count)\n"]
-        for index, item in enumerate(hotspots, 1):
-            lines.append(
-                f"{index}. {risk_mark[item['risk']]} `{item['file']}` — **{item['symbol_count']}** symbols"
-            )
-        print("\n".join(lines))
-        for hint in hotspots_hint(has_hotspots=len(hotspots) > 0):
-            print(hint, file=sys.stderr)
-        return 0
-    except Exception as exc:
-        print(f"[{CLI_NAME}] hotspots failed: {exc}", file=sys.stderr)
         return 1

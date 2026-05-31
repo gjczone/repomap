@@ -12,7 +12,7 @@ from ...ai import render_verify_report
 from ...check import RepoMapChecker
 from ...core import RepoMapEngine
 from ...git_backend import GitBackend
-from ...hints import verify_hint, orphan_hint, check_hint
+from ...hints import verify_hint, check_hint
 from ...core import DEFAULT_MAX_FILES
 from ..handlers import (
     CLI_NAME,
@@ -27,7 +27,6 @@ from ..handlers import (
     _normalize_project_relative_paths,
     json_envelope,
 )
-from ...ranking import GraphAnalyzer
 from ...toolkit import diff_project, scan_project
 from ...topic import (
     find_related_tests,
@@ -931,152 +930,6 @@ def _collect_orphan_symbols(
 
     scored.sort(key=lambda x: (-x["confidence"], x["file"], x["line"], x["name"]))
     return scored
-
-
-def run_orphan(
-    project: str,
-    max_files: int,
-    as_json: bool = False,
-    limit: int = 20,
-    min_confidence: int = 0,
-) -> int:
-    try:
-        engine = _scan_engine(project, max_files)
-        scored = _collect_orphan_symbols(engine, min_confidence=0)
-        total_candidates = len(scored)
-
-        # Count structurally filtered symbols
-        filtered_structural_count = sum(
-            1
-            for sid in engine.graph.symbols
-            if engine.graph.symbols[sid].kind in _ORPHAN_EXCLUDED_KINDS
-            or any(
-                engine.graph.symbols[sid].file.lower().endswith(ext)
-                for ext in _ORPHAN_EXCLUDED_EXTENSIONS
-            )
-        )
-
-        # Filter by min_confidence
-        if min_confidence > 0:
-            scored = [s for s in scored if s["confidence"] >= min_confidence]
-
-        # Tier classification
-        high = [s for s in scored if s["confidence"] >= 70]
-        medium = [s for s in scored if 40 <= s["confidence"] < 70]
-        low = [s for s in scored if s["confidence"] < 40]
-
-        if as_json:
-
-            def _to_dict(item):
-                return {
-                    "name": item["name"],
-                    "kind": item["kind"],
-                    "file": item["file"],
-                    "line": item["line"],
-                    "confidence": item["confidence"],
-                    "note": item["note"],
-                    "visibility": item["visibility"],
-                }
-
-            payload = {
-                "project_root": str(engine.project_root),
-                "total_candidates": total_candidates,
-                "filtered_structural": filtered_structural_count,
-                "high_confidence": [_to_dict(s) for s in high],
-                "medium_confidence": [_to_dict(s) for s in medium],
-                "low_confidence": [_to_dict(s) for s in low],
-            }
-            print(json_envelope("orphan", str(engine.project_root), payload))
-            return 0
-
-        # Text output
-        lines = ["## Dead Code Analysis\n"]
-        lines.append(
-            f"Total {total_candidates} candidates ({filtered_structural_count} structural elements filtered)"
-        )
-        if min_confidence > 0:
-            lines.append(
-                f"Confidence threshold: {min_confidence} (low-confidence items filtered)"
-            )
-        lines.append("")
-
-        _module_for_file = GraphAnalyzer._module_bucket_for_file
-
-        def _render_tier(title: str, emoji: str, items: list[dict], max_items: int):
-            if not items:
-                return []
-            tier_lines = [f"### {emoji} {title} — {len(items)}"]
-            # 按模块分组
-            by_module: dict[str, list[dict]] = {}
-            for item in items:
-                mod = _module_for_file(item["symbol"].file)
-                by_module.setdefault(mod, []).append(item)
-            tier_lines.append("")
-            for mod in sorted(by_module, key=lambda m: -len(by_module[m])):
-                mod_items = by_module[mod][
-                    : max(3, max_items // max(len(by_module), 1))
-                ]
-                tier_lines.append(f"**`{mod}/`** ({len(by_module[mod])})")
-                for item in mod_items:
-                    sym = item["symbol"]
-                    tier_lines.append(
-                        f"- `{sym.name}` ({sym.kind}) `{sym.file}:{sym.line}` — {item['confidence']}% | {item['note']}"
-                    )
-                if len(by_module[mod]) > len(mod_items):
-                    tier_lines.append(
-                        f"  ... {len(by_module[mod]) - len(mod_items)} more"
-                    )
-            tier_lines.append("")
-            return tier_lines
-
-        lines.extend(_render_tier("HIGH (review recommended)", "🔴", high, limit))
-        lines.extend(_render_tier("MEDIUM (verify needed)", "🟡", medium, limit))
-        lines.extend(_render_tier("LOW (likely active)", "🟢", low, limit))
-
-        # 如果过滤后无结果，给出建议
-        if not high and not medium and not low:
-            if min_confidence > 0:
-                lines.append(
-                    f"\n> Using `--min-confidence {min_confidence}` filter returned no results."
-                )
-                lines.append(
-                    f"> Try a lower threshold, e.g.: `--min-confidence {max(0, min_confidence - 20)}`"
-                )
-            else:
-                lines.append("\n> No dead code candidates found.")
-                lines.append(
-                    "> This may indicate good code quality, or analysis parameters need adjustment."
-                )
-        else:
-            if low:
-                lines.append(
-                    "> Using `--min-confidence 40` filter low-confidence items."
-                )
-            lines.append(
-                "> Do not delete solely based on this output. Verify with `refs` and business review. Use `--json` for structured output."
-            )
-            lines.append("")
-            lines.append("## Pre-deletion checklist\n")
-            lines.append(
-                "1. Verify each candidate with `refs --project <project> --symbol <name>` or `query-symbol` before deletion."
-            )
-            lines.append(
-                "2. Check for dynamic references: string-based calls, reflection, macro expansions, test fixtures, config-driven dispatch."
-            )
-            lines.append(
-                "3. Check project-specific rules about code ownership, generated code, or feature flags."
-            )
-            lines.append("4. Run the full test suite after deletion.")
-            lines.append(
-                "5. Never delete solely from `orphan` output; treat it as a starting point for investigation."
-            )
-        print("\n".join(lines))
-        for hint in orphan_hint(has_high_confidence_candidates=len(high) > 0):
-            print(hint, file=sys.stderr)
-        return 0
-    except Exception as exc:
-        print(f"[{CLI_NAME}] orphan failed: {exc}", file=sys.stderr)
-        return 1
 
 
 def run_check(

@@ -78,30 +78,6 @@ class TestCallChainHints(unittest.TestCase):
                 self.assertTrue(h.startswith("> "))
 
 
-class TestRefsHints(unittest.TestCase):
-    """refs 命令的运行时提示"""
-
-    def test_has_callers_suggests_call_chain(self) -> None:
-        from src.hints import refs_hint
-
-        hints = refs_hint(called_by_count=5)
-        self.assertTrue(any("call-chain" in h for h in hints))
-
-    def test_no_callers_suggests_orphan(self) -> None:
-        from src.hints import refs_hint
-
-        hints = refs_hint(called_by_count=0)
-        self.assertTrue(any("orphan" in h for h in hints))
-
-    def test_all_hints_start_with_arrow(self) -> None:
-        from src.hints import refs_hint
-
-        for count in (0, 1, 10):
-            hints = refs_hint(called_by_count=count)
-            for h in hints:
-                self.assertTrue(h.startswith("> "))
-
-
 class TestOverviewHints(unittest.TestCase):
     """overview 命令的运行时提示"""
 
@@ -245,49 +221,6 @@ class TestCheckHints(unittest.TestCase):
                 self.assertTrue(h.startswith("> "))
 
 
-class TestOrphanHints(unittest.TestCase):
-    """orphan 命令的运行时提示"""
-
-    def test_has_candidates_suggests_refs(self) -> None:
-        from src.hints import orphan_hint
-
-        hints = orphan_hint(has_high_confidence_candidates=True)
-        self.assertTrue(any("refs" in h for h in hints))
-
-    def test_no_candidates_no_refs(self) -> None:
-        from src.hints import orphan_hint
-
-        hints = orphan_hint(has_high_confidence_candidates=False)
-        self.assertFalse(any("refs" in h for h in hints))
-
-    def test_all_hints_start_with_arrow(self) -> None:
-        from src.hints import orphan_hint
-
-        for has_candidates in (True, False):
-            hints = orphan_hint(has_high_confidence_candidates=has_candidates)
-            for h in hints:
-                self.assertTrue(h.startswith("> "))
-
-
-class TestHotspotsHints(unittest.TestCase):
-    """hotspots 命令的运行时提示"""
-
-    def test_has_hotspots_suggests_file_detail_and_impact(self) -> None:
-        from src.hints import hotspots_hint
-
-        hints = hotspots_hint(has_hotspots=True)
-        self.assertTrue(any("file-detail" in h for h in hints))
-        self.assertTrue(any("impact" in h for h in hints))
-
-    def test_all_hints_start_with_arrow(self) -> None:
-        from src.hints import hotspots_hint
-
-        for has in (True, False):
-            hints = hotspots_hint(has_hotspots=has)
-            for h in hints:
-                self.assertTrue(h.startswith("> "))
-
-
 class TestQueryHints(unittest.TestCase):
     """query 命令的运行时提示"""
 
@@ -342,24 +275,6 @@ class TestRoutesHints(unittest.TestCase):
                 self.assertTrue(h.startswith("> "))
 
 
-class TestStateMapHints(unittest.TestCase):
-    """state-map 命令的运行时提示"""
-
-    def test_has_writers_suggests_refs(self) -> None:
-        from src.hints import state_map_hint
-
-        hints = state_map_hint(has_writers=True)
-        self.assertTrue(any("refs" in h for h in hints))
-
-    def test_all_hints_start_with_arrow(self) -> None:
-        from src.hints import state_map_hint
-
-        for has in (True, False):
-            hints = state_map_hint(has_writers=has)
-            for h in hints:
-                self.assertTrue(h.startswith("> "))
-
-
 class TestHintFormat(unittest.TestCase):
     """通用格式验证"""
 
@@ -367,24 +282,19 @@ class TestHintFormat(unittest.TestCase):
         from src.hints import (
             query_symbol_hint,
             call_chain_hint,
-            refs_hint,
             overview_hint,
             file_detail_hint,
             impact_hint,
             verify_hint,
             check_hint,
-            orphan_hint,
-            hotspots_hint,
             query_hint,
             search_hint,
             routes_hint,
-            state_map_hint,
         )
 
         all_funcs = [
             lambda: query_symbol_hint(match_count=1, has_file_filter=False),
             lambda: call_chain_hint(caller_count=15, callee_count=3),
-            lambda: refs_hint(called_by_count=0),
             lambda: overview_hint(
                 has_hotspots=True, has_reading_order=True, has_modules=True
             ),
@@ -392,12 +302,9 @@ class TestHintFormat(unittest.TestCase):
             lambda: impact_hint(risk_level="high", has_suggested_tests=True),
             lambda: verify_hint(status="failed", has_contract_risks=True),
             lambda: check_hint(has_errors=True),
-            lambda: orphan_hint(has_high_confidence_candidates=True),
-            lambda: hotspots_hint(has_hotspots=True),
             lambda: query_hint(file_match_count=10),
             lambda: search_hint(symbol_match_count=10),
             lambda: routes_hint(has_routes=True),
-            lambda: state_map_hint(has_writers=True),
         ]
 
         for fn in all_funcs:
@@ -413,7 +320,6 @@ class TestHintFormat(unittest.TestCase):
         from src.hints import (
             query_symbol_hint,
             call_chain_hint,
-            refs_hint,
             overview_hint,
             file_detail_hint,
             impact_hint,
@@ -424,7 +330,6 @@ class TestHintFormat(unittest.TestCase):
         cmd_hints = {
             "query-symbol": query_symbol_hint(match_count=1, has_file_filter=False),
             "call-chain": call_chain_hint(caller_count=15, callee_count=3),
-            "refs": refs_hint(called_by_count=5),
             "overview": overview_hint(
                 has_hotspots=True, has_reading_order=False, has_modules=False
             ),
