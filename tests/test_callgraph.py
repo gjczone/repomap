@@ -65,7 +65,7 @@ class MyClass:
         assert "helper" in v.info.classes["MyClass"].methods
         assert "do_work" in v.info.classes["MyClass"].methods
         call_names_with_class = [(c[0], c[1]) for c in v.info.calls]
-        assert ("self.helper", "MyClass") in call_names_with_class
+        assert ("self.helper", "MyClass.do_work") in call_names_with_class
 
     def test_cls_method_resolution(self):
         source = """\
@@ -81,7 +81,7 @@ class MyClass:
         v = _parse_py(source)
         assert "MyClass" in v.info.classes
         call_names_with_class = [(c[0], c[1]) for c in v.info.calls]
-        assert ("cls.helper", "MyClass") in call_names_with_class
+        assert ("cls.helper", "MyClass.create") in call_names_with_class
 
     def test_cross_file_import_resolution(self):
         with tempfile.TemporaryDirectory() as tmpdir:

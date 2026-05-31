@@ -541,21 +541,29 @@ class TreeSitterAdapter:
 
         # 检测异常内容模式（可能导致解析器崩溃）
         try:
-            # 检查是否包含可能导致解析器栈溢出的极端嵌套模式
-            content_str = content.decode("utf-8", errors="replace")
-            # 检测极端深度的括号嵌套（可能导致递归溢出）
-            max_nesting = 0
-            current_nesting = 0
-            for char in content_str:  # 检查全部内容
-                if char in "({[<":
-                    current_nesting += 1
-                    max_nesting = max(max_nesting, current_nesting)
-                elif char in ")}]>":
-                    current_nesting -= 1
-            # 如果嵌套深度超过 1000，可能触发解析器栈溢出
-            if max_nesting > 1000:
+            # 使用 bytes 级别计数快速评估嵌套深度，避免逐字符 Python 循环
+            # 仅扫描前 256KB 作为启发式检查，大文件只需判断是否需要跳过
+            scan_bytes = content[: 256 * 1024]
+            open_count = (
+                scan_bytes.count(b"(")
+                + scan_bytes.count(b"{")
+                + scan_bytes.count(b"[")
+                + scan_bytes.count(b"<")
+            )
+            close_count = (
+                scan_bytes.count(b")")
+                + scan_bytes.count(b"}")
+                + scan_bytes.count(b"]")
+                + scan_bytes.count(b">")
+            )
+            # 括号总数不平衡或过多时视为极端嵌套风险
+            if (
+                abs(open_count - close_count) > 100
+                or max(open_count, close_count) > 1000
+            ):
                 logger.warning(
-                    f"Extreme nesting detected ({max_nesting} levels), skipping file to prevent parser crash"
+                    f"Extreme nesting risk detected ({open_count} open, {close_count} close brackets in first 256KB), "
+                    f"skipping file to prevent parser crash"
                 )
                 return None
         except (UnicodeDecodeError, ValueError):
@@ -605,10 +613,12 @@ class TreeSitterAdapter:
                 elif "definition" in cap_name or "export" in cap_name:
                     def_nodes.append((node, cap_name))
 
-            total_matches = 0
+            names_processed = 0
+            matches_found = 0
             for name_node in name_nodes:
-                if total_matches >= 5000:
+                if names_processed >= 5000:
                     break
+                names_processed += 1
                 matching_defs = []
                 def_searched = 0
                 for def_node, def_cap in def_nodes:
@@ -617,8 +627,8 @@ class TreeSitterAdapter:
                     def_searched += 1
                     if self._within(name_node, def_node):
                         matching_defs.append((def_node, def_cap))
-                        total_matches += 1
-                        if total_matches >= 5000:
+                        matches_found += 1
+                        if matches_found >= 5000:
                             break
                 matching_defs.sort(
                     key=lambda item: (
@@ -1868,7 +1878,13 @@ class TreeSitterAdapter:
                     if child.type == "function_definition":
                         target_node = child
                         break
-            first_line = self._text(target_node).split("\n")[0]
+            # 仅提取首行，避免读取整个函数体再 split
+            node_bytes = getattr(target_node, "text", b"") or b""
+            newline_pos = node_bytes.find(b"\n")
+            first_line_bytes = (
+                node_bytes[:newline_pos] if newline_pos >= 0 else node_bytes[:500]
+            )
+            first_line = first_line_bytes.decode("utf-8", errors="replace")
             patterns = {
                 "python": r"(?:async\s+)?def\s+\w+\s*\([^)]*\)(?:\s*->\s*[^:]+)?",
                 "javascript": r"(?:async\s+)?(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)",

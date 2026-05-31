@@ -122,7 +122,7 @@ def _read_file_with_encoding_fallback(raw_bytes: bytes) -> tuple[bytes, str | No
 
     # 1. Try UTF-8 first
     try:
-        text = raw_bytes.decode("utf-8")
+        text = raw_bytes.decode("utf-8-sig")
         if _replacement_ratio(text) <= 0.05:
             return raw_bytes, None  # Clean UTF-8, no re-encoding needed
     except UnicodeDecodeError:
@@ -290,11 +290,12 @@ class RepoMapEngine:
             logger.info(f"Found {len(files_to_scan)} source files")
 
         # 一次性清理过期缓存（避免 _process_file 内 O(n²) 检查）
-        stale_before = [
-            k for k in list(self._cache) if not (self.project_root / k).exists()
-        ]
-        for k in stale_before:
-            del self._cache[k]
+        if self._cache:
+            stale_before = [
+                k for k in list(self._cache) if not (self.project_root / k).exists()
+            ]
+            for k in stale_before:
+                del self._cache[k]
         try:
             for f in files_to_scan:
                 # 超时熔断检查
@@ -968,7 +969,9 @@ class RepoMapEngine:
         """Detect module clusters from the file dependency graph."""
         from .ranking import detect_file_clusters, format_cluster_summary
 
-        clusters = detect_file_clusters(self.graph, project_root=str(self.project_root))
+        clusters = detect_file_clusters(
+            self.graph, project_root=str(self.project_root), resolver=self._resolver
+        )
         return format_cluster_summary(clusters, top_n=limit)
 
     def summary_symbols(

@@ -98,16 +98,14 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
         if call_name:
             # 根据函数名栈判断当前函数上下文
             if self._func_stack:
-                # 在函数内部，记录调用
-                self.info.calls.append(
-                    (
-                        call_name,
-                        ".".join(self._func_stack)
-                        if not self._current_class
-                        else self._current_class[-1],
-                        node.lineno,
-                    )
-                )
+                # 类方法内部：拼接类名.方法名；普通函数：拼接函数栈
+                if self._current_class and self._func_stack:
+                    caller = f"{self._current_class[-1]}.{self._func_stack[-1]}"
+                elif self._current_class:
+                    caller = self._current_class[-1]
+                else:
+                    caller = ".".join(self._func_stack)
+                self.info.calls.append((call_name, caller, node.lineno))
             else:
                 # 在模块级别，记录调用
                 self.info.calls.append((call_name, "", node.lineno))
@@ -220,7 +218,16 @@ def _walk_ts_node(
 
     if node.type == "import_statement":
         source_node = _find_child_by_type(node, "string")
-        source = _node_text(source_node).strip("\"'") if source_node else ""
+        raw_source = _node_text(source_node) if source_node else ""
+        # 仅剥离匹配的外层引号，strip 会剥除所有组合字符导致引号内内容损坏
+        if (
+            len(raw_source) >= 2
+            and raw_source[0] in "\"'"
+            and raw_source[-1] == raw_source[0]
+        ):
+            source = raw_source[1:-1]
+        else:
+            source = raw_source.strip("\"'")
         clause = _find_child_by_type(node, "import_clause")
         if clause:
             for child in clause.children:
@@ -487,6 +494,8 @@ def _walk_rust_node(
                         info.classes[impl_type].methods[fn_name] = (
                             child.start_point[0] + 1
                         )
+                    # 递归处理函数体内部以捕获方法调用
+                    _walk_rust_node(child, info, current_impl, depth + 1)
                 elif child.type == "declaration_list":
                     for decl_child in child.children:
                         if decl_child.type == "function_item":
@@ -496,7 +505,10 @@ def _walk_rust_node(
                                 info.classes[impl_type].methods[fn_name] = (
                                     decl_child.start_point[0] + 1
                                 )
-                _walk_rust_node(child, info, current_impl, depth + 1)
+                        # 递归处理 declaration_list 内的所有子节点以捕获调用
+                        _walk_rust_node(decl_child, info, current_impl, depth + 1)
+                else:
+                    _walk_rust_node(child, info, current_impl, depth + 1)
             current_impl[0] = old
             return
 
