@@ -15,6 +15,7 @@ from .. import (
     DEFAULT_OVERVIEW_MAX_CHARS,
     DEFAULT_QUERY_SYMBOL_MAX_CHARS,
     DEFAULT_VERIFY_MAX_CHARS,
+    DEFAULT_MAX_SOURCE_LINES,
 )
 
 
@@ -88,6 +89,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CALL_CHAIN_MAX_CHARS,
         help="Maximum text output size.",
     )
+    chain_parser.add_argument(
+        "--include-source",
+        action="store_true",
+        default=False,
+        help="Inline source code for each symbol in the call chain.",
+    )
+    chain_parser.add_argument(
+        "--max-source-lines",
+        type=int,
+        default=DEFAULT_MAX_SOURCE_LINES,
+        help="Max source lines per symbol (default 80).",
+    )
 
     # ── query: 统一查询入口（主题搜索 + 符号查询 + BM25 搜索 + 文件详情）──
     topic_query_parser = subparsers.add_parser(
@@ -128,6 +141,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     topic_query_parser.add_argument(
         "--top-k", type=int, default=20, help="Max results for --search (default 20)."
+    )
+    topic_query_parser.add_argument(
+        "--include-source",
+        action="store_true",
+        default=False,
+        help="Inline source code for each matched symbol.",
+    )
+    topic_query_parser.add_argument(
+        "--max-source-lines",
+        type=int,
+        default=DEFAULT_MAX_SOURCE_LINES,
+        help="Max source lines per symbol (default 80).",
     )
 
     # ── 新增: impact（文件级影响分析）──────────────────────────────────────────
@@ -437,6 +462,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.depth,
             args.max_chars,
             args.json,
+            include_source=getattr(args, "include_source", False),
+            max_source_lines=getattr(
+                args, "max_source_lines", DEFAULT_MAX_SOURCE_LINES
+            ),
         )
     if command == "query":
         # 符号查询模式
@@ -449,6 +478,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 DEFAULT_QUERY_SYMBOL_MAX_CHARS,
                 DEFAULT_LSP_TIMEOUT,
                 args.json,
+                include_source=getattr(args, "include_source", False),
+                max_source_lines=getattr(
+                    args, "max_source_lines", DEFAULT_MAX_SOURCE_LINES
+                ),
             )
         # BM25 搜索模式
         if getattr(args, "search", None):
@@ -488,6 +521,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.paths,
             args.exclude,
             getattr(args, "context_lines", 2),
+            include_source=getattr(args, "include_source", False),
+            max_source_lines=getattr(
+                args, "max_source_lines", DEFAULT_MAX_SOURCE_LINES
+            ),
         )
     if command == "impact":
         return run_impact(

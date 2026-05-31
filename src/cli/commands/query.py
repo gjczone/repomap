@@ -47,6 +47,8 @@ def run_query(
     paths: str | None,
     exclude: str | None,
     context_lines: int = 2,
+    include_source: bool = False,
+    max_source_lines: int = 80,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -240,7 +242,13 @@ def run_query(
                     }
                     for t in tests
                 ],
-                "symbols": _query_symbols_json(engine, top_matches, max_result_symbols),
+                "symbols": _query_symbols_json(
+                    engine,
+                    top_matches,
+                    max_result_symbols,
+                    include_source=include_source,
+                    max_source_lines=max_source_lines,
+                ),
             }
             print(json_envelope("query", str(engine.project_root), payload))
             return 0
@@ -420,6 +428,8 @@ def _query_symbols_json(
     engine: RepoMapEngine,
     matches: list[FileMatch],
     max_symbols: int,
+    include_source: bool = False,
+    max_source_lines: int = 80,
 ) -> list[dict[str, Any]]:
     """为 JSON 输出提取符号列表。"""
     result: list[dict[str, Any]] = []
@@ -441,6 +451,16 @@ def _query_symbols_json(
                 entry["endLine"] = sym_end
             if (sym_end - sym["line"]) > 100:
                 entry["chunkRange"] = f"L{sym['line']}-L{sym_end}"
+            if include_source and max_source_lines > 0 and m.path:
+                from ...ai import _read_symbol_source
+
+                entry["source"] = _read_symbol_source(
+                    str(engine.project_root),
+                    m.path,
+                    sym["line"],
+                    sym.get("end_line", sym["line"]),
+                    max_source_lines,
+                )
             result.append(entry)
     return result
 

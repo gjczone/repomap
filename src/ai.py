@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -38,6 +38,35 @@ def _truncate_output(output: str, max_chars: int) -> str:
         truncated
         + f"\n\n[output truncated: {truncated_size}/{original_size} chars ({ratio}%)]"
     )
+
+
+def _read_symbol_source(
+    project_root: "str | Path",
+    file_path: str,
+    line: int,
+    end_line: int = 0,
+    max_lines: int = 80,
+) -> str:
+    """Read source code for a symbol from its file."""
+    if max_lines <= 0:
+        return ""
+    if end_line <= line:
+        end_line = line + 5
+    try:
+        abs_path = Path(project_root) / file_path
+        text = abs_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    all_lines = text.splitlines()
+    start_idx = max(0, line - 1)
+    end_idx = min(len(all_lines), end_line)
+    lines = all_lines[start_idx:end_idx]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines.append(
+            f"# ... (truncated, showing first {max_lines} of {end_idx - start_idx} lines)"
+        )
+    return "\n".join(lines)
 
 
 def _get_hot_files(project_root: str, days: int = 30) -> set[str]:
