@@ -473,7 +473,7 @@ class RepoMapCliTests(unittest.TestCase):
 
         captured = {}
 
-        def fake_run_query_symbol(*args):
+        def fake_run_query_symbol(*args, **kwargs):
             captured["query-symbol"] = args
             return 0
 
@@ -1805,6 +1805,156 @@ class RepoMapCliTests(unittest.TestCase):
             self.assertEqual(code1, 0)
             self.assertEqual(code2, 0)
             self.assertEqual(scan_mock.call_count, 2)
+
+    def test_include_source_query_inlines_source_code(self) -> None:
+        """--include-source 应在 query 输出中添加源码片段。"""
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "auth.py",
+                'def login(user: str) -> bool:\n    """Authenticate user."""\n    return user == \'admin\'\n\n'
+                'def logout() -> None:\n    """Clear session."""\n    pass\n',
+            )
+
+            # Without --include-source, source should be absent
+            stdout_no_src = io.StringIO()
+            with redirect_stdout(stdout_no_src), redirect_stderr(io.StringIO()):
+                code_no = main(
+                    ["query", "--project", project_root, "--query", "login", "--json"]
+                )
+            self.assertIn(code_no, {0, 3})
+            payload_no = json.loads(stdout_no_src.getvalue())
+            symbols_no = payload_no["result"].get("symbols", [])
+            for sym in symbols_no:
+                self.assertNotIn(
+                    "source", sym, "source should not exist without --include-source"
+                )
+
+            # With --include-source, source should be present
+            stdout_with = io.StringIO()
+            with redirect_stdout(stdout_with), redirect_stderr(io.StringIO()):
+                code_with = main(
+                    [
+                        "query",
+                        "--project",
+                        project_root,
+                        "--query",
+                        "login",
+                        "--include-source",
+                        "--json",
+                    ]
+                )
+            self.assertIn(code_with, {0, 3})
+            payload_with = json.loads(stdout_with.getvalue())
+            symbols_with = payload_with["result"].get("symbols", [])
+            source_found = False
+            for sym in symbols_with:
+                if sym.get("source"):
+                    source_found = True
+                    break
+            self.assertTrue(
+                source_found, "source should be present with --include-source"
+            )
+
+    def test_include_source_query_symbol_inlines_source(self) -> None:
+        """--include-source 应在 query --symbol 输出中添加函数体。"""
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "auth.py",
+                'def login(user: str) -> bool:\n    """Authenticate user."""\n    return user == \'admin\'\n',
+            )
+
+            # With --include-source
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                code = main(
+                    [
+                        "query",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "login",
+                        "--include-source",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            exact = payload["result"].get("exact_matches", [])
+            self.assertTrue(len(exact) > 0, "should find login symbol")
+            source_found = any(m.get("source") for m in exact)
+            self.assertTrue(source_found, "source should be inlined for exact matches")
+
+            # Without --include-source
+            stdout2 = io.StringIO()
+            with redirect_stdout(stdout2), redirect_stderr(io.StringIO()):
+                code2 = main(
+                    ["query", "--project", project_root, "--symbol", "login", "--json"]
+                )
+            self.assertEqual(code2, 0)
+            payload2 = json.loads(stdout2.getvalue())
+            exact2 = payload2["result"].get("exact_matches", [])
+            for m in exact2:
+                self.assertNotIn(
+                    "source", m, "source should not exist without --include-source"
+                )
+
+    def test_include_source_call_chain_inlines_source(self) -> None:
+        """--include-source 应在 call-chain 输出中包含调用链源码。"""
+        from src.cli import main
+
+        with tempfile.TemporaryDirectory() as project_root:
+            write_file(
+                project_root,
+                "auth.py",
+                'def login(user: str) -> bool:\n    """Authenticate user."""\n    return user == \'admin\'\n\n'
+                "def validate(user: str) -> bool:\n    return login(user)\n",
+            )
+
+            # With --include-source
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                code = main(
+                    [
+                        "call-chain",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "login",
+                        "--include-source",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            sym = payload["result"].get("symbol", {})
+            if sym.get("source"):
+                self.assertIn("login", sym["source"])
+
+            # Without --include-source
+            stdout2 = io.StringIO()
+            with redirect_stdout(stdout2), redirect_stderr(io.StringIO()):
+                code2 = main(
+                    [
+                        "call-chain",
+                        "--project",
+                        project_root,
+                        "--symbol",
+                        "login",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(code2, 0)
+            payload2 = json.loads(stdout2.getvalue())
+            sym2 = payload2["result"].get("symbol", {})
+            self.assertNotIn(
+                "source", sym2, "source should not exist without --include-source"
+            )
 
 
 class DiagnosticWarningTests(unittest.TestCase):

@@ -147,6 +147,8 @@ def run_call_chain(
     depth: int = 3,
     max_chars: int = DEFAULT_CALL_CHAIN_MAX_CHARS,
     as_json: bool = True,
+    include_source: bool = False,
+    max_source_lines: int = 80,
 ) -> int:
     if depth > _CALL_CHAIN_MAX_DEPTH:
         print(
@@ -190,6 +192,41 @@ def run_call_chain(
                 ],
                 "references": references,
             }
+            if include_source and max_source_lines > 0:
+                from ...ai import _read_symbol_source
+
+                project_root_str = str(engine.project_root)
+                # Add source for the primary symbol
+                sym_dict: dict[str, Any] = payload["symbol"]  # type: ignore[assignment]
+                sym_dict["source"] = _read_symbol_source(
+                    project_root_str,
+                    selected.file,
+                    selected.line,
+                    selected.end_line,
+                    max_source_lines,
+                )
+                # Add source for callers
+                caller_dicts: list[dict[str, Any]] = payload["callers"]  # type: ignore[assignment]
+                for i, caller_item in enumerate(chain["callers"]):
+                    if i < len(caller_dicts):
+                        caller_dicts[i]["source"] = _read_symbol_source(
+                            project_root_str,
+                            caller_item.file,
+                            caller_item.line,
+                            caller_item.end_line,
+                            max_source_lines,
+                        )
+                # Add source for callees
+                callee_dicts: list[dict[str, Any]] = payload["callees"]  # type: ignore[assignment]
+                for i, callee_item in enumerate(chain["callees"]):
+                    if i < len(callee_dicts):
+                        callee_dicts[i]["source"] = _read_symbol_source(
+                            project_root_str,
+                            callee_item.file,
+                            callee_item.line,
+                            callee_item.end_line,
+                            max_source_lines,
+                        )
             print(json_envelope("call-chain", str(engine.project_root), payload))
             return 0
         if direction != "both":
@@ -233,6 +270,8 @@ def run_query_symbol(
     max_chars: int = DEFAULT_QUERY_SYMBOL_MAX_CHARS,
     lsp_timeout: float = DEFAULT_LSP_TIMEOUT,
     as_json: bool = True,
+    include_source: bool = False,
+    max_source_lines: int = 80,
 ) -> int:
     try:
         engine = _scan_engine(project, max_files)
@@ -270,6 +309,16 @@ def run_query_symbol(
                     d["return_type"] = item.return_type
                 if item.params:
                     d["params"] = item.params
+                if include_source and max_source_lines > 0:
+                    from ...ai import _read_symbol_source
+
+                    d["source"] = _read_symbol_source(
+                        str(engine.project_root),
+                        item.file,
+                        item.line,
+                        item.end_line,
+                        max_source_lines,
+                    )
                 return d
 
             payload = {
