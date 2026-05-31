@@ -27,36 +27,29 @@ logger = logging.getLogger("repomap.git_backend")
 
 
 def _format_git_timestamp(timestamp: int) -> str:
-    """将 Unix 时间戳格式化为与 git --format=%ad 默认格式一致的字符串。
-
-    例如: "Thu Jan  6 09:32:07 2022 -0500"
-    """
     dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    # 转换为本地时区以匹配 git 默认行为
     local_dt = dt.astimezone()
     return local_dt.strftime("%a %b %d %H:%M:%S %Y %z")
 
 
 _HAS_PYGIT2 = False
+_PYGIT2_ERRORS: tuple[type[Exception], ...] = ()
 try:
     import pygit2
 
     _HAS_PYGIT2 = True
+    _PYGIT2_ERRORS = (pygit2.GitError,)
 except ImportError:
     pygit2: Any = None  # type: ignore[no-redef]
+    _PYGIT2_ERRORS = ()
 
 
 def _validate_file_path(project_root: str, file_path: str) -> str | None:
-    """验证并规范化文件路径，防止路径遍历和参数注入。
-
-    返回规范化后的相对路径字符串，无效时返回 None。
-    """
     try:
         resolved = (Path(project_root) / file_path).resolve()
         root_resolved = Path(project_root).resolve()
-        # Python 3.9+ 推荐用法，避免混合分隔符导致的误判
         if not resolved.is_relative_to(root_resolved):
-            logger.warning(f"Path traversal attempt: {file_path}")
+            logger.warning("Path traversal attempt: %s", file_path)
             return None
         return str(resolved.relative_to(root_resolved))
     except (ValueError, OSError):
@@ -64,32 +57,31 @@ def _validate_file_path(project_root: str, file_path: str) -> str | None:
 
 
 def _validate_git_ref(ref: str) -> str | None:
-    """验证 git ref 格式，返回清理后的 ref 或 None（无效时）。"""
     import re
 
-    # 允许: HEAD, commit hash, branch name, tag, refs/...
-    # 禁止: 以 - 开头, 包含 shell 元字符
     if not ref or ref.startswith("-"):
         return None
-    # 基本格式检查: 允许字母数字、/、.、-、_、~、^、:、@、{、}
     if not re.match(r"^[a-zA-Z0-9/.\-_~^:@{}]+$", ref):
         return None
     return ref
 
 
-class SubprocessBackend:
-    """基于 subprocess 的 git 操作后端（原有实现）。"""
+# Subprocess 方法预期异常
+_SUBPROCESS_EXPECTED = (
+    FileNotFoundError,
+    subprocess.TimeoutExpired,
+    subprocess.SubprocessError,
+    OSError,
+)
 
+
+class SubprocessBackend:
     @staticmethod
     def _run_git(
         args: list[str], cwd: str, timeout: int = 10
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git"] + args,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout
         )
 
     @staticmethod
@@ -99,8 +91,11 @@ class SubprocessBackend:
                 ["rev-parse", "HEAD"], project_root, timeout=5
             )
             return r.stdout.strip() if r.returncode == 0 else None
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git rev-parse HEAD failed: %s", exc)
+            return None
         except Exception as exc:
-            logger.warning(f"git rev-parse HEAD failed: {exc}")
+            logger.error("git rev-parse HEAD unexpected error: %s", exc, exc_info=True)
             return None
 
     @staticmethod
@@ -110,8 +105,13 @@ class SubprocessBackend:
                 ["rev-parse", "--show-toplevel"], project_root, timeout=5
             )
             return r.stdout.strip() if r.returncode == 0 else None
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git rev-parse --show-toplevel failed: %s", exc)
+            return None
         except Exception as exc:
-            logger.warning(f"git rev-parse --show-toplevel failed: {exc}")
+            logger.error(
+                "git rev-parse --show-toplevel unexpected error: %s", exc, exc_info=True
+            )
             return None
 
     @staticmethod
@@ -125,10 +125,14 @@ class SubprocessBackend:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
             elif r.returncode == 128:
                 logger.warning(
-                    f"git diff failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
+                    "git diff failed (rc=%d): %s", r.returncode, r.stderr.strip()[:100]
                 )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git diff --name-only failed: %s", exc)
         except Exception as exc:
-            logger.warning(f"git diff --name-only failed: {exc}")
+            logger.error(
+                "git diff --name-only unexpected error: %s", exc, exc_info=True
+            )
         try:
             r = SubprocessBackend._run_git(
                 ["ls-files", "--others", "--exclude-standard"], project_root
@@ -137,10 +141,14 @@ class SubprocessBackend:
                 files.extend(l for l in r.stdout.strip().splitlines() if l)
             elif r.returncode == 128:
                 logger.warning(
-                    f"git ls-files failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
+                    "git ls-files failed (rc=%d): %s",
+                    r.returncode,
+                    r.stderr.strip()[:100],
                 )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git ls-files failed: %s", exc)
         except Exception as exc:
-            logger.warning(f"git ls-files failed: {exc}")
+            logger.error("git ls-files unexpected error: %s", exc, exc_info=True)
         return files
 
     @staticmethod
@@ -152,11 +160,16 @@ class SubprocessBackend:
             if r.returncode == 0:
                 return [l for l in r.stdout.strip().splitlines() if l]
             logger.warning(
-                f"git diff --diff-filter=D failed (rc={r.returncode}): {r.stderr.strip()[:100]}"
+                "git diff --diff-filter=D failed (rc=%d): %s",
+                r.returncode,
+                r.stderr.strip()[:100],
             )
             return []
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git deleted_files failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git deleted_files failed: {exc}")
+            logger.error("git deleted_files unexpected error: %s", exc, exc_info=True)
             return []
 
     @staticmethod
@@ -175,8 +188,13 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git diff --name-only failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git diff --name-only failed: {exc}")
+            logger.error(
+                "git diff --name-only unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -190,8 +208,13 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git diff --cached --name-only failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git diff --cached --name-only failed: {exc}")
+            logger.error(
+                "git diff --cached --name-only unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -203,8 +226,13 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git status --porcelain failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git status --porcelain failed: {exc}")
+            logger.error(
+                "git status --porcelain unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -221,16 +249,19 @@ class SubprocessBackend:
                 ],
                 project_root,
             )
-            # 校验 returncode：git 命令失败时返回空列表，与"无变更文件"区分
             if r.returncode != 0:
                 logger.debug(
-                    f"git log --name-only failed (rc={r.returncode}): "
-                    f"{r.stderr.strip()[:100]}"
+                    "git log --name-only failed (rc=%d): %s",
+                    r.returncode,
+                    r.stderr.strip()[:100],
                 )
                 return []
             return [l for l in r.stdout.strip().splitlines() if l]
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git log --name-only failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git log --name-only failed: {exc}")
+            logger.error("git log --name-only unexpected error: %s", exc, exc_info=True)
             return []
 
     @staticmethod
@@ -245,13 +276,17 @@ class SubprocessBackend:
                 if r.returncode == 0
                 else []
             )
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git diff --name-only --since failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git diff --name-only --since failed: {exc}")
+            logger.error(
+                "git diff --name-only --since unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
     def log_commits_grouped(project_root: str, since_days: int = 30) -> list[list[str]]:
-        """返回按 commit 分组的文件列表，用于共变分析。每个子列表是一个 commit 修改的文件。"""
         try:
             r = SubprocessBackend._run_git(
                 [
@@ -280,8 +315,13 @@ class SubprocessBackend:
             if current:
                 groups.append(current)
             return groups
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git log --name-only (grouped) failed: %s", exc)
+            return []
         except Exception as exc:
-            logger.warning(f"git log --name-only (grouped) failed: {exc}")
+            logger.error(
+                "git log --name-only (grouped) unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -302,8 +342,17 @@ class SubprocessBackend:
             output = r.stdout
             commit_hash = output.split()[0][:8] if output else "unknown"
             return {"commit": commit_hash}
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("git blame failed for %s:%d: %s", file_path, line, exc)
+            return None
         except Exception as exc:
-            logger.warning(f"git blame failed for {file_path}:{line}: {exc}")
+            logger.error(
+                "git blame unexpected error for %s:%d: %s",
+                file_path,
+                line,
+                exc,
+                exc_info=True,
+            )
             return None
 
     @staticmethod
@@ -326,7 +375,7 @@ class SubprocessBackend:
                 project_root,
                 timeout=10,
             )
-            commits = []
+            commits: list[dict[str, str]] = []
             if r.returncode == 0:
                 for line in r.stdout.strip().split("\n"):
                     if "|" in line:
@@ -341,8 +390,16 @@ class SubprocessBackend:
                                 }
                             )
             return commits
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("log_file_commits failed for %s: %s", file_path, exc)
+            return []
         except Exception as exc:
-            logger.warning(f"log_file_commits failed for {file_path}: {exc}")
+            logger.error(
+                "log_file_commits unexpected error for %s: %s",
+                file_path,
+                exc,
+                exc_info=True,
+            )
             return []
 
     @staticmethod
@@ -358,24 +415,29 @@ class SubprocessBackend:
                 args.extend(["--since", f"{since_days}.days.ago"])
             args.extend(["--", safe_path])
             r = SubprocessBackend._run_git(args, project_root, timeout=10)
-            authors = []
+            authors: list[str] = []
             if r.returncode == 0:
                 for line in r.stdout.strip().split("\n"):
                     parts = line.strip().split("\t", 1)
                     if len(parts) == 2:
                         authors.append(parts[1])
             return authors
+        except _SUBPROCESS_EXPECTED as exc:
+            logger.warning("file_authors failed for %s: %s", file_path, exc)
+            return []
         except Exception as exc:
-            logger.warning(f"file_authors failed for {file_path}: {exc}")
+            logger.error(
+                "file_authors unexpected error for %s: %s",
+                file_path,
+                exc,
+                exc_info=True,
+            )
             return []
 
 
 class Pygit2Backend:
-    """基于 pygit2（libgit2）的 git 操作后端，消除 fork 开销。"""
-
     @staticmethod
     def _validate_git_ref(ref: str) -> str | None:
-        """Backward-compatible alias for the module-level _validate_git_ref."""
         return _validate_git_ref(ref)
 
     @staticmethod
@@ -404,8 +466,13 @@ class Pygit2Backend:
             return None
         try:
             return str(repo.head.target)
-        except Exception:
-            logger.debug("pygit2 rev_parse_head failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 rev_parse_head failed: %s", exc)
+            return None
+        except Exception as exc:
+            logger.error(
+                "pygit2 rev_parse_head unexpected error: %s", exc, exc_info=True
+            )
             return None
 
     @staticmethod
@@ -416,8 +483,13 @@ class Pygit2Backend:
             repo = pygit2.discover_repository(project_root)
             if repo:
                 return str(Path(repo).parent)
-        except Exception:
-            logger.warning("pygit2 show_toplevel failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 show_toplevel failed: %s", exc)
+            return None
+        except Exception as exc:
+            logger.error(
+                "pygit2 show_toplevel unexpected error: %s", exc, exc_info=True
+            )
             return None
         return None
 
@@ -444,8 +516,13 @@ class Pygit2Backend:
                 if is_changed or is_new_wt or is_new_idx:
                     files.append(fp)
             return files
-        except Exception:
-            logger.warning("pygit2 changed_files failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 changed_files failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 changed_files unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -464,8 +541,13 @@ class Pygit2Backend:
                 if is_deleted:
                     files.append(fp)
             return files
-        except Exception:
-            logger.warning("pygit2 deleted_files failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 deleted_files failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 deleted_files unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -477,7 +559,6 @@ class Pygit2Backend:
             return []
         try:
             if since and repo.head.target:
-                # 验证 git ref 格式
                 validated = _validate_git_ref(
                     since.split("..")[0] if ".." in since else since
                 )
@@ -489,8 +570,13 @@ class Pygit2Backend:
             else:
                 diff = repo.diff_index_to_workdir()
             return list({p.new_file.path for p in diff.deltas if p.new_file.path})
-        except Exception:
-            logger.warning("pygit2 diff_name_only failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 diff_name_only failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 diff_name_only unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -501,8 +587,13 @@ class Pygit2Backend:
         try:
             diff = repo.diff_cached()
             return list({p.new_file.path for p in diff.deltas if p.new_file.path})
-        except Exception:
-            logger.warning("pygit2 diff_cached_name_only failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 diff_cached_name_only failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 diff_cached_name_only unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -535,7 +626,6 @@ class Pygit2Backend:
                 elif flags & pygit2.GIT_STATUS_INDEX_DELETED:
                     x = "D"
                 elif flags & pygit2.GIT_STATUS_INDEX_RENAMED:
-                    # pygit2 repo.status() 不提供旧路径，只能输出 R NEW_PATH
                     x = "R"
                 elif flags & pygit2.GIT_STATUS_INDEX_TYPECHANGE:
                     x = "T"
@@ -545,7 +635,6 @@ class Pygit2Backend:
                 elif flags & pygit2.GIT_STATUS_WT_DELETED:
                     y = "D"
                 elif flags & pygit2.GIT_STATUS_WT_RENAMED:
-                    # pygit2 repo.status() 不提供旧路径，只能输出 R NEW_PATH
                     y = "R"
                 elif flags & pygit2.GIT_STATUS_WT_TYPECHANGE:
                     y = "T"
@@ -555,8 +644,13 @@ class Pygit2Backend:
                     x, y = "U", "U"
                 lines.append(f"{x}{y} {fp}")
             return lines
-        except Exception:
-            logger.warning("pygit2 status_porcelain failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 status_porcelain failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 status_porcelain unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -592,13 +686,17 @@ class Pygit2Backend:
                     if d.new_file.path:
                         files.add(d.new_file.path)
             return list(files)
-        except Exception:
-            logger.warning("pygit2 log_name_only failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 log_name_only failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 log_name_only unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
     def log_commits_grouped(project_root: str, since_days: int = 30) -> list[list[str]]:
-        """返回按 commit 分组的文件列表，用于共变分析。"""
         repo = Pygit2Backend._repo(project_root)
         if repo is None:
             return []
@@ -625,8 +723,13 @@ class Pygit2Backend:
                 if commit_files:
                     groups.append(commit_files)
             return groups
-        except Exception:
-            logger.warning("pygit2 log_commits_grouped failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 log_commits_grouped failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 log_commits_grouped unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
@@ -657,15 +760,19 @@ class Pygit2Backend:
                     if d.new_file.path:
                         files.add(d.new_file.path)
             return list(files)
-        except Exception:
-            logger.warning("pygit2 diff_name_only_since failed", exc_info=True)
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 diff_name_only_since failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error(
+                "pygit2 diff_name_only_since unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
     def blame_line(
         project_root: str, file_path: str, line: int
     ) -> dict[str, str] | None:
-        # 路径验证：与 SubprocessBackend 保持一致的安全检查
         safe_path = _validate_file_path(project_root, file_path)
         if safe_path is None:
             return None
@@ -679,18 +786,18 @@ class Pygit2Backend:
                 end = start + hunk.lines_in_hunk - 1
                 if start <= line <= end:
                     return {"commit": str(hunk.final_commit_id)[:8]}
-        except Exception:
-            logger.debug(
-                "pygit2 blame_line failed for %s:%d", file_path, line, exc_info=True
+        except _PYGIT2_ERRORS as exc:
+            logger.warning(
+                "pygit2 blame_line failed for %s:%d: %s", file_path, line, exc
             )
-            pass
+        except Exception as exc:
+            logger.error("pygit2 blame_line unexpected error: %s", exc, exc_info=True)
         return None
 
     @staticmethod
     def log_file_commits(
         project_root: str, file_path: str, limit: int = 20
     ) -> list[dict[str, str]]:
-        # 路径验证：与 SubprocessBackend 保持一致的安全检查
         safe_path = _validate_file_path(project_root, file_path)
         if safe_path is None:
             return []
@@ -747,15 +854,19 @@ class Pygit2Backend:
                             continue
                         break
             return commits
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 log_file_commits failed for %s: %s", file_path, exc)
+            return []
         except Exception as exc:
-            logger.warning(f"log_file_commits failed for {file_path}: {exc}")
+            logger.error(
+                "pygit2 log_file_commits unexpected error: %s", exc, exc_info=True
+            )
             return []
 
     @staticmethod
     def file_authors(
         project_root: str, file_path: str, since_days: int = 365
     ) -> list[str]:
-        # 路径验证：与 SubprocessBackend 保持一致的安全检查
         safe_path = _validate_file_path(project_root, file_path)
         if safe_path is None:
             return []
@@ -763,11 +874,10 @@ class Pygit2Backend:
         if repo is None:
             return []
         try:
-            from datetime import datetime, timezone, timedelta
+            from datetime import datetime as _dt, timezone as _tz, timedelta
 
-            cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+            cutoff = _dt.now(_tz.utc) - timedelta(days=since_days)
             cutoff_timestamp = int(cutoff.timestamp())
-
             author_counts: dict[str, int] = {}
             max_commits = 5000
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
@@ -777,7 +887,6 @@ class Pygit2Backend:
                         "file_authors: hit max_commits=%d limit", max_commits
                     )
                     break
-                # 超过时间限制则停止遍历
                 if commit.commit_time < cutoff_timestamp:
                     break
                 touched = False
@@ -792,20 +901,22 @@ class Pygit2Backend:
                 if touched:
                     name = commit.author.name
                     author_counts[name] = author_counts.get(name, 0) + 1
-            sorted_authors = sorted(
-                author_counts.items(), key=lambda x: x[1], reverse=True
-            )
-            return [a[0] for a in sorted_authors]
+            return [
+                a[0]
+                for a in sorted(author_counts.items(), key=lambda x: x[1], reverse=True)
+            ]
+        except _PYGIT2_ERRORS as exc:
+            logger.warning("pygit2 file_authors failed for %s: %s", file_path, exc)
+            return []
         except Exception as exc:
-            logger.warning(f"file_authors failed for {file_path}: {exc}")
+            logger.error("pygit2 file_authors unexpected error: %s", exc, exc_info=True)
             return []
 
 
 class GitBackend:
-    """Git 操作统一入口 — 优先 pygit2，fallback 到 subprocess。"""
-
     def __init__(self, project_root: str) -> None:
         self.project_root = project_root
+        self._last_error: str | None = None
         if _HAS_PYGIT2:
             try:
                 repo = Pygit2Backend._repo(project_root)
@@ -820,63 +931,118 @@ class GitBackend:
                     "pygit2 backend init failed, falling back to subprocess",
                     exc_info=True,
                 )
-                pass
         self._backend = SubprocessBackend
         logger.debug("Using subprocess backend for %s", project_root)
-
-    def changed_files(self) -> list[str]:
-        try:
-            return self._backend.changed_files(self.project_root)
-        except Exception:
-            logger.warning(
-                "pygit2 changed_files failed, falling back to subprocess",
-                exc_info=True,
-            )
-            return SubprocessBackend.changed_files(self.project_root)
 
     @property
     def backend_name(self) -> str:
         return "pygit2" if self._backend is Pygit2Backend else "subprocess"
 
     def rev_parse_head(self) -> str | None:
-        return self._backend.rev_parse_head(self.project_root)
+        try:
+            return self._backend.rev_parse_head(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend rev_parse_head failed: %s", exc)
+            return None
 
     def show_toplevel(self) -> str | None:
-        return self._backend.show_toplevel(self.project_root)
+        try:
+            return self._backend.show_toplevel(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend show_toplevel failed: %s", exc)
+            return None
+
+    def changed_files(self) -> list[str]:
+        try:
+            return self._backend.changed_files(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error(
+                "pygit2 changed_files failed, falling back to subprocess", exc_info=True
+            )
+            return SubprocessBackend.changed_files(self.project_root)
+
+    def deleted_files(self) -> list[str]:
+        try:
+            return self._backend.deleted_files(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend deleted_files failed: %s", exc)
+            return []
 
     def diff_name_only(self, since: str | None = None) -> list[str]:
         try:
             return self._backend.diff_name_only(self.project_root, since)
-        except Exception:
-            logger.warning(
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error(
                 "pygit2 diff_name_only failed, falling back to subprocess",
                 exc_info=True,
             )
             return SubprocessBackend.diff_name_only(self.project_root, since)
 
-    def deleted_files(self) -> list[str]:
-        return self._backend.deleted_files(self.project_root)
-
     def diff_cached_name_only(self) -> list[str]:
-        return self._backend.diff_cached_name_only(self.project_root)
+        try:
+            return self._backend.diff_cached_name_only(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend diff_cached_name_only failed: %s", exc)
+            return []
 
     def status_porcelain(self) -> list[str]:
-        return self._backend.status_porcelain(self.project_root)
+        try:
+            return self._backend.status_porcelain(self.project_root)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend status_porcelain failed: %s", exc)
+            return []
 
     def log_name_only(self, since: str = "90.days.ago") -> list[str]:
-        return self._backend.log_name_only(self.project_root, since)
-
-    def diff_name_only_since(self, days: int = 30) -> list[str]:
-        return self._backend.diff_name_only_since(self.project_root, days)
-
-    def blame_line(self, file_path: str, line: int) -> dict[str, str] | None:
-        return self._backend.blame_line(self.project_root, file_path, line)
-
-    def log_file_commits(self, file_path: str, limit: int = 20) -> list[dict[str, str]]:
-        return self._backend.log_file_commits(self.project_root, file_path, limit)
-
-    def file_authors(self, file_path: str) -> list[str]:
-        return self._backend.file_authors(self.project_root, file_path)
+        try:
+            return self._backend.log_name_only(self.project_root, since)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend log_name_only failed: %s", exc)
+            return []
 
     def log_commits_grouped(self, since_days: int = 30) -> list[list[str]]:
-        return self._backend.log_commits_grouped(self.project_root, since_days)
+        try:
+            return self._backend.log_commits_grouped(self.project_root, since_days)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend log_commits_grouped failed: %s", exc)
+            return []
+
+    def diff_name_only_since(self, days: int = 30) -> list[str]:
+        try:
+            return self._backend.diff_name_only_since(self.project_root, days)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend diff_name_only_since failed: %s", exc)
+            return []
+
+    def blame_line(self, file_path: str, line: int) -> dict[str, str] | None:
+        try:
+            return self._backend.blame_line(self.project_root, file_path, line)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend blame_line failed: %s", exc)
+            return None
+
+    def log_file_commits(self, file_path: str, limit: int = 20) -> list[dict[str, str]]:
+        try:
+            return self._backend.log_file_commits(self.project_root, file_path, limit)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend log_file_commits failed: %s", exc)
+            return []
+
+    def file_authors(self, file_path: str) -> list[str]:
+        try:
+            return self._backend.file_authors(self.project_root, file_path)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("GitBackend file_authors failed: %s", exc)
+            return []
