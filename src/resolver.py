@@ -323,6 +323,9 @@ class ImportResolver:
                         package_name, sub_data["exports"], package_root
                     )
             except ValueError:
+                logger.debug(
+                    "Failed to parse %s: invalid JSON", sub_package_path, exc_info=True
+                )
                 continue
             except Exception as e:
                 logger.warning(f"Failed to parse {sub_package_path}: {e}")
@@ -833,8 +836,8 @@ class ImportResolver:
         visit_key = (file, export_name)
         if visit_key in visited:
             return set()
-        next_visited = set(visited)
-        next_visited.add(visit_key)
+        # 可变集合配合 add/remove 回溯模式，避免每次递归复制集合
+        visited.add(visit_key)
 
         bindings = self.graph.file_exports.get(file, [])
         resolved_ids: set[str] = set()
@@ -848,7 +851,7 @@ class ImportResolver:
                             file=target_file,
                             export_name=export_name,
                             depth=depth + 1,
-                            visited=next_visited,
+                            visited=visited,
                         )
                     )
                 continue
@@ -872,12 +875,15 @@ class ImportResolver:
                             file=target_file,
                             export_name=binding.source_name,
                             depth=depth + 1,
-                            visited=next_visited,
+                            visited=visited,
                         )
                     )
 
         if resolved_ids:
             return resolved_ids
+
+        # 回溯：移除当前递归层级添加的访问标记
+        visited.discard(visit_key)
 
         return {
             symbol_id
@@ -979,11 +985,18 @@ class ImportResolver:
 
     def _discover_import_config_paths(self) -> list[Path]:
         found: list[Path] = []
+        max_configs = 200
         for root, dir_names, file_names in os.walk(self.project_root):
             rel_root = Path(root).relative_to(self.project_root)
             depth = len(rel_root.parts) if rel_root != Path(".") else 0
             if depth >= 30:
                 dir_names.clear()
+            if len(found) >= max_configs:
+                logger.warning(
+                    "Import config discovery reached %d file limit, stopping traversal",
+                    max_configs,
+                )
+                break
             dir_names[:] = [
                 n
                 for n in dir_names

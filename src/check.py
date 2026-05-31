@@ -599,10 +599,18 @@ class DiagnosticRunner:
         parsed = self._parse_pyright_output(output)
         if parsed is None:
             logger.warning("pyright output parse failed, returning empty diagnostics")
-            errors: list[DiagnosticIssue] = []
-            warnings: list[DiagnosticIssue] = []
-        else:
-            errors, warnings = parsed
+            return DiagnosticResult(
+                tool=tool,
+                command=" ".join(cmd[:5]) + "..." if len(cmd) > 5 else " ".join(cmd),
+                exit_code=exit_code,
+                duration_ms=duration,
+                errors=[],
+                warnings=[],
+                truncated=True,
+                skip_reason="parse_error",
+                raw_excerpt=output.split("\n")[:30],
+            )
+        errors, warnings = parsed
 
         return DiagnosticResult(
             tool=tool,

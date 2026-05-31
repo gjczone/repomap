@@ -1132,7 +1132,13 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
         if len(changed_files) > 30:
             lines.append(f"- ... {len(changed_files) - 30} more")
     else:
-        lines.append("- No changed files detected in the project.")
+        status = result.get("status", "")
+        if status == "warning":
+            lines.append(
+                "- No git changes detected — verify cannot assess risk without changes."
+            )
+        else:
+            lines.append("- No changed files detected in the project.")
     lines.append("")
 
     risk = result.get("risk", {})
@@ -1238,9 +1244,9 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
     if breaking_changes:
         lines.append("## Breaking Changes\n")
         for bc in breaking_changes[:10]:
-            risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}
+            risk_icon = {"HIGH": "[HIGH]", "MEDIUM": "[MEDIUM]", "LOW": "[LOW]"}
             lines.append(
-                f"- {risk_icon.get(bc.get('risk', 'LOW'), '⚪')} "
+                f"- {risk_icon.get(bc.get('risk', 'LOW'), '[LOW]')} "
                 f"**{bc['name']}** `({bc.get('kind', '')})` in `{bc['file']}` "
                 f"[{bc.get('risk', 'LOW')}]"
             )

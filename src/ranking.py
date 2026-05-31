@@ -758,7 +758,10 @@ class EdgeBuilder:
 
 
 def detect_file_clusters(
-    graph: "RepoGraph", max_iterations: int = 20, project_root: str | None = None
+    graph: "RepoGraph",
+    max_iterations: int = 20,
+    project_root: str | None = None,
+    resolver: Any | None = None,
 ) -> dict[str, int]:
     """Detect module clusters from the file import/call graph using label propagation.
 
@@ -783,9 +786,11 @@ def detect_file_clusters(
     from pathlib import Path
     from .resolver import ImportResolver
 
-    root = Path(project_root) if project_root else Path(".")
-    resolver = ImportResolver(root, graph)
-    resolver.build_indices()
+    # 复用外部传入的 resolver，避免重复创建实例和重复执行文件系统 I/O
+    if resolver is None:
+        root = Path(project_root) if project_root else Path(".")
+        resolver = ImportResolver(root, graph)
+        resolver.build_indices()
 
     for f in files:
         # Import edges — 解析 import 模块名到文件路径
@@ -839,15 +844,17 @@ def detect_file_clusters(
     dir_labels: dict[str, int] = {}
     next_dir_id = 0
     labels: dict[str, int] = {}
-    for f in files:
+    # 排序文件列表后再分配标签，确保标签分配与遍历顺序无关
+    for f in sorted(files):
         # Use top-2 directory levels as initial label
-        # Normalize ./file.txt to file.txt for correct classification
-        normalized = f.lstrip("./")
-        parts = PurePosixPath(normalized).parts
-        if len(parts) >= 2:
-            d = f"{parts[0]}/{parts[1]}"
-        elif len(parts) == 1 and parts[0] != f:
-            d = parts[0]
+        # 统一使用 PurePosixPath 解析路径组件，不依赖 lstrip 和字符串比较
+        parts = PurePosixPath(f).parts
+        # 去除可能的前导 "." 或 ".." 伪组件
+        real_parts = [p for p in parts if p not in (".", "..")]
+        if len(real_parts) >= 2:
+            d = f"{real_parts[0]}/{real_parts[1]}"
+        elif len(real_parts) == 1:
+            d = real_parts[0]
         else:
             d = "__root__"
         if d not in dir_labels:

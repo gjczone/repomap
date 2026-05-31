@@ -401,13 +401,14 @@ def extract_types_for_file(
 
     extract_rt, extract_params = extractors
 
-    symbol_line_map: dict[int, Any] = {}
+    # 同行可能有多个符号，按行号分组存储列表，匹配时按列号最近匹配
+    symbol_by_line: dict[int, list[Any]] = {}
     for sym_id in sym_ids:
         sym = all_symbols.get(sym_id)
         if sym and sym.kind in ("function", "method", "lambda"):
-            symbol_line_map[sym.line] = sym
+            symbol_by_line.setdefault(sym.line, []).append(sym)
 
-    if not symbol_line_map:
+    if not symbol_by_line:
         return 0
 
     enriched = [0]
@@ -423,7 +424,14 @@ def extract_types_for_file(
             return
         if node.type in func_types:
             node_start_line = node.start_point[0] + 1
-            sym = symbol_line_map.get(node_start_line)
+            # 在同行符号列表中按列号最近匹配
+            line_syms = symbol_by_line.get(node_start_line)
+            if line_syms:
+                # 找列号最接近的符号
+                best_sym = min(
+                    line_syms, key=lambda s: abs(s.col - node.start_point[1])
+                )
+                sym = best_sym
             if sym:
                 has_return = bool(sym.return_type)
                 has_params = bool(sym.params)
