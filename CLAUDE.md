@@ -55,7 +55,26 @@ uv run repomap --help
 uv run python -m unittest discover -s tests -v
 
 # Build binary
-uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py
+uv run --with pyinstaller python -m PyInstaller \
+  --onefile --name repomap src/cli/__main__.py \
+  --hidden-import tree_sitter \
+  --hidden-import tree_sitter_python \
+  --hidden-import tree_sitter_javascript \
+  --hidden-import tree_sitter_typescript \
+  --hidden-import tree_sitter_go \
+  --hidden-import tree_sitter_rust \
+  --hidden-import tree_sitter_html \
+  --hidden-import tree_sitter_css \
+  --hidden-import tree_sitter_json \
+  --hidden-import tree_sitter_c \
+  --hidden-import tree_sitter_java \
+  --hidden-import tree_sitter_kotlin \
+  --hidden-import tree_sitter_swift \
+  --hidden-import tree_sitter_cpp \
+  --hidden-import tree_sitter_c_sharp \
+  --hidden-import tree_sitter_php \
+  --hidden-import tree_sitter_ruby \
+  --hidden-import repomap_lsp
 ```
 
 ## Architecture
@@ -330,8 +349,26 @@ uv run python -m unittest discover -s tests -v
 uv run --with pytest python -m pytest tests/test_git_backend.py tests/test_callgraph.py tests/test_type_inference.py -q
 
 # 2. Rebuild binary
-uv run --with pyinstaller python -m PyInstaller --onefile --name repomap src/cli/__main__.py
-
+uv run --with pyinstaller python -m PyInstaller \
+  --onefile --name repomap src/cli/__main__.py \
+  --hidden-import tree_sitter \
+  --hidden-import tree_sitter_python \
+  --hidden-import tree_sitter_javascript \
+  --hidden-import tree_sitter_typescript \
+  --hidden-import tree_sitter_go \
+  --hidden-import tree_sitter_rust \
+  --hidden-import tree_sitter_html \
+  --hidden-import tree_sitter_css \
+  --hidden-import tree_sitter_json \
+  --hidden-import tree_sitter_c \
+  --hidden-import tree_sitter_java \
+  --hidden-import tree_sitter_kotlin \
+  --hidden-import tree_sitter_swift \
+  --hidden-import tree_sitter_cpp \
+  --hidden-import tree_sitter_c_sharp \
+  --hidden-import tree_sitter_php \
+  --hidden-import tree_sitter_ruby \
+  --hidden-import repomap_lsp
 # 2.5. Verify binary version matches pyproject.toml (MANDATORY)
 #    - If version is wrong, npm will publish a broken package that cannot be overwritten
 #    EXPECTED=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
