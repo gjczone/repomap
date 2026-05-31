@@ -27,7 +27,6 @@ from ..handlers import (
     _normalize_project_relative_paths,
     json_envelope,
 )
-from ...ranking import GraphAnalyzer
 from ...toolkit import diff_project, scan_project
 from ...topic import (
     find_related_tests,
