@@ -548,13 +548,11 @@ class TreeSitterAdapter:
                 scan_bytes.count(b"(")
                 + scan_bytes.count(b"{")
                 + scan_bytes.count(b"[")
-                + scan_bytes.count(b"<")
             )
             close_count = (
                 scan_bytes.count(b")")
                 + scan_bytes.count(b"}")
                 + scan_bytes.count(b"]")
-                + scan_bytes.count(b">")
             )
             # 括号总数不平衡或过多时视为极端嵌套风险
             if (

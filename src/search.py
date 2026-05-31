@@ -24,7 +24,7 @@ try:
 
     _HAS_BM25 = True
 except ImportError:
-    BM25Okapi = None
+    BM25Okapi: Any = None
 
 
 def _create_chunk_symbol_id(sym_id: str, start_line: int, end_line: int) -> str:
