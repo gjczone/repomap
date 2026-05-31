@@ -1668,34 +1668,40 @@ class TreeSitterAdapter:
                 else "fastapi"
             )
         elif lang in ("javascript", "typescript", "tsx"):
-            # NestJS decorator-based routes (checked before Express since
-            # NestJS queries capture no _router and Express check would reject)
-            nestjs_methods = {
-                "get",
-                "post",
-                "put",
-                "delete",
-                "patch",
-                "head",
-                "options",
-                "all",
-            }
-            if method in nestjs_methods:
-                path = self._string_literal_value(path_node)
-                if not path:
-                    return None
-                handler_name = self._route_handler_name(handler_node)
-                if not handler_name:
-                    return None
-                return HttpRoute(
-                    method=method.upper(),
-                    path=path,
-                    handler=handler_name,
-                    file=file,
-                    line=path_node.start_point[0] + 1,
-                    framework="nestjs",
-                )
-            router = self._text(self._first_capture(captures, "_router"))
+            # NestJS decorator-based routes: only apply when captured from
+            # http_route_nestjs query (no _router capture). Express routes
+            # have _router (app/router/api/server/routes) and are handled below.
+            router_capture = self._first_capture(captures, "_router")
+            if router_capture is None:
+                nestjs_methods = {
+                    "get",
+                    "post",
+                    "put",
+                    "delete",
+                    "patch",
+                    "head",
+                    "options",
+                    "all",
+                }
+                if method in nestjs_methods:
+                    path = self._string_literal_value(path_node)
+                    if not path:
+                        return None
+                    handler_name = self._route_handler_name(handler_node)
+                    if not handler_name:
+                        return None
+                    return HttpRoute(
+                        method=method.upper(),
+                        path=path,
+                        handler=handler_name,
+                        file=file,
+                        line=path_node.start_point[0] + 1,
+                        framework="nestjs",
+                    )
+            # Express route handling
+            if router_capture is None:
+                return None
+            router = self._text(router_capture)
             if router not in {
                 "app",
                 "router",
