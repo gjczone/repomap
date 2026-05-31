@@ -70,6 +70,24 @@ jobs:
          - name: Run mypy (blocking)
            run: uv run mypy src/ --ignore-missing-imports --no-error-summary
 
+   pyright:
+      needs: lint
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - uses: actions/checkout@v6
+           with:
+              persist-credentials: false
+
+         - name: Install uv
+           run: pip install uv
+
+         - name: Install dependencies
+           run: uv sync --all-extras --group dev
+
+         - name: Run pyright
+           run: uv run pyright .
+
    security:
       needs: lint
       runs-on: ubuntu-latest
