@@ -244,7 +244,7 @@ class RepoMapEngine:
 
         self.graph = RepoGraph()
         self._cache = {}
-        self._source_bytes: dict[str, bytes] = {}
+        self._source_bytes = {}
         self.scan_stats = ScanStats()
         self.routes = []
         self._search_index = None  # invalidate search index on re-scan

@@ -43,7 +43,7 @@ try:
 
     _HAS_PYGIT2 = True
 except ImportError:
-    pygit2: Any = None
+    pygit2: Any = None  # type: ignore[no-redef]
 
 
 def _validate_file_path(project_root: str, file_path: str) -> str | None:
