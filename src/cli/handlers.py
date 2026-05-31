@@ -90,7 +90,6 @@ def json_envelope(command: str, project: str, result: dict, status: str = "ok") 
             "status": status,
             "result": result,
         },
-        ensure_ascii=False,
         indent=2,
     )
 
@@ -503,18 +502,25 @@ def _save_session_engine(
             suffix=".tmp",
             delete=False,
         ) as handle:
-            json_dump(payload, handle, ensure_ascii=False, indent=2)
+            json_dump(payload, handle, indent=2)
             tmp_path = Path(handle.name)
-        tmp_path.replace(cache_path)
+        try:
+            tmp_path.replace(cache_path)
+        except OSError:
+            # 跨文件系统 move，fallback 到 shutil.move
+            import shutil as _shutil
+
+            _shutil.move(str(tmp_path), str(cache_path))
         return True
     except Exception:
         logger.warning("Failed to save session cache", exc_info=True)
+        return False
+    finally:
         try:
             if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink()
         except OSError:
             pass
-        return False
 
 
 def _select_symbol_match(
@@ -775,7 +781,7 @@ IMPACT_SESSION_FILENAME = "session.json"
 IMPACT_SESSION_SCHEMA_VERSION = "1.0"
 _IMPACT_SESSION_MAX_AFFECTED = 50
 _IMPACT_SESSION_MAX_TARGETS = 200
-_IMPACT_SESSION_MAX_BYTES = 1024 * 1024
+_IMPACT_SESSION_MAX_BYTES = 50 * 1024 * 1024  # 50MB
 
 
 def _project_local_session_path(project_root: str | Path) -> Path:
@@ -843,7 +849,7 @@ def save_impact_session(
             suffix=".tmp",
             delete=False,
         ) as handle:
-            handle.write(json_dumps(payload, ensure_ascii=False, indent=2))
+            handle.write(json_dumps(payload, indent=2))
             tmp_path = Path(handle.name)
         tmp_path.replace(session_path)
     except Exception:

@@ -426,13 +426,14 @@ def extract_types_for_file(
             node_start_line = node.start_point[0] + 1
             # 在同行符号列表中按列号最近匹配
             line_syms = symbol_by_line.get(node_start_line)
+            sym = None
             if line_syms:
                 # 找列号最接近的符号
                 best_sym = min(
                     line_syms, key=lambda s: abs(s.col - node.start_point[1])
                 )
                 sym = best_sym
-            if sym:
+            if sym is not None:
                 has_return = bool(sym.return_type)
                 has_params = bool(sym.params)
                 # 只要有一个字段未填充就尝试提取，不要求两个都为空

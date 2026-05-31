@@ -555,14 +555,21 @@ class StdioLspClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        started: list[threading.Thread] = []
         try:
             self._reader = threading.Thread(target=self._read_loop, daemon=True)
             self._reader.start()
+            started.append(self._reader)
             self._stderr_reader = threading.Thread(
                 target=self._drain_stderr, daemon=True
             )
             self._stderr_reader.start()
+            started.append(self._stderr_reader)
         except Exception:
+            for t in started:
+                if t.is_alive():
+                    # signal stop and wait briefly for daemon thread to exit
+                    self._stop_event.set()
             self.process.kill()
             self.process.wait()
             raise
@@ -570,6 +577,7 @@ class StdioLspClient:
     def _read_loop(self) -> None:
         if self.process is None or self.process.stdout is None:
             return
+        consecutive_errors = 0
         while not self._stop_event.is_set():
             try:
                 fd = self.process.stdout.fileno()
@@ -583,10 +591,18 @@ class StdioLspClient:
             except Exception as exc:
                 if self._stop_event.is_set():
                     return  # close() 触发的异常，正常退出
+                consecutive_errors += 1
+                if consecutive_errors >= 10:
+                    logger.error(
+                        "LSP reader thread exiting after %d consecutive errors",
+                        consecutive_errors,
+                    )
+                    return
                 logger.warning(
-                    "LSP message read error: %s (reader thread continues)", exc
+                    "LSP message read error (%d/10): %s", consecutive_errors, exc
                 )
                 continue
+            consecutive_errors = 0  # reset on successful read or non-error path
             if message is _STREAM_EOF:
                 return  # 流关闭，正常退出
             if message is _MESSAGE_SKIPPED:

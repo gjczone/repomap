@@ -716,7 +716,9 @@ class EdgeBuilder:
                     target_ids
                 )
                 for target_id in sorted(target_ids):
-                    import_targets_by_file[file].add(self.graph.symbols[target_id].file)
+                    sym = self.graph.symbols.get(target_id)
+                    if sym is not None:
+                        import_targets_by_file[file].add(sym.file)
                     for source_id in src_ids:
                         self._add_edge(
                             source_id, target_id, self.IMPORT_WEIGHT, "import"

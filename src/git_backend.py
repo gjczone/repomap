@@ -43,7 +43,7 @@ try:
 
     _HAS_PYGIT2 = True
 except ImportError:
-    pygit2 = None  # type: ignore[assignment]
+    pygit2: Any = None  # type: ignore[no-redef]
 
 
 def _validate_file_path(project_root: str, file_path: str) -> str | None:
@@ -71,8 +71,8 @@ def _validate_git_ref(ref: str) -> str | None:
     # 禁止: 以 - 开头, 包含 shell 元字符
     if not ref or ref.startswith("-"):
         return None
-    # 基本格式检查: 只允许字母数字、/、.、-、_、~、^、:
-    if not re.match(r"^[a-zA-Z0-9/.\-_~^:]+$", ref):
+    # 基本格式检查: 允许字母数字、/、.、-、_、~、^、:、@、{、}
+    if not re.match(r"^[a-zA-Z0-9/.\-_~^:@{}]+$", ref):
         return None
     return ref
 

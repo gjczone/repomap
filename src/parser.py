@@ -545,16 +545,10 @@ class TreeSitterAdapter:
             # 仅扫描前 256KB 作为启发式检查，大文件只需判断是否需要跳过
             scan_bytes = content[: 256 * 1024]
             open_count = (
-                scan_bytes.count(b"(")
-                + scan_bytes.count(b"{")
-                + scan_bytes.count(b"[")
-                + scan_bytes.count(b"<")
+                scan_bytes.count(b"(") + scan_bytes.count(b"{") + scan_bytes.count(b"[")
             )
             close_count = (
-                scan_bytes.count(b")")
-                + scan_bytes.count(b"}")
-                + scan_bytes.count(b"]")
-                + scan_bytes.count(b">")
+                scan_bytes.count(b")") + scan_bytes.count(b"}") + scan_bytes.count(b"]")
             )
             # 括号总数不平衡或过多时视为极端嵌套风险
             if (

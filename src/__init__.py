@@ -12,21 +12,21 @@ logger = logging.getLogger("repomap")
 try:
     import orjson as _orjson
 
-    def json_dumps(obj: Any, **kwargs: Any) -> str:
+    def json_dumps(obj: Any, *, indent: int | None = None) -> str:
         option = 0
-        if kwargs.get("indent") is not None:
+        if indent is not None:
             option |= _orjson.OPT_INDENT_2
-        # orjson 默认就是 UTF-8 输出，ensure_ascii=False 无需额外选项
+        # orjson 默认就是 UTF-8 输出（无 ensure_ascii 参数）
         # 注意：不要设置 OPT_NON_STR_KEYS，它会允许非字符串 key，产生非法 JSON
         if not option:
             return _orjson.dumps(obj).decode("utf-8")
         return _orjson.dumps(obj, option=option).decode("utf-8")
 
-    def json_loads(s: str | bytes, **kwargs: Any) -> Any:
+    def json_loads(s: str | bytes) -> Any:
         return _orjson.loads(s)
 
-    def json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
-        fp.write(json_dumps(obj, **kwargs))
+    def json_dump(obj: Any, fp: Any, *, indent: int | None = None) -> None:
+        fp.write(json_dumps(obj, indent=indent))
 
     def json_load(fp: Any) -> Any:
         return json_loads(fp.read())
@@ -34,14 +34,14 @@ try:
 except ImportError:
     import json as _json_mod
 
-    def json_dumps(obj: Any, **kwargs: Any) -> str:
-        return _json_mod.dumps(obj, **kwargs)
+    def json_dumps(obj: Any, *, indent: int | None = None) -> str:
+        return _json_mod.dumps(obj, indent=indent)
 
-    def json_loads(s: str | bytes, **kwargs: Any) -> Any:
-        return _json_mod.loads(s, **kwargs)
+    def json_loads(s: str | bytes) -> Any:
+        return _json_mod.loads(s)
 
-    def json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
-        return _json_mod.dump(obj, fp, **kwargs)
+    def json_dump(obj: Any, fp: Any, *, indent: int | None = None) -> None:
+        return _json_mod.dump(obj, fp, indent=indent)
 
     def json_load(fp: Any) -> Any:
         return _json_mod.load(fp)

@@ -150,7 +150,7 @@ def save_cache(project_path: str, symbols: list[Symbol], edges: list[Edge]) -> P
             delete=False,
         ) as f:
             temp_path = f.name
-            json_dump(asdict(cache), f, indent=2, ensure_ascii=False)
+            json_dump(asdict(cache), f, indent=2)
         # 原子替换（Windows 和 Linux 都支持）
         os.replace(temp_path, cache_file)
     except Exception:
@@ -319,7 +319,7 @@ def save_incremental_cache(project_path: str, engine: RepoMapEngine) -> Path:
             delete=False,
         ) as f:
             temp_path = f.name
-            json_dump(_inc_cache_to_dict(cache), f, indent=2, ensure_ascii=False)
+            json_dump(_inc_cache_to_dict(cache), f, indent=2)
         os.replace(temp_path, cache_path)
     except Exception:
         if temp_path is not None and os.path.exists(temp_path):
