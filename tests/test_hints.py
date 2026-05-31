@@ -397,6 +397,5 @@ class TestHintFormat(unittest.TestCase):
         self.assertEqual(
             set(),
             unknown,
-            f"Hint 引用了不存在的命令: {unknown}。"
-            f"有效命令: {sorted(valid_commands)}",
+            f"Hint 引用了不存在的命令: {unknown}。有效命令: {sorted(valid_commands)}",
         )

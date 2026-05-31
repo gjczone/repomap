@@ -86,8 +86,9 @@ class RepoMapCliTests(unittest.TestCase):
                             "src.cli.commands.verify._verify_lsp_payload",
                             fake_lsp_payload,
                         ):
-                            with redirect_stdout(stdout), redirect_stderr(
-                                io.StringIO()
+                            with (
+                                redirect_stdout(stdout),
+                                redirect_stderr(io.StringIO()),
                             ):
                                 exit_code = main(
                                     ["verify", "--project", project_root, "--json"]

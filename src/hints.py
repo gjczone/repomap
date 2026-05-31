@@ -73,8 +73,7 @@ def overview_hint(
         )
     if not hints:
         hints.append(
-            "> Next: `repomap query --file <file> --project .`"
-            " to inspect a file"
+            "> Next: `repomap query --file <file> --project .` to inspect a file"
         )
     return hints[:3]
 
