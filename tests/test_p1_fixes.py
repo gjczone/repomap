@@ -172,5 +172,46 @@ class TestP1_11_BundlerConfigsRemoved(unittest.TestCase):
         self.assertFalse(hasattr(resolver, "BUNDLER_CONFIGS"))
 
 
+class TestP1_12_QueryMatchedLinesRemoved(unittest.TestCase):
+    """P1-12: query --query 输出中 Matched Lines 区域应移除，减少 token 消耗。
+
+    Issue #148: Matched Lines 输出源代码片段，消耗 ~40% token 但 LLM
+    已从 Core Files/Key Symbols 表格获取足够信息。需要源码时 LLM 会
+    使用 query --file 或 read 工具。
+    """
+
+    def test_render_query_report_has_no_matched_lines(self) -> None:
+        """render_query_report 输出不应包含 'Matched Lines' 标题。"""
+        from src.ai import render_query_report
+        from src.core import RepoMapEngine
+        from src.topic import FileMatch
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            engine = RepoMapEngine(tmpdir)
+            fm = FileMatch(
+                path="src/core.py",
+                role="core",
+                score=95.0,
+                reasons=["keyword match"],
+            )
+            report = render_query_report(
+                engine=engine,
+                query="test",
+                file_matches=[fm],
+                tests=[],
+                max_files=10,
+                max_symbols=10,
+                max_chars=12000,
+                context_lines=2,
+            )
+            self.assertNotIn(
+                "Matched Lines",
+                report,
+                "query 文本输出不应包含 'Matched Lines' 区域（源代码片段由 LLM 按需获取）",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

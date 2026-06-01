@@ -895,22 +895,6 @@ def render_query_report(
             symbols_shown += 1
     lines.append("")
 
-    # 匹配代码行（含上下文）
-    if file_matches and context_lines > 0:
-        lines.append("## Matched Lines\n")
-        for m in file_matches[: min(len(file_matches), 3)]:
-            blocks = _build_matched_blocks(engine, m.path, query, context_lines)
-            if blocks:
-                if len(file_matches[:3]) > 1:
-                    lines.append(f"### `{m.path}`\n")
-                for block in blocks[:5]:
-                    lines.append(_format_matched_block(block))
-                    lines.append("")
-                if len(blocks) > 5:
-                    lines.append(
-                        f"... {len(blocks) - 5} more match(es) in `{m.path}`\n"
-                    )
-
     # Related Commands
     if file_matches:
         top_file = file_matches[0].path
@@ -1414,73 +1398,6 @@ def _test_commands_for_files(tests: list[TestMatch]) -> list[str]:
             else:
                 commands.append(f"# run tests in {t.test_file}")
     return commands[:10]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 文本匹配格式化（Serena 风格）
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-def _build_matched_blocks(
-    engine: "RepoMapEngine", file_path: str, query: str, context: int = 2
-) -> list[dict[str, Any]]:
-    """在文件中搜索关键词，返回带上下文的匹配块。"""
-    try:
-        abs_path = engine.project_root / file_path
-        content = abs_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    lines = content.splitlines()
-    last_line = len(lines) - 1
-    matched_indices: list[int] = []
-    query_lower = query.lower()
-    for i, line in enumerate(lines):
-        if query_lower in line.lower():
-            matched_indices.append(i)
-    if not matched_indices:
-        return []
-    # 合并相邻匹配
-    blocks: list[dict[str, Any]] = []
-    current_block: dict[str, Any] | None = None
-    for idx in matched_indices:
-        if current_block is None or idx > current_block["end"] + context + 1:
-            if current_block:
-                blocks.append(current_block)
-            start = max(0, idx - context)
-            end = min(last_line, idx + context)
-            current_block = {"start": start, "end": end, "matches": [idx]}
-        else:
-            end = min(last_line, idx + context)
-            current_block["end"] = end
-            current_block["matches"].append(idx)
-    if current_block:
-        blocks.append(current_block)
-    # 转换为格式化块
-    result: list[dict[str, Any]] = []
-    for block in blocks:
-        block_lines: list[dict[str, Any]] = []
-        for i in range(block["start"], block["end"] + 1):
-            block_lines.append(
-                {
-                    "num": i + 1,
-                    "text": lines[i],
-                    "match": i in block["matches"],
-                }
-            )
-        result.append({"first_line": block["start"] + 1, "lines": block_lines})
-    return result
-
-
-def _format_matched_block(block: dict[str, Any]) -> str:
-    """将匹配块格式化为 Serena 风格文本。"""
-    out: list[str] = []
-    for ln in block["lines"]:
-        if ln["match"]:
-            prefix = f"  > {ln['num']:4d}"
-        else:
-            prefix = f" ... {ln['num']:4d}"
-        out.append(f"{prefix} | {ln['text']}")
-    return "\n".join(out)
 
 
 def render_affected_report(
