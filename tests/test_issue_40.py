@@ -17,39 +17,13 @@ import unittest
 class TestP1_3_CallgraphOsErrorLogging(unittest.TestCase):
     """P1-3: callgraph.py 文件读取 OSError 不应完全静默。"""
 
-    def test_python_callgraph_oserror_has_logger(self) -> None:
+    def test_build_callgraph_modules_oserror_has_logger(self) -> None:
         import src.callgraph
 
-        source = inspect.getsource(src.callgraph.analyze_python_callgraph)
+        source = inspect.getsource(src.callgraph._build_callgraph_modules)
         self.assertIn("OSError", source)
-        # 修复后 except OSError 块应包含 logger 调用
-        self.assertTrue(
-            "logger" in source.split("except OSError")[1].split("continue")[0]
-            if "except OSError" in source
-            else True,
-            "analyze_python_callgraph 的 except OSError 应有日志",
-        )
-
-    def test_ts_callgraph_oserror_has_logger(self) -> None:
-        import src.callgraph
-
-        source = inspect.getsource(src.callgraph.analyze_ts_callgraph)
-        if "except OSError" in source:
-            self.assertIn("logger", source)
-
-    def test_go_callgraph_oserror_has_logger(self) -> None:
-        import src.callgraph
-
-        source = inspect.getsource(src.callgraph.analyze_go_callgraph)
-        if "except OSError" in source:
-            self.assertIn("logger", source)
-
-    def test_rust_callgraph_oserror_has_logger(self) -> None:
-        import src.callgraph
-
-        source = inspect.getsource(src.callgraph.analyze_rust_callgraph)
-        if "except OSError" in source:
-            self.assertIn("logger", source)
+        self.assertIn("logger", source,
+            "_build_callgraph_modules OSError 处理应有日志调用")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
