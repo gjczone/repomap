@@ -35,27 +35,6 @@ from ..lsp import DEFAULT_LSP_TIMEOUT
 CLI_NAME = "repomap"
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = PACKAGE_ROOT.parent
-PYINSTALLER_BINDINGS = [
-    "tree_sitter",
-    "tree_sitter_python",
-    "tree_sitter_javascript",
-    "tree_sitter_typescript",
-    "tree_sitter_go",
-    "tree_sitter_rust",
-    "tree_sitter_html",
-    "tree_sitter_css",
-    "tree_sitter_json",
-    "tree_sitter_c",
-    "tree_sitter_java",
-    "tree_sitter_kotlin",
-    "tree_sitter_swift",
-    "tree_sitter_cpp",
-    "tree_sitter_c_sharp",
-    "tree_sitter_php",
-    "tree_sitter_ruby",
-    "repomap_lsp",
-]
 
 _SCAN_CACHE: dict[tuple, tuple] = {}
 _SCAN_CACHE_MAX_SIZE = 16
@@ -118,8 +97,9 @@ def _resolve_project(project: str | None = None) -> str:
         git_root = git.show_toplevel()
         if git_root:
             return git_root
-    except (OSError, ValueError, ImportError, RuntimeError) as exc:
-        logger.warning("git detection failed: %s", exc)
+    except ImportError as exc:
+        logger.error("GitBackend import failed — check installation: %s", exc)
+    except (OSError, ValueError, RuntimeError):
         pass
 
     # 3. 检测父目录是否是 git 仓库

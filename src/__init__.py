@@ -94,35 +94,6 @@ DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES = 8
 DEFAULT_MAX_SOURCE_LINES = 80
 
 
-def get_project_size_tier(file_count: int) -> str:
-    """按源文件数返回项目规模分级: small / medium / large。"""
-    if file_count < 500:
-        return "small"
-    if file_count < 5000:
-        return "medium"
-    return "large"
-
-
-def get_adaptive_max_source_lines(tier: str) -> int:
-    """按项目规模返回每符号源码段上限行数。"""
-    _source_lines = {"small": 40, "medium": 60, "large": 80}
-    return _source_lines.get(tier, DEFAULT_MAX_SOURCE_LINES)
-
-
-def get_adaptive_max_chars(tier: str, default_max: int) -> int:
-    """按项目规模返回输出上限字符数。
-
-    Args:
-        tier: 项目规模 (small/medium/large)
-        default_max: 传入的默认值（作为基准参考）
-
-    Returns:
-        缩放后的上限
-    """
-    _max_chars = {"small": 15000, "medium": 25000, "large": 35000}
-    return _max_chars.get(tier, default_max)
-
-
 # 低信号符号类型——这些类型在 PageRank/权重计算中降权处理
 # 统一定义在此处，ranking.py 和 topic.py 共享同一来源，防止不同步
 LOW_SIGNAL_KINDS = frozenset(

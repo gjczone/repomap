@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger("repomap.search")
+
+if TYPE_CHECKING:
+    from . import Symbol
 
 _HAS_BM25 = False
 try:
@@ -32,7 +35,7 @@ def _create_chunk_symbol_id(sym_id: str, start_line: int, end_line: int) -> str:
     return f"{sym_id}#chunk:L{start_line}-L{end_line}"
 
 
-def _symbol_is_large(sym: Any, threshold: int = 100) -> bool:
+def _symbol_is_large(sym: Symbol, threshold: int = 100) -> bool:
     """Check if a symbol's line range exceeds *threshold* lines."""
     end = max(sym.end_line, sym.line)
     return (end - sym.line) > threshold
@@ -47,7 +50,7 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
-def _symbol_to_document(sym: Any) -> list[str]:
+def _symbol_to_document(sym: Symbol) -> list[str]:
     parts = []
     name = sym.name
     for sub in re.findall(r"[\w_][\w\d_]*", name):
@@ -75,7 +78,7 @@ def _symbol_to_document(sym: Any) -> list[str]:
 class SymbolSearchIndex:
     """BM25 符号搜索索引，在 scan 后按需构建。"""
 
-    def __init__(self, symbols: dict[str, Any]) -> None:
+    def __init__(self, symbols: dict[str, Symbol]) -> None:
         self._symbol_ids: list[str] = []
         self._documents: list[list[str]] = []
         self._bm25: Any | None = None

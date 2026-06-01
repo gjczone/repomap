@@ -23,7 +23,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .ai import (
     render_call_chain_report,
@@ -41,6 +41,9 @@ from . import (
     Symbol,
 )
 
+if TYPE_CHECKING:
+    from . import IncrementalCache
+    from .search import SymbolSearchIndex
 # ── 日志：统一写 stderr，绝不污染 CLI stdout ────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -202,7 +205,7 @@ class RepoMapEngine:
         self._analyzer = GraphAnalyzer(self.graph)
         self.routes: list = []
         self._gitignore: GitignoreParser | None = None
-        self._search_index: Any | None = None
+        self._search_index: SymbolSearchIndex | None = None
         self._source_bytes: dict[str, bytes] = {}
         self._inc_cache_loaded: bool = False
 
@@ -389,7 +392,7 @@ class RepoMapEngine:
 
     # ── 增量扫描辅助 ─────────────────────────────────────────────────────────
 
-    def _load_incremental_cache_if_valid(self) -> Any | None:
+    def _load_incremental_cache_if_valid(self) -> IncrementalCache | None:
         """加载增量缓存并校验有效性（项目路径 + git HEAD 匹配）。"""
         try:
             from .toolkit import _project_root_cache_key, load_incremental_cache
@@ -431,15 +434,13 @@ class RepoMapEngine:
         """从增量缓存还原文件解析结果，跳过 tree-sitter 解析。"""
         full = self.project_root / file_path
         try:
-            if not full.exists():
-                return False
-            actual_mtime = full.stat().st_mtime
+            stat_result = full.stat()
+            actual_mtime = stat_result.st_mtime
             if not _mtime_matches(actual_mtime, entry.mtime):
                 return False
             # 同时验证文件大小，防止内容替换后 mtime 不变的场景
             if hasattr(entry, "size") and entry.size is not None:
-                actual_size = full.stat().st_size
-                if actual_size != entry.size:
+                if stat_result.st_size != entry.size:
                     return False
         except OSError:
             return False
@@ -465,7 +466,10 @@ class RepoMapEngine:
                 )
                 self.graph.symbols[sym.id] = sym
                 self.graph.file_symbols[file_path].append(sym.id)
-            except (KeyError, TypeError):
+            except (KeyError, TypeError) as exc:
+                logger.debug(
+                    "Skipping malformed symbol entry in %s: %s", file_path, exc
+                )
                 continue
 
         # 还原 imports

@@ -938,6 +938,11 @@ class GitBackend:
     def backend_name(self) -> str:
         return "pygit2" if self._backend is Pygit2Backend else "subprocess"
 
+    @property
+    def last_error(self) -> str | None:
+        """返回最近一次 git 操作的错误信息，供调用方检查。"""
+        return self._last_error
+
     def rev_parse_head(self) -> str | None:
         try:
             return self._backend.rev_parse_head(self.project_root)

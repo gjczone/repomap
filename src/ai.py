@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .core import RepoMapEngine
 
-from .topic import FileMatch, TestMatch, classify_file_role, get_co_change_neighbors
+from .topic import (
+    FileMatch,
+    TestMatch,
+    classify_file_role,
+    get_co_change_neighbors,
+    co_change_load_failed,
+)
 
 logger = logging.getLogger("repomap")
 
@@ -622,7 +628,8 @@ def render_overview_report(
         )
         if co_change_lines:
             lines.extend(co_change_lines)
-
+        if co_change_load_failed():
+            lines.append("> ⚠ co-change analysis unavailable (git error)\n")
     return _truncate_output("\n".join(lines), max_chars)
 
 

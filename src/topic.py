@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from . import LOW_SIGNAL_KINDS, signal_weight_for_symbol
 
 logger = logging.getLogger("repomap")
+_co_change_load_failed: bool = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -632,6 +633,8 @@ def _load_co_change_scores(
         commit_groups = git.log_commits_grouped(since_days=since_days)
     except Exception:
         logger.warning("Failed to load co-change scores from git", exc_info=True)
+        global _co_change_load_failed
+        _co_change_load_failed = True
         return dict(scores)
 
     for commit_files in commit_groups:
@@ -642,6 +645,11 @@ def _load_co_change_scores(
                     scores[(a, b)] += 1
 
     return dict(scores)
+
+
+def co_change_load_failed() -> bool:
+    """检查 co-change 分析是否因 git 错误而失败。"""
+    return _co_change_load_failed
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

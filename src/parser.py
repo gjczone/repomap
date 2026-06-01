@@ -705,7 +705,7 @@ class TreeSitterAdapter:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
         symbols_by_id: dict[str, Symbol] = {}
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type not in {"function_expression", "arrow_function"}:
                 continue
             if not self._is_exported_anonymous_expression(node):
@@ -762,7 +762,7 @@ class TreeSitterAdapter:
         if lang not in ("javascript", "typescript", "tsx"):
             return []
         symbols_by_id: dict[str, Symbol] = {}
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type != "pair":
                 continue
             value_node = node.child_by_field_name("value")
@@ -811,7 +811,7 @@ class TreeSitterAdapter:
             return []
 
         anonymous_symbols: dict[str, Symbol] = {}
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type not in {"arrow_function", "function_expression"}:
                 continue
             if self._has_named_owner(
@@ -996,7 +996,7 @@ class TreeSitterAdapter:
     def _extract_html_symbols(self, tree: Any, file: str) -> list[Symbol]:
         symbols_by_id: dict[str, Symbol] = {}
         seen_names: dict[tuple[str, int], int] = {}
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type != "element":
                 continue
             start_tag = self._first_child_of_type(node, "start_tag")
@@ -1041,7 +1041,7 @@ class TreeSitterAdapter:
             "tag_name",
             "nesting_selector",
         }
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type not in selector_types:
                 continue
             raw_name = self._text(node).strip()
@@ -1078,7 +1078,7 @@ class TreeSitterAdapter:
     def _extract_json_symbols(self, tree: Any, file: str) -> list[Symbol]:
         symbols_by_id: dict[str, Symbol] = {}
         seen_names: dict[tuple[str, int], int] = {}
-        for node in self._walk_tree(tree.root_node):
+        for node in self._walk_tree(tree.root_node, file_path=file):
             if node.type != "pair":
                 continue
             key_node = node.child_by_field_name("key")
@@ -1542,7 +1542,9 @@ class TreeSitterAdapter:
             return node.text.decode("utf-8", errors="replace")
         return None
 
-    def _walk_tree(self, root: Any, max_nodes: int = 500_000) -> list[Any]:
+    def _walk_tree(
+        self, root: Any, max_nodes: int = 500_000, file_path: str = ""
+    ) -> list[Any]:
         """前序 DFS 遍历 AST 节点，限制最大节点数防止 OOM。"""
         nodes = [root]
         result: list[Any] = []
@@ -1550,6 +1552,12 @@ class TreeSitterAdapter:
             current = nodes.pop()
             result.append(current)
             nodes.extend(reversed(current.children))
+        if len(result) >= max_nodes:
+            logger.warning(
+                "Truncated AST walk at %d nodes for %s",
+                max_nodes,
+                file_path or "<unknown>",
+            )
         return result
 
     def extract_calls(self, tree: Any, lang: str) -> list[tuple[str, int, str]]:

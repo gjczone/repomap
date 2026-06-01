@@ -18,9 +18,9 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, overload
 
-from . import json_loads
+from . import Symbol, json_loads
 
 logger = logging.getLogger("repomap")
 
@@ -278,8 +278,22 @@ class DiagnosticRunner:
 
         return int(time.time() * 1000)
 
-    def _run_command(self, cmd: list[str], tool_name: str) -> tuple[int, str, int]:
-        """运行命令并返回 (exit_code, stdout, duration_ms)"""
+    @overload
+    def _run_command(
+        self, cmd: list[str], tool_name: str, *, merge_output: Literal[True] = ...
+    ) -> tuple[int, str, int]: ...
+    @overload
+    def _run_command(
+        self, cmd: list[str], tool_name: str, *, merge_output: Literal[False]
+    ) -> tuple[int, str, str, int]: ...
+    def _run_command(
+        self, cmd: list[str], tool_name: str, merge_output: bool = True
+    ) -> tuple[int, str, int] | tuple[int, str, str, int]:
+        """运行命令并返回 (exit_code, output, duration_ms).
+
+        When merge_output=False, returns (exit_code, stdout, stderr, duration_ms)
+        so structured-output tools can parse stdout without stderr contamination.
+        """
         start = self._now_ms()
         process = None
         try:
@@ -292,6 +306,15 @@ class DiagnosticRunner:
             )
             stdout, stderr = process.communicate(timeout=120)
             duration = self._now_ms() - start
+            if not merge_output:
+                max_bytes = 10 * 1024 * 1024
+                s_out = stdout.encode("utf-8", errors="replace")
+                if len(s_out) > max_bytes:
+                    stdout = s_out[:max_bytes].decode("utf-8", errors="replace")
+                s_err = stderr.encode("utf-8", errors="replace")
+                if len(s_err) > max_bytes:
+                    stderr = s_err[:max_bytes].decode("utf-8", errors="replace")
+                return process.returncode, stdout, stderr, duration
             output = stdout + stderr
             # Truncate to 10MB
             max_bytes = 10 * 1024 * 1024
@@ -416,8 +439,10 @@ class DiagnosticRunner:
                 "json",
             ]
 
-        exit_code, output, duration = self._run_command(cmd, tool)
-        errors, warnings = self._parse_eslint_output(output)
+        exit_code, stdout, stderr, duration = self._run_command(
+            cmd, tool, merge_output=False
+        )
+        errors, warnings = self._parse_eslint_output(stdout)
 
         return DiagnosticResult(
             tool=tool,
@@ -427,7 +452,7 @@ class DiagnosticRunner:
             errors=errors[: self.max_items],
             warnings=warnings[: self.max_items],
             truncated=len(errors) > self.max_items or len(warnings) > self.max_items,
-            raw_excerpt=output.split("\n")[:20],
+            raw_excerpt=(stdout + stderr).split("\n")[:20],
         )
 
     def _parse_eslint_output(
@@ -470,8 +495,9 @@ class DiagnosticRunner:
                         errors.append(issue)
                     elif severity == "warning":
                         warnings.append(issue)
-        except ValueError:
-            logger.warning("Failed to parse ESLint output as JSON")
+        except ValueError as exc:
+            logger.warning("Failed to parse eslint JSON output: %s", exc)
+            logger.debug("Raw eslint output: %s", output[:500])
 
         return errors, warnings
 
@@ -497,8 +523,10 @@ class DiagnosticRunner:
         )
 
         cmd = ["cargo", "check", "--message-format", "json"]
-        exit_code, output, duration = self._run_command(cmd, tool)
-        errors, warnings = self._parse_cargo_output(output)
+        exit_code, stdout, stderr, duration = self._run_command(
+            cmd, tool, merge_output=False
+        )
+        errors, warnings = self._parse_cargo_output(stdout)
 
         # 显示完成提示
         print(f"[{tool}] Completed in {duration}ms", file=sys.stderr)
@@ -511,7 +539,7 @@ class DiagnosticRunner:
             errors=errors[: self.max_items],
             warnings=warnings[: self.max_items],
             truncated=len(errors) > self.max_items or len(warnings) > self.max_items,
-            raw_excerpt=output.split("\n")[:30],
+            raw_excerpt=(stdout + stderr).split("\n")[:30],
         )
 
     def _parse_cargo_output(
@@ -566,7 +594,8 @@ class DiagnosticRunner:
                     errors.append(issue)
                 else:
                     warnings.append(issue)
-            except ValueError:
+            except ValueError as exc:
+                logger.debug("Skipping malformed cargo JSON line: %s", exc)
                 continue
 
         return errors, warnings
@@ -602,8 +631,10 @@ class DiagnosticRunner:
         else:
             cmd = ["pyright", ".", "--outputjson"]
 
-        exit_code, output, duration = self._run_command(cmd, tool)
-        parsed = self._parse_pyright_output(output)
+        exit_code, stdout, stderr, duration = self._run_command(
+            cmd, tool, merge_output=False
+        )
+        parsed = self._parse_pyright_output(stdout)
         if parsed is None:
             logger.warning("pyright output parse failed, returning empty diagnostics")
             return DiagnosticResult(
@@ -615,7 +646,7 @@ class DiagnosticRunner:
                 warnings=[],
                 truncated=True,
                 skip_reason="parse_error",
-                raw_excerpt=output.split("\n")[:30],
+                raw_excerpt=(stdout + stderr).split("\n")[:30],
             )
         errors, warnings = parsed
 
@@ -627,7 +658,7 @@ class DiagnosticRunner:
             errors=errors[: self.max_items],
             warnings=warnings[: self.max_items],
             truncated=len(errors) > self.max_items or len(warnings) > self.max_items,
-            raw_excerpt=output.split("\n")[:30],
+            raw_excerpt=(stdout + stderr).split("\n")[:30],
         )
 
     def _parse_pyright_output(
@@ -1030,25 +1061,17 @@ class RepoMapChecker:
     def _resolve_symbols(
         self,
         results: list[DiagnosticResult],
-        symbols_map: dict[str, Any],
+        symbols_map: dict[str, Symbol],
         graph: Any = None,
     ) -> None:
         """将错误位置解析为符号名称，并计算置信度；可选附加上下文调用者。"""
         # 构建文件 -> 符号列表 的映射，包含行号范围
         file_symbols: dict[str, list[tuple[str, int, int, str]]] = {}
         for symbol_id, symbol in symbols_map.items():
-
-            def _get_attr(obj: Any, attr: str, default: Any = None) -> Any:
-                if hasattr(obj, attr):
-                    return getattr(obj, attr, default)
-                elif isinstance(obj, dict):
-                    return obj.get(attr, default)
-                return default
-
-            file_path = _get_attr(symbol, "file", "")
-            line = _get_attr(symbol, "line", 0)
-            end_line = _get_attr(symbol, "end_line", line)
-            name = _get_attr(symbol, "name", "")
+            file_path = symbol.file
+            line = symbol.line
+            end_line = symbol.end_line
+            name = symbol.name
             if file_path:
                 if file_path not in file_symbols:
                     file_symbols[file_path] = []

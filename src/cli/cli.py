@@ -195,6 +195,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Number of top affected files to show in compact mode (default 5).",
     )
+    impact_parser.add_argument(
+        "--max-affected-files",
+        type=int,
+        default=20,
+        help="Max number of affected files to report (default 20).",
+    )
 
     # ── affected: CI 友好的变更影响测试发现 ────────────────────────────────────
     affected_parser = subparsers.add_parser(
@@ -560,7 +566,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.project,
             args.max_files,
             args.files,
-            getattr(args, "max_files", 20),
+            getattr(args, "max_affected_files", 20),
             args.json,
             getattr(args, "with_symbols", False),
             depth=getattr(args, "depth", 1),

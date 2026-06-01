@@ -99,32 +99,6 @@ def normalize_route_path(path: str) -> str:
     return norm
 
 
-def _route_pattern_for_matching(route_path: str) -> list[tuple[str, str]]:
-    """Generate regex patterns to match a route in client code.
-
-    Returns list of (pattern, match_type) tuples.
-    """
-    norm = normalize_route_path(route_path)
-    patterns: list[tuple[str, str]] = []
-
-    # Exact literal match
-    escaped = re.escape(norm)
-    patterns.append((escaped, "exact_literal"))
-
-    # Dynamic segment -> wildcard for template literal / concatenation matching
-    wildcard = re.sub(r"\\\{[^}]+\\\}", r"[^/'\")`]+", escaped)
-    if wildcard != escaped:
-        patterns.append((wildcard, "normalized_dynamic"))
-
-    # Prefix match (for concatenation like '/path/' + name)
-    prefix = norm.rsplit("/{", 1)[0] if "/{" in norm else norm
-    if prefix != norm:
-        escaped_prefix = re.escape(prefix)
-        patterns.append((escaped_prefix, "prefix_concatenation"))
-
-    return patterns
-
-
 def find_route_consumers(
     engine: "RepoMapEngine",
     routes: list["HttpRoute"],

@@ -488,10 +488,20 @@ class StdioLspClient:
         except Exception:
             for t in started:
                 if t.is_alive():
-                    # signal stop and wait briefly for daemon thread to exit
                     self._stop_event.set()
             self.process.kill()
             self.process.wait()
+            # 关闭管道 FD，防止泄漏
+            for stream in (
+                self.process.stdin,
+                self.process.stdout,
+                self.process.stderr,
+            ):
+                if stream:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
             raise
 
     def _read_loop(self) -> None:
@@ -543,7 +553,6 @@ class StdioLspClient:
             except Exception:
                 if self._stop_event.is_set():
                     return  # close() 触发的异常，正常退出
-                logger.debug("Stderr drain interrupted", exc_info=True)
                 logger.warning("Stderr drain failed unexpectedly", exc_info=True)
                 break
 
@@ -1270,7 +1279,7 @@ def _parse_hover_response(raw: Any) -> str:
 def collect_lsp_symbol_tree(
     project_root: str | Path,
     file_path: str,
-    timeout: float = 8.0,
+    timeout: float | None = None,
 ) -> list[LspSymbolInfo]:
     root = Path(project_root).resolve()
     language = language_for_file(file_path)
@@ -1282,10 +1291,13 @@ def collect_lsp_symbol_tree(
     detection = detect_lsp_server(root, language, abs_file)
     if detection.status != "available":
         return []
+    effective_timeout: float = (
+        timeout if timeout is not None else lsp_timeout_for(language)
+    )
     try:
         workspace_root = Path(detection.workspace_root)
         with StdioLspClient(
-            detection.command, workspace_root, timeout=timeout
+            detection.command, workspace_root, timeout=effective_timeout
         ) as client:
             client.initialize()
             client.did_open(
@@ -1313,64 +1325,12 @@ def _walk_symbol_tree(nodes: list[LspSymbolInfo]) -> "list[LspSymbolInfo]":
     return result
 
 
-def collect_lsp_hover(
-    project_root: str | Path,
-    file_path: str,
-    line: int,
-    symbol_name: str,
-    timeout: float = 8.0,
-) -> LspHoverInfo | None:
-    root = Path(project_root).resolve()
-    language = language_for_file(file_path)
-    if not language:
-        return None
-    abs_file = (root / file_path).resolve()
-    if not abs_file.exists() or not abs_file.is_file():
-        return None
-    try:
-        file_text = abs_file.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    abs_file, line_index, character = _symbol_position(
-        root, file_path, line, symbol_name, file_text=file_text
-    )
-    detection = detect_lsp_server(root, language, abs_file)
-    if detection.status != "available":
-        return None
-    try:
-        workspace_root = Path(detection.workspace_root)
-        with StdioLspClient(
-            detection.command, workspace_root, timeout=timeout
-        ) as client:
-            client.initialize()
-            client.did_open(abs_file, language, file_text)
-            raw = client.hover(abs_file, line_index, character)
-        return LspHoverInfo(
-            file=file_path,
-            line=line,
-            col=character + 1,
-            contents=_parse_hover_response(raw),
-        )
-    except Exception as exc:
-        logger.warning(
-            "LSP hover collection failed for %s:%d (symbol=%s, language=%s, server=%s): %s",
-            file_path,
-            line,
-            symbol_name,
-            language,
-            detection.server_name if detection else "?",
-            exc,
-            exc_info=True,
-        )
-        return None
-
-
 def collect_lsp_full_evidence(
     project_root: str | Path,
     file_path: str,
     line: int,
     symbol_name: str,
-    timeout: float = 8.0,
+    timeout: float | None = None,
 ) -> tuple[LspRunResult, LspHoverInfo | None]:
     """Collect definition + references + hover in a single LSP session.
 
@@ -1419,12 +1379,15 @@ def collect_lsp_full_evidence(
             reason=detection.reason,
         )
         return empty, None
+    effective_timeout: float = (
+        timeout if timeout is not None else lsp_timeout_for(language)
+    )
     start = time.time()
     hover_info: LspHoverInfo | None = None
     try:
         workspace_root = Path(detection.workspace_root)
         with StdioLspClient(
-            detection.command, workspace_root, timeout=timeout
+            detection.command, workspace_root, timeout=effective_timeout
         ) as client:
             client.initialize()
             client.did_open(abs_file, language, file_text)
@@ -1483,20 +1446,6 @@ def collect_lsp_full_evidence(
             duration_ms=int((time.time() - start) * 1000),
         )
         return result, None
-
-
-def compute_name_paths(
-    symbol_tree: list[LspSymbolInfo],
-    parent: tuple[str, ...] = (),
-) -> dict[tuple[str, ...], LspSymbolInfo]:
-    """将 LSP 符号树扁平化为 NamePath → LspSymbolInfo 映射。"""
-    result: dict[tuple[str, ...], LspSymbolInfo] = {}
-    for node in symbol_tree:
-        path = parent + (node.name,)
-        result[path] = node
-        if node.children:
-            result.update(compute_name_paths(node.children, path))
-    return result
 
 
 LSP_INSTALL_STRATEGIES: dict[str, dict[str, str]] = {
