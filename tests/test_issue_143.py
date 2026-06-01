@@ -50,7 +50,9 @@ class FileSeverityIndexCorrectness(unittest.TestCase):
         # sym_b 被 sym_a 调用
         self.graph.incoming["sym_b"].append(_make_edge("sym_a", "sym_b", "call"))
         # sym_b 被 sym_c 调用
-        self.graph.incoming["sym_c"].append(_make_edge("sym_c", "sym_c", "call"))  # self-call, should not count
+        self.graph.incoming["sym_c"].append(
+            _make_edge("sym_c", "sym_c", "call")
+        )  # self-call, should not count
         # sym_a 被 sym_b 调用
         self.graph.incoming["sym_a"].append(_make_edge("sym_b", "sym_a", "call"))
         # sym_b 有 import 边（不应计数）
@@ -132,7 +134,7 @@ class FileSeverityIndexEquivalence(unittest.TestCase):
         # 构建一个更复杂的图: 5 个文件，多种边类型
         g.symbols = {}
         for i in range(10):
-            fname = f"file_{i//2}.py"
+            fname = f"file_{i // 2}.py"
             sid = f"sym_{i}"
             g.symbols[sid] = _make_symbol(sid, f"func_{i}", fname)
             g.file_symbols.setdefault(fname, []).append(sid)
@@ -158,7 +160,8 @@ class FileSeverityIndexEquivalence(unittest.TestCase):
             old = _affected_severity(fname, engine)  # type: ignore[arg-type]
             new = index.get(fname, 0)
             self.assertEqual(
-                old, new,
+                old,
+                new,
                 f"file={fname}: _affected_severity={old} != index={new}",
             )
 
