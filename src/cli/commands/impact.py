@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ... import RepoGraph
 from ...ai import render_impact_report
 from ...core import RepoMapEngine
 from ..handlers import (
@@ -129,6 +130,7 @@ def _impact_type_level(
 ) -> list[dict[str, Any]]:
     """Detect type-level impact: return type / parameter type changes for exported symbols."""
     results: list[dict[str, Any]] = []
+    target_set = set(target_files)
 
     for f in target_files:
         for sid in engine.graph.file_symbols.get(f, []):
@@ -137,7 +139,6 @@ def _impact_type_level(
                 continue
 
             # Check if symbol has callers outside the changed files
-            target_set = set(target_files)
             external_callers: list[str] = []
             for edge in engine.graph.incoming.get(sid, []):
                 caller = engine.graph.symbols.get(edge.source)
@@ -305,11 +306,13 @@ def run_impact(
         type_impacts = _impact_type_level(engine, target_files)
 
         affected_list = [(f, why, conf) for f, (why, conf) in affected_files.items()]
+        # 预构建 file severity 索引（O(total_edges)），替代排序中每次 O(S*I) 计算
+        file_severity = _build_file_severity_index(engine.graph)
         # 按影响严重程度排序：置信度高→严重度高→文件路径（tiebreaker）
         affected_list.sort(
             key=lambda x: (
                 -{"high": 3, "medium": 2, "low": 1}.get(x[2], 0),
-                -_affected_severity(x[0], engine),
+                -file_severity.get(x[0], 0),
                 x[0],
             ),
         )
@@ -439,3 +442,26 @@ def _affected_severity(file_path: str, engine: RepoMapEngine) -> int:
                 if src_sym and src_sym.file != file_path:
                     total += 1
     return total
+
+
+def _build_file_severity_index(graph: RepoGraph) -> dict[str, int]:
+    """一次遍历 incoming edges 构建 file → external_caller_count 索引。
+
+    对每条 kind="call" 且 source file ≠ target file 的边，
+    累加 target file 的计数。复杂度 O(total_edges)。
+    """
+    sid_to_file: dict[str, str] = {}
+    for sid, sym in graph.symbols.items():
+        sid_to_file[sid] = sym.file
+
+    index: dict[str, int] = {}
+    for target_sid, edges in graph.incoming.items():
+        target_file = sid_to_file.get(target_sid)
+        if not target_file:
+            continue
+        for edge in edges:
+            if edge.kind == "call":
+                src_file = sid_to_file.get(edge.source)
+                if src_file and src_file != target_file:
+                    index[target_file] = index.get(target_file, 0) + 1
+    return index
