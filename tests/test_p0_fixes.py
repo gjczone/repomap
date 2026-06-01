@@ -88,7 +88,9 @@ class P0_3_CoChangeCacheKeyIncludesSinceDays(unittest.TestCase):
                 call_log.append(since_days)
                 return {("a.py", "b.py"): since_days}
 
-            with patch.object(co_change, "_load_co_change_scores", side_effect=fake_load):
+            with patch.object(
+                co_change, "_load_co_change_scores", side_effect=fake_load
+            ):
                 # 第一次调用 since_days=30
                 score_30 = co_change.get_co_change_score(
                     "/fake/project", "a.py", "b.py", since_days=30
