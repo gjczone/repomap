@@ -31,7 +31,8 @@ from .ai import (
     render_overview_report,
 )
 from .gitignore import GitignoreParser, get_gitignore
-from .parser import EXT_TO_LANG, QUERIES, TreeSitterAdapter
+from .parser import EXT_TO_LANG, TreeSitterAdapter
+from .queries import QUERIES
 from .ranking import EdgeBuilder, GraphAnalyzer
 from .resolver import ImportResolver
 from . import (
