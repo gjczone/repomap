@@ -108,6 +108,7 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `query --search <文本>` | BM25 语义符号搜索；`--top-k <N>` 控制结果数；`--json` |
 | `query --file <路径>` | 文件符号 + 签名 + 调用者；默认展示 LSP 分级符号树；`--json` |
 | `impact --files <文件...> --with-symbols` | 编辑前影响范围：关键符号、受影响文件、风险、建议测试；`--compact` 精简输出；`--top-n <N>` |
+| `affected --files <文件...>` | 发现受源代码变更影响的测试；`--stdin` 管道模式；`--filter` 自定义模式 |
 | `call-chain --symbol <名称>` | 调用者、被调用者和引用，支持配置深度；`--direction`；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
 | `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异；`--risk-threshold HIGH\|MED\|LOW` |

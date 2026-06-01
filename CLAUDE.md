@@ -399,6 +399,19 @@ repomap overview --project .
 # 4.5. Sync local skill directory to ~/.agents/skills/repomap/
 #      cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
 
+# 4.6. Verify local skill copy is byte-identical (MANDATORY)
+#    - Compare open-source skill with local copy:
+#      diff skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
+#    - If different, sync: cp skills/repomap/SKILL.md ~/.agents/skills/repomap/SKILL.md
+#    - Local copy must be byte-identical to open-source version
+
+# 5. Verify local binary version (MANDATORY)
+#    - Check local binary matches pyproject.toml:
+#      repomap --version
+#    - If version mismatch, rebuild binary and update symlink:
+#      uv run --with pyinstaller python -m PyInstaller ...
+#      ln -sf $(pwd)/dist/repomap ~/.local/bin/repomap
+
 # 6. Bump version in pyproject.toml
 
 # 7. Commit + push → CI auto-builds binary
