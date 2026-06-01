@@ -33,6 +33,12 @@ _JS_TS_CONSUMER_PATTERNS: list[tuple[str, int]] = [
         1,
     ),
     (r"""axios\.(?:get|post|put|patch|delete|head|options)\s*\(\s*`(/[^`]*)`""", 1),
+    # 常见 HTTP 客户端封装
+    (r"""fetchApi\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+    (r"""apiClient\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+    (r"""apiClient\.(?:get|post|put|patch|delete)\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+    (r"""api\.(?:get|post|put|patch|delete)\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
+    (r"""request\s*\(\s*['"`](/[^'"`)]*)['"`]""", 1),
 ]
 
 _CONSUMER_PATTERNS: dict[str, list[tuple[str, int]]] = {
@@ -110,6 +116,9 @@ def find_route_consumers(
 
     consumers: dict[str, list[RouteConsumer]] = {}
 
+    # 收集路由 handler 文件，扫描时排除它们（装饰器不是 consumer）
+    route_files: set[str] = {route.file for route in routes}
+
     # 预构建路由查找表，将匹配从 O(routes) 降为 O(1)
     route_by_literal: dict[str, "HttpRoute"] = {}
     route_by_normalized: dict[str, "HttpRoute"] = {}
@@ -131,6 +140,10 @@ def find_route_consumers(
     # Scan each source file
     project_root = str(engine.project_root)
     for file_path in sorted(engine.graph.file_symbols.keys()):
+        # 跳过路由定义文件自身（装饰器不是 consumer）
+        if file_path in route_files:
+            continue
+
         ext = PurePosixPath(file_path).suffix.lower()
         file_lang = ext_to_lang.get(ext)
         if not file_lang:
