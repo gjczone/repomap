@@ -433,12 +433,17 @@ def run_impact(
                 if ti.get("note"):
                     print(f"  - {ti['note']}")
                 print("")
-        for hint in impact_hint(
-            risk_level=risk_level, has_suggested_tests=len(tests) > 0
-        ):
-            print(hint, file=sys.stderr)
+        if not as_json:
+            for hint in impact_hint(
+                risk_level=risk_level, has_suggested_tests=len(tests) > 0
+            ):
+                print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
+        if as_json:
+            from ..handlers import json_envelope
+            print(json_envelope("impact", str(project or ""),
+                  {"error": str(exc)}, status="error"))
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
         return 1
 

@@ -625,7 +625,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.lsp_command == "doctor":
             return run_lsp_doctor(args.project, args.json)
         if args.lsp_command == "setup":
-            return run_lsp_setup(args.project, args.languages, args.dry_run)
+            return run_lsp_setup(args.project, args.languages, args.dry_run, args.json)
         parser.error(f"unknown lsp command: {args.lsp_command}")
         return 2
     if command == "routes":

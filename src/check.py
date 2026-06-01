@@ -64,6 +64,10 @@ def _detect_project_types(project_root: Path) -> list[str]:
 
     if list(project_root.glob("tsconfig*.json")):
         types.add("typescript")
+    elif _has_ts_files(project_root):
+        # 降级检测：项目有 .ts/.tsx 文件但没有 tsconfig.json
+        types.add("typescript")
+
     if (project_root / "Cargo.toml").exists():
         types.add("rust")
     if any(
@@ -73,11 +77,74 @@ def _detect_project_types(project_root: Path) -> list[str]:
         types.add("python")
     if (project_root / "go.mod").exists():
         types.add("go")
+
+    # 新增：检查 package.json 中的 TypeScript 依赖
+    if "typescript" not in types and "javascript" not in types:
+        pkg_json = project_root / "package.json"
+        if pkg_json.exists():
+            try:
+                import json
+                pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
+                all_deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+                if "typescript" in all_deps or "@types/node" in all_deps:
+                    types.add("typescript")
+                elif any(k for k in all_deps if k.startswith("@types/")):
+                    types.add("typescript")
+            except Exception:
+                pass
+
     if "typescript" not in types:
         if _has_js_files(project_root):
             types.add("javascript")
 
     return sorted(types)
+
+
+def _has_ts_files(project_root: Path) -> bool:
+    """检查是否有 TS 文件（排除 node_modules）"""
+    try:
+        result = subprocess.run(
+            [
+                "rg",
+                "--files",
+                "-g",
+                "!node_modules/**",
+                "-g",
+                "!dist/**",
+                "-g",
+                "!build/**",
+            ],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.split("\n")[:200]:
+                if re.search(r"\.(ts|tsx)$", line):
+                    return True
+    except subprocess.TimeoutExpired:
+        logger.debug("rg --files timed out for TS detection, falling back")
+    except Exception:
+        logger.warning("rg --files failed for TS detection, falling back to os.walk")
+
+    skip_dirs = {
+        "node_modules",
+        "dist",
+        "build",
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+    }
+    for root, dir_names, file_names in os.walk(project_root):
+        dir_names[:] = [name for name in dir_names if name not in skip_dirs]
+        if any(
+            Path(file_name).suffix.lower() in {".ts", ".tsx"}
+            for file_name in file_names
+        ):
+            return True
+    return False
 
 
 def _has_js_files(project_root: Path) -> bool:

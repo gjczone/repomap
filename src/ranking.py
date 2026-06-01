@@ -99,9 +99,39 @@ class GraphAnalyzer:
 
         query_context: 可选的关键词上下文，用于为匹配到的符号做局部 boost。
         当提供时，符号所在文件名命中关键词的会获得额外排序加分。
+
+        搜索策略（3层降级）：
+        1. 子字符串匹配（现有行为）
+        2. camelCase token匹配（将查询词和符号名都拆分为token）
+        3. 文件名匹配（查找文件名包含查询词的文件中的符号）
         """
         nl = name.lower()
+
+        # Tier 1: 子字符串匹配（现有行为）
         candidates = [s for s in self.graph.symbols.values() if nl in s.name.lower()]
+
+        # Tier 2: camelCase token匹配
+        if not candidates:
+            from .topic import split_identifier
+            query_tokens = set(split_identifier(name))
+            if query_tokens:
+                candidates = [
+                    s for s in self.graph.symbols.values()
+                    if query_tokens & set(split_identifier(s.name))
+                ]
+
+        # Tier 3: 文件名匹配 - 查找文件名包含查询词的文件中的符号
+        if not candidates:
+            from pathlib import PurePosixPath
+            name_lower = name.lower()
+            for file_path, sids in self.graph.file_symbols.items():
+                stem = PurePosixPath(file_path).stem.lower()
+                if name_lower in stem or stem in name_lower:
+                    for sid in sids:
+                        sym = self.graph.symbols.get(sid)
+                        if sym:
+                            candidates.append(sym)
+
         if not query_context or len(candidates) <= 1:
             return sorted(candidates, key=lambda s: s.pagerank, reverse=True)
 

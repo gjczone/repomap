@@ -269,26 +269,31 @@ def run_call_chain(
             if len(data[direction]) > 50:
                 lines.append(f"\n... and {len(data[direction]) - 50} more")
             print(_truncate_output("\n".join(lines), max_chars))
-            chain = engine.call_chain(selected.id, "both", 1)
-            for hint in call_chain_hint(
-                caller_count=len(chain.get("callers", [])),
-                callee_count=len(chain.get("callees", [])),
-            ):
-                print(hint, file=sys.stderr)
+            if not as_json:
+                chain = engine.call_chain(selected.id, "both", 1)
+                for hint in call_chain_hint(
+                    caller_count=len(chain.get("callers", [])),
+                    callee_count=len(chain.get("callees", [])),
+                ):
+                    print(hint, file=sys.stderr)
             return 0
         print(
             _truncate_output(
                 _render_selected_call_chain(engine, selected, depth), max_chars
             )
         )
-        chain = engine.call_chain(selected.id, "both", 1)
-        for hint in call_chain_hint(
-            caller_count=len(chain.get("callers", [])),
-            callee_count=len(chain.get("callees", [])),
-        ):
-            print(hint, file=sys.stderr)
+        if not as_json:
+            chain = engine.call_chain(selected.id, "both", 1)
+            for hint in call_chain_hint(
+                caller_count=len(chain.get("callers", [])),
+                callee_count=len(chain.get("callees", [])),
+            ):
+                print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
+        if as_json:
+            print(json_envelope("call-chain", str(project or ""),
+                  {"error": str(exc)}, status="error"))
         print(f"[{CLI_NAME}] call-chain failed: {exc}", file=sys.stderr)
         return 1
 
@@ -417,12 +422,16 @@ def run_query_symbol(
             )
         )
         print(_truncate_output("\n".join(lines), max_chars))
-        for hint in query_symbol_hint(
-            match_count=len(results), has_file_filter=file_path is not None
-        ):
-            print(hint, file=sys.stderr)
+        if not as_json:
+            for hint in query_symbol_hint(
+                match_count=len(results), has_file_filter=file_path is not None
+            ):
+                print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
+        if as_json:
+            print(json_envelope("query", str(project or ""),
+                  {"error": str(exc)}, status="error"))
         print(f"[{CLI_NAME}] query --symbol failed: {exc}", file=sys.stderr)
         return 1
 
@@ -516,10 +525,14 @@ def run_file_detail(
         has_callers = any(
             len(engine.graph.incoming.get(sid, set())) > 0 for sid in file_sids
         )
-        for hint in file_detail_hint(has_symbols=has_symbols, has_callers=has_callers):
-            print(hint, file=sys.stderr)
+        if not as_json:
+            for hint in file_detail_hint(has_symbols=has_symbols, has_callers=has_callers):
+                print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
+        if as_json:
+            print(json_envelope("query", str(project or ""),
+                  {"error": str(exc)}, status="error"))
         print(f"[{CLI_NAME}] query --file failed: {exc}", file=sys.stderr)
         return 1
 
