@@ -69,6 +69,25 @@ class TestGitBackend:
             assert gb.status_porcelain() == ["M file.py"]
             m.assert_called_once_with("/fake")
 
+    def test_deleted_files_falls_back_to_subprocess(self) -> None:
+        with (
+            patch("src.git_backend._HAS_PYGIT2", True),
+            patch.object(Pygit2Backend, "_repo", return_value=MagicMock()),
+            patch.object(
+                Pygit2Backend,
+                "deleted_files",
+                side_effect=Exception("pygit2 crash"),
+            ),
+            patch.object(
+                SubprocessBackend,
+                "deleted_files",
+                return_value=["old.py", "gone.py"],
+            ) as m,
+        ):
+            gb = GitBackend("/fake")
+            assert gb.deleted_files() == ["old.py", "gone.py"]
+            m.assert_called_once_with("/fake")
+
 
 # ── TestSubprocessBackend ───────────────────────────────────────────
 

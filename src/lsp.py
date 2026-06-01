@@ -451,7 +451,7 @@ class StdioLspClient:
         self.process: subprocess.Popen[bytes] | None = None
         self._next_id = 1
         self._id_lock = threading.Lock()
-        self._messages: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._messages: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=10000)
         self._notifications: list[dict[str, Any]] = []
         self._reader: threading.Thread | None = None
         self._stderr_reader: threading.Thread | None = None
@@ -539,7 +539,20 @@ class StdioLspClient:
                 continue  # 消息丢弃，继续读
             if message is None:
                 return  # 保持兼容（理论上不应到达）
-            self._messages.put(message)
+            try:
+                self._messages.put(message, timeout=1.0)
+            except queue.Full:
+                logger.warning(
+                    "LSP message queue full (%d), dropping oldest message",
+                    self._messages.maxsize,
+                )
+                try:
+                    self._messages.get_nowait()
+                    self._messages.put_nowait(message)
+                except queue.Empty:
+                    self._messages.put_nowait(message)
+                except queue.Full:
+                    pass  # 极端情况：丢弃消息
 
     def _drain_stderr(self) -> None:
         """Continuously drain stderr to prevent pipe buffer deadlock."""

@@ -29,7 +29,13 @@ from . import node_text as _node_text
 logger = logging.getLogger("repomap.callgraph")
 
 
+_MAX_PARSE_BYTES = 1024 * 1024  # 1 MB 源码上限，防止病态嵌套挂起
+
+
 def _safe_parse(source: bytes, filename: str = "<unknown>") -> ast.AST | None:
+    if len(source) > _MAX_PARSE_BYTES:
+        logger.debug("File too large for parse (%d bytes), skipping", len(source))
+        return None
     try:
         return ast.parse(source, filename)
     except (SyntaxError, RecursionError):

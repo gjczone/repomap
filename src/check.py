@@ -116,6 +116,8 @@ class ProjectDetector:
                 for line in result.stdout.split("\n")[:100]:
                     if re.search(r"\.(mjs|cjs|js|jsx)$", line):
                         return True
+        except subprocess.TimeoutExpired:
+            logger.debug("rg --files timed out for JS detection, falling back")
         except Exception:
             logger.warning(
                 "rg --files failed for JS detection, falling back to os.walk"

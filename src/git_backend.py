@@ -974,8 +974,11 @@ class GitBackend:
             return self._backend.deleted_files(self.project_root)
         except Exception as exc:
             self._last_error = str(exc)
-            logger.error("GitBackend deleted_files failed: %s", exc)
-            return []
+            logger.error(
+                "pygit2 deleted_files failed, falling back to subprocess",
+                exc_info=True,
+            )
+            return SubprocessBackend.deleted_files(self.project_root)
 
     def diff_name_only(self, since: str | None = None) -> list[str]:
         try:
