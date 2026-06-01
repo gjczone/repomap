@@ -127,37 +127,6 @@ class PackageJsonExports:
         return None
 
 
-class BundlerAliasConfig:
-    """解析各种 bundler 的 alias 配置。
-
-    通过 _parse_bundler_alias_strings() 对 Vite/Webpack 配置文件
-    中的 alias 声明进行字符串级解析（非 AST 解析），避免正则解析
-    JS 配置的脆弱性。解析结果在 _detect_vite_alias() 和
-    _detect_webpack_alias() 中使用。
-
-    主路径解析（tsconfig paths / package.json exports）由
-    ImportResolver 主逻辑处理。
-    """
-
-    def __init__(self, project_root: Path) -> None:
-        self.project_root = project_root
-        self.aliases: dict[str, str] = {}  # alias -> resolved path
-
-    def resolve(self, import_path: str) -> str | None:
-        """解析 bundler alias 到实际路径。"""
-        for alias, target in self.aliases.items():
-            if import_path == alias:
-                return target
-            if import_path.startswith(f"{alias}/"):
-                suffix = import_path[len(alias) + 1 :]
-                return (
-                    f"{target}/{suffix}"
-                    if not target.endswith("/")
-                    else f"{target}{suffix}"
-                )
-        return None
-
-
 class ImportResolver:
     """
     Import 解析器：处理各种 import 路径解析场景。
@@ -167,7 +136,7 @@ class ImportResolver:
         self.project_root = project_root
         self.graph = graph
         self.import_configs: list[ProjectImportConfig] = []
-        self.bundler_aliases = BundlerAliasConfig(project_root)
+        self.bundler_aliases: dict[str, str] = {}  # alias -> resolved path
         self.package_exports: dict[
             str, PackageJsonExports
         ] = {}  # package name -> exports
@@ -201,6 +170,20 @@ class ImportResolver:
         self._load_package_json_exports()
         self._detect_vite_alias()
         self._detect_webpack_alias()
+
+    def _resolve_bundler_alias(self, import_path: str) -> str | None:
+        """解析 bundler alias 到实际路径。"""
+        for alias, target in self.bundler_aliases.items():
+            if import_path == alias:
+                return target
+            if import_path.startswith(f"{alias}/"):
+                suffix = import_path[len(alias) + 1 :]
+                return (
+                    f"{target}/{suffix}"
+                    if not target.endswith("/")
+                    else f"{target}{suffix}"
+                )
+        return None
 
     def _load_import_configs(self) -> None:
         """加载所有 tsconfig.json / jsconfig.json 配置。"""
@@ -336,8 +319,8 @@ class ImportResolver:
             cfg_path = self.project_root / cfg_name
             if not cfg_path.exists():
                 continue
-            if "~" not in self.bundler_aliases.aliases:
-                self.bundler_aliases.aliases["~"] = "src"
+            if "~" not in self.bundler_aliases:
+                self.bundler_aliases["~"] = "src"
             # 尝试提取 resolve.alias 中的简单字符串映射
             try:
                 content = cfg_path.read_text(encoding="utf-8", errors="replace")
@@ -373,8 +356,8 @@ class ImportResolver:
         for match in alias_pattern.finditer(content):
             key = match.group(1)
             value = match.group(2) or match.group(3)
-            if key and value and key not in self.bundler_aliases.aliases:
-                self.bundler_aliases.aliases[key] = value
+            if key and value and key not in self.bundler_aliases:
+                self.bundler_aliases[key] = value
             elif key and value:
                 logger.debug(
                     "Bundler alias %r already defined, skipping duplicate", key
@@ -489,7 +472,7 @@ class ImportResolver:
                         return java_matches
 
             # 尝试 bundler alias 解析
-            bundler_match = self.bundler_aliases.resolve(imp)
+            bundler_match = self._resolve_bundler_alias(imp)
             if bundler_match:
                 result = self._resolve_relative(source_file, bundler_match)
             else:
