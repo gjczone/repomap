@@ -216,5 +216,101 @@ class P0_7_EslintCommandSeparator(unittest.TestCase):
             )
 
 
+class P0_8_StderrNoiseRegression(unittest.TestCase):
+    """P0-8: stderr 噪音 — parser/nesting/scan 日志不应每次命令都输出到 stderr。
+
+    Issue #144: 每次 repomap 命令都在 stderr 输出 ~4 条 parser unavailable 警告、
+    N 条 extreme nesting risk 警告，以及扫描进度 INFO 日志，污染 LLM 上下文窗口。
+    """
+
+    def test_basic_config_level_is_warning_not_info(self) -> None:
+        """src/core.py: basicConfig 的 level 应为 WARNING 而非 INFO。
+
+        修复前：level=logging.INFO → 所有 INFO/WARNING 都输出到 stderr
+        修复后：level=logging.WARNING → 仅 WARNING+ 输出
+
+        使用 inspect.getsource 直接检查源码，避免依赖运行时 root logger 状态
+        （pytest 可能已在 basicConfig 之前配置了 root logger）。
+        """
+        import inspect
+
+        from src import core as core_module
+
+        source = inspect.getsource(core_module)
+        # basicConfig 调用中 level 参数应为 WARNING
+        self.assertIn(
+            "level=logging.WARNING",
+            source,
+            "src/core.py 的 basicConfig 应使用 level=logging.WARNING",
+        )
+        self.assertNotIn(
+            "level=logging.INFO",
+            source,
+            "src/core.py 的 basicConfig 不应使用 level=logging.INFO（会产生噪音）",
+        )
+
+    def test_parser_unavailable_logs_as_info_not_warning(self) -> None:
+        """parser.py: 'Parser unavailable' 消息应为 logger.info，非 logger.warning。
+
+        修复前：logger.warning → 每次命令都输出 ~4 条噪音
+        修复后：logger.info → 仅在显式开启 INFO 级别时可见
+        """
+        import inspect
+
+        from src import parser as parser_module
+
+        source = inspect.getsource(parser_module)
+        # 找到包含 "Parser unavailable" 的行并确认上下文使用 logger.info
+        lines = source.split("\n")
+        found = False
+        for i, line in enumerate(lines):
+            if "Parser unavailable" in line:
+                found = True
+                # 检查前几行是否有 logger.warning（不应存在）
+                context_before = "\n".join(lines[max(0, i - 2) : i])
+                context = context_before + "\n" + line
+                self.assertNotIn(
+                    "logger.warning",
+                    context,
+                    f"Parser unavailable 消息应使用 logger.info 而非 logger.warning:\n{context}",
+                )
+                self.assertIn(
+                    "logger.info",
+                    context,
+                    f"Parser unavailable 消息应使用 logger.info:\n{context}",
+                )
+        self.assertTrue(found, "未找到 'Parser unavailable' 日志调用")
+
+    def test_nesting_risk_logs_as_info_not_warning(self) -> None:
+        """parser.py: 'Extreme nesting risk' 消息应为 logger.info，非 logger.warning。
+
+        修复前：logger.warning → 每次扫描大型/嵌套文件时输出噪音
+        修复后：logger.info → 跳过信息已在 scan_stats 中记录
+        """
+        import inspect
+
+        from src import parser as parser_module
+
+        source = inspect.getsource(parser_module)
+        lines = source.split("\n")
+        found = False
+        for i, line in enumerate(lines):
+            if "Extreme nesting risk" in line:
+                found = True
+                context_before = "\n".join(lines[max(0, i - 2) : i])
+                context = context_before + "\n" + line
+                self.assertNotIn(
+                    "logger.warning",
+                    context,
+                    f"Extreme nesting risk 消息应使用 logger.info 而非 logger.warning:\n{context}",
+                )
+                self.assertIn(
+                    "logger.info",
+                    context,
+                    f"Extreme nesting risk 消息应使用 logger.info:\n{context}",
+                )
+        self.assertTrue(found, "未找到 'Extreme nesting risk' 日志调用")
+
+
 if __name__ == "__main__":
     unittest.main()
