@@ -274,5 +274,70 @@ class TestP1_12_QueryMatchedLinesRemoved(unittest.TestCase):
             )
 
 
+class TestP1_13_CallChainCallerGrouping(unittest.TestCase):
+    """P1-13: call-chain caller 应按实现/测试分组。
+
+    Issue #147: Callers 列表中实现代码和测试代码混在一起，
+    LLM 需要看到实现 caller 优先展示，测试 caller 只展示总数 + top-3。
+    """
+
+    def test_callers_grouped_by_impl_and_test(self) -> None:
+        """call-chain 输出应将 caller 分为 Implementation Callers 和 Test Callers。"""
+        from unittest.mock import MagicMock
+
+        from src.ai import render_call_chain_report
+        from src import Symbol
+
+        engine = MagicMock()
+        engine.project_root = "/fake/project"
+
+        # 构造 symbol（被调用的函数）
+        target = Symbol(
+            id="target",
+            name="scan",
+            kind="function",
+            file="src/core.py",
+            line=100,
+            pagerank=0.05,
+            signature="def scan():",
+        )
+        engine.query_symbol.return_value = [target]
+
+        # 构造 callers: 15 个实现 callers + 10 个测试 callers
+        impl_callers = [
+            Symbol(
+                id=f"caller_impl_{i}",
+                name=f"impl_func_{i}",
+                kind="function",
+                file=f"src/module_{i}.py",
+                line=10 * i,
+            )
+            for i in range(15)
+        ]
+        test_callers = [
+            Symbol(
+                id=f"caller_test_{i}",
+                name=f"test_func_{i}",
+                kind="function",
+                file=f"tests/test_module_{i}.py",
+                line=20 * i,
+            )
+            for i in range(10)
+        ]
+
+        engine.call_chain.return_value = {
+            "callers": impl_callers + test_callers,
+            "callees": [],
+        }
+        engine.confidence_for.return_value = 1.0
+
+        report = render_call_chain_report(engine, "scan")
+
+        self.assertIn("Implementation Callers", report)
+        self.assertIn("Test Callers", report)
+        self.assertIn("15", report)  # impl count
+        self.assertIn("10", report)  # test count
+
+
 if __name__ == "__main__":
     unittest.main()

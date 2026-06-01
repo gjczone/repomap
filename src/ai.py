@@ -652,17 +652,47 @@ def render_call_chain_report(
     ]
 
     callers = chain["callers"]
-    lines.append(f"### Called by ({len(callers)})\n")
+    # 按实现/测试分组：实现 caller 优先展示，测试 caller 只展示总数 + top-3
+    impl_callers = [c for c in callers if not (c.file or "").startswith("tests/")]
+    test_callers = [c for c in callers if (c.file or "").startswith("tests/")]
+    total = len(callers)
+
     if callers:
-        for caller in callers[:20]:
-            conf = engine.confidence_for(symbol.id, caller.id, "caller")
-            heuristic = " (heuristic)" if conf < 1.0 else ""
-            lines.append(
-                f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`{heuristic}"
-            )
-        if len(callers) > 20:
-            lines.append(f"- ... {len(callers) - 20} more")
+        summary_parts = [f"({total} total"]
+        if impl_callers:
+            summary_parts.append(f"{len(impl_callers)} impl")
+        if test_callers:
+            summary_parts.append(f"{len(test_callers)} test")
+        lines.append(f"### Called by {', '.join(summary_parts)})\n")
+
+        # 实现 callers — 完整展示
+        if impl_callers:
+            lines.append("#### Implementation Callers\n")
+            max_impl = min(len(impl_callers), 50)
+            for caller in impl_callers[:max_impl]:
+                conf = engine.confidence_for(symbol.id, caller.id, "caller")
+                heuristic = " (heuristic)" if conf < 1.0 else ""
+                lines.append(
+                    f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`{heuristic}"
+                )
+            if len(impl_callers) > max_impl:
+                lines.append(f"- ... {len(impl_callers) - max_impl} more impl callers")
+            lines.append("")
+
+        # 测试 callers — 仅展示总数 + top-3
+        if test_callers:
+            lines.append("#### Test Callers\n")
+            for caller in test_callers[:3]:
+                conf = engine.confidence_for(symbol.id, caller.id, "caller")
+                heuristic = " (heuristic)" if conf < 1.0 else ""
+                lines.append(
+                    f"- `{caller.name}` ({caller.kind}) — `{caller.file}:{caller.line}`{heuristic}"
+                )
+            if len(test_callers) > 3:
+                lines.append(f"- ... {len(test_callers) - 3} more test callers")
+            lines.append("")
     else:
+        lines.append(f"### Called by ({total})\n")
         lines.append("- (None — entry point)")
 
     callees = chain["callees"]
