@@ -510,5 +510,54 @@ class TestP2_15_ImpactSessionNoise(unittest.TestCase):
         )
 
 
+class TestP2_16_CheckImplDetailsRemoved(unittest.TestCase):
+    """Issue #151: check 输出中不应包含实现细节（command line、exit code、duration_ms）"""
+
+    def test_no_impl_details_in_check_output(self):
+        """_format_check_report 输出不应包含 Command/Exit code/duration_ms"""
+        from src.cli.commands.verify import _format_check_report
+
+        result = {
+            "project_root": "/tmp/test",
+            "status": "failed",
+            "message": None,
+            "types": ["python"],
+            "timestamp": "2026-01-01T00:00:00Z",
+            "summary": {
+                "total_errors": 3,
+                "total_warnings": 2,
+                "files_with_errors": 1,
+                "tools_run": 1,
+                "tools_skipped": 0,
+                "tool_failures": 0,
+            },
+            "runs": [
+                {
+                    "tool": "ruff",
+                    "command": "ruff check . --output-format=json",
+                    "exit_code": 1,
+                    "duration_ms": 1234,
+                    "error_count": 3,
+                    "warning_count": 2,
+                    "skipped": False,
+                    "truncated": False,
+                }
+            ],
+        }
+        output = _format_check_report(result, max_issues=20)
+
+        # 不应包含实现细节
+        self.assertNotIn("Command:", output, "不应包含 Command 行")
+        self.assertNotIn("Exit code:", output, "不应包含 Exit code 行")
+        self.assertNotIn("1234ms", output, "不应包含 duration_ms")
+        self.assertNotIn("ruff check", output, "不应包含命令行")
+
+        # 应保留有价值信息
+        self.assertIn("ruff", output, "应包含工具名")
+        self.assertIn("Failed", output, "应包含状态")
+        self.assertIn("Errors: **3**", output, "应包含错误数")
+        self.assertIn("Warnings: 2", output, "应包含警告数")
+
+
 if __name__ == "__main__":
     unittest.main()

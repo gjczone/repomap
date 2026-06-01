@@ -1086,13 +1086,10 @@ def _format_check_report(result: dict[str, Any], max_issues: int) -> str:
                     else "❌ Failed"
                 )
             )
-            lines.append(f"**{run['tool']}** {status} ({run['duration_ms']}ms)")
+            lines.append(f"**{run['tool']}** {status}")
             if run.get("skipped"):
                 lines.append(f"  - Reason: {run.get('skip_reason', 'unknown')}")
             else:
-                lines.append(f"  - Command: `{run['command']}`")
-                if run.get("exit_code", 0) != 0:
-                    lines.append(f"  - Exit code: {run['exit_code']}")
                 if run.get("tool_failure_reason"):
                     lines.append(f"  - Reason: {run['tool_failure_reason']}")
                     excerpt = run.get("raw_excerpt") or []
