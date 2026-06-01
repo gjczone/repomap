@@ -145,6 +145,9 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
         return ""
 
 
+# analyze_{lang}_callgraph 四函数共享相同结构（parse → modules → calls → edges）。
+# 差异仅在解析器（ast vs tree-sitter）和符号提取方式，不适合强行模板化。
+# 保持独立实现以确保每语言调用的正确性和可维护性。
 def analyze_python_callgraph(
     project_root: Path,
     python_files: list[str],
