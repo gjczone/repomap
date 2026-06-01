@@ -1345,55 +1345,61 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
 
     impact_session = result.get("impactSession", {})
     if impact_session:
-        lines.append("## Impact Session Check\n")
         imp_status = impact_session.get("status", "skipped")
-        imp_status_label = {
-            "ok": "PASS",
-            "missed": "WARNING",
-            "no_changes": "NO_CHANGES",
-            "skipped": "SKIPPED",
-        }.get(imp_status, imp_status.upper())
-        lines.append(f"**{imp_status_label}**")
-        age = impact_session.get("sessionAgeSeconds")
-        if age is not None:
-            lines.append(f"- Session age: {age}s")
-        missed = impact_session.get("missedFiles", [])
-        unexpected = impact_session.get("unexpectedFiles", [])
-        covered = impact_session.get("coveredFiles", [])
-        if imp_status == "ok":
-            if covered:
+        # 无 active session 时跳过整个 section
+        if imp_status == "skipped":
+            pass
+        else:
+            lines.append("## Impact Session Check\n")
+            age = impact_session.get("sessionAgeSeconds")
+            # session 过期（>5 分钟）：仅一行提示，不列举文件
+            if age is not None and age > 300:
+                lines.append("**EXPIRED**")
                 lines.append(
-                    "- All impact-expected affected files are present in the git diff."
+                    f"- Impact session expired ({age}s ago), run `repomap impact` first"
                 )
             else:
-                lines.append(
-                    "- Impact predicted no affected files (only targets); coverage check is vacuous."
-                )
-        elif imp_status == "missed":
-            lines.append(
-                "- The following impact-expected files are NOT in the git diff (may need review):"
-            )
-            for f in missed[:20]:
-                lines.append(f"  - `{f}`")
-        elif imp_status == "no_changes":
-            lines.append(
-                "- No git changes detected; cannot compare against impact expectations."
-            )
-        elif imp_status == "skipped":
-            lines.append(
-                f"- Impact session unavailable: {impact_session.get('reason', 'unknown')}"
-            )
-        if covered:
-            lines.append(
-                f"- Covered by diff: {', '.join('`' + f + '`' for f in covered[:10])}"
-            )
-        if unexpected:
-            lines.append(
-                "- Files in git diff but NOT expected by impact (review if intentional):"
-            )
-            for f in unexpected[:10]:
-                lines.append(f"  - `{f}`")
-        lines.append("")
+                imp_status_label = {
+                    "ok": "PASS",
+                    "missed": "WARNING",
+                    "no_changes": "NO_CHANGES",
+                }.get(imp_status, imp_status.upper())
+                lines.append(f"**{imp_status_label}**")
+                if age is not None:
+                    lines.append(f"- Session age: {age}s")
+                missed = impact_session.get("missedFiles", [])
+                unexpected = impact_session.get("unexpectedFiles", [])
+                covered = impact_session.get("coveredFiles", [])
+                if imp_status == "ok":
+                    if covered:
+                        lines.append(
+                            "- All impact-expected affected files are present in the git diff."
+                        )
+                    else:
+                        lines.append(
+                            "- Impact predicted no affected files (only targets); coverage check is vacuous."
+                        )
+                elif imp_status == "missed":
+                    lines.append(
+                        "- The following impact-expected files are NOT in the git diff (may need review):"
+                    )
+                    for f in missed[:20]:
+                        lines.append(f"  - `{f}`")
+                elif imp_status == "no_changes":
+                    lines.append(
+                        "- No git changes detected; cannot compare against impact expectations."
+                    )
+                if covered:
+                    lines.append(
+                        f"- Covered by diff: {', '.join('`' + f + '`' for f in covered[:10])}"
+                    )
+                if unexpected:
+                    lines.append(
+                        "- Files in git diff but NOT expected by impact (review if intentional):"
+                    )
+                    for f in unexpected[:10]:
+                        lines.append(f"  - `{f}`")
+            lines.append("")
 
     lines.append("## Final Evidence Checklist\n")
 

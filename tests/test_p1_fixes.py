@@ -428,5 +428,87 @@ class TestP1_14_RouteConsumerExcludesOwnFile(unittest.TestCase):
             )
 
 
+class TestP2_15_ImpactSessionNoise(unittest.TestCase):
+    """Issue #150: Impact Session Check 在无 session/过期时不输出噪音"""
+
+    def _make_payload(self, impact_session: dict) -> dict:
+        return {
+            "result": {
+                "status": "passed",
+                "changedFiles": ["src/ai.py"],
+                "risk": {"level": "low", "reasons": [], "missingChecks": []},
+                "check": {
+                    "status": "passed",
+                    "summary": {"tools_run": 0, "tools_skipped": 0},
+                },
+                "graphDiff": {"status": "skipped"},
+                "impactSession": impact_session,
+            }
+        }
+
+    def test_skipped_session_not_rendered(self):
+        """status=skipped 时不应出现 Impact Session Check section"""
+        from src.ai import render_verify_report
+
+        output = render_verify_report(
+            self._make_payload(
+                {
+                    "status": "skipped",
+                    "reason": "no session file",
+                    "missedFiles": [],
+                    "unexpectedFiles": [],
+                    "coveredFiles": [],
+                    "sessionAgeSeconds": None,
+                }
+            )
+        )
+        self.assertNotIn(
+            "Impact Session Check",
+            output,
+            "skipped session 不应渲染 Impact Session Check section",
+        )
+
+    def test_expired_session_shows_oneliner(self):
+        """session 过期（>300s）时只显示一行提示，不列举文件"""
+        from src.ai import render_verify_report
+
+        output = render_verify_report(
+            self._make_payload(
+                {
+                    "status": "missed",
+                    "reason": None,
+                    "missedFiles": ["src/core.py", "src/parser.py", "src/cli/cli.py"],
+                    "unexpectedFiles": [],
+                    "coveredFiles": [],
+                    "sessionAgeSeconds": 360,
+                }
+            )
+        )
+        self.assertIn("expired", output.lower(), "过期 session 应包含 expired 提示")
+        self.assertNotIn("src/core.py", output, "过期 session 不应列举文件")
+
+    def test_valid_session_shows_details(self):
+        """有效 session 正常展示"""
+        from src.ai import render_verify_report
+
+        output = render_verify_report(
+            self._make_payload(
+                {
+                    "status": "ok",
+                    "reason": None,
+                    "missedFiles": [],
+                    "unexpectedFiles": [],
+                    "coveredFiles": ["src/ai.py"],
+                    "sessionAgeSeconds": 30,
+                }
+            )
+        )
+        self.assertIn(
+            "Impact Session Check",
+            output,
+            "有效 session 应渲染 Impact Session Check section",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
