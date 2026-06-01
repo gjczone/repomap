@@ -1613,6 +1613,184 @@ class TreeSitterAdapter:
             ),
         )
 
+    def _validate_http_route(
+        self,
+        lang: str,
+        captures: dict[str, list[Any]],
+        method: str,
+        path_node: Any,
+        handler_node: Any,
+        file: str,
+    ) -> Any | None:
+        """统一分发到各语言的路由验证器。"""
+        if lang == "python":
+            return self._validate_python_route(captures, method)
+        if lang in ("javascript", "typescript", "tsx"):
+            return self._validate_js_route(
+                captures, method, path_node, handler_node, file
+            )
+        if lang == "go":
+            return self._validate_go_route(captures, method)
+        if lang == "rust":
+            return self._validate_rust_route(captures, method)
+        if lang == "java":
+            return self._validate_java_route(captures, method)
+        return None
+
+    def _validate_python_route(
+        self, captures: dict[str, list[Any]], method: str
+    ) -> tuple[str, str] | None:
+        """验证 Python (Flask/FastAPI) 路由并返回 (method, framework)。"""
+        obj = self._text(self._first_capture(captures, "_obj"))
+        if obj not in {
+            "app",
+            "router",
+            "api",
+            "bp",
+            "blueprint",
+            "routes",
+            "endpoints",
+        } or method not in {
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "head",
+            "options",
+            "route",
+        }:
+            return None
+        if method == "route":
+            methods_node = self._first_capture(captures, "_methods")
+            if methods_node is not None:
+                method_text = self._text(methods_node).strip("\"'")
+                method = method_text.lower()
+            else:
+                method = "get"
+        if method not in {
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "head",
+            "options",
+        }:
+            return None
+        framework = (
+            "flask" if method == "route" or obj in {"bp", "blueprint"} else "fastapi"
+        )
+        return method, framework
+
+    def _validate_js_route(
+        self,
+        captures: dict[str, list[Any]],
+        method: str,
+        path_node: Any,
+        handler_node: Any,
+        file: str,
+    ) -> Any | None:
+        """验证 JS/TS (Express/NestJS) 路由。"""
+        from . import HttpRoute
+
+        router_capture = self._first_capture(captures, "_router")
+        if router_capture is None:
+            nestjs_methods = {
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "head",
+                "options",
+                "all",
+            }
+            if method in nestjs_methods:
+                path = self._string_literal_value(path_node)
+                if not path:
+                    return None
+                handler_name = self._route_handler_name(handler_node)
+                if not handler_name:
+                    return None
+                return HttpRoute(
+                    method=method.upper(),
+                    path=path,
+                    handler=handler_name,
+                    file=file,
+                    line=path_node.start_point[0] + 1,
+                    framework="nestjs",
+                )
+        if router_capture is None:
+            return None
+        router = self._text(router_capture)
+        if router not in {
+            "app",
+            "router",
+            "api",
+            "server",
+            "routes",
+        } or method not in {
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "use",
+            "all",
+        }:
+            return None
+        if method in {
+            "describe",
+            "test",
+            "it",
+            "expect",
+            "log",
+            "some",
+            "map",
+            "filter",
+            "find",
+            "reduce",
+            "foreach",
+        }:
+            return None
+        return method, "express"
+
+    def _validate_go_route(
+        self, captures: dict[str, list[Any]], method: str
+    ) -> tuple[str, str] | None:
+        """验证 Go HTTP 路由。"""
+        if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
+            return None
+        return method, "go-http"
+
+    def _validate_rust_route(
+        self, captures: dict[str, list[Any]], method: str
+    ) -> tuple[str, str] | None:
+        """验证 Rust (Axum) 路由。"""
+        method_name = self._text(self._first_capture(captures, "_method_name"))
+        if method_name != "route" or method not in {
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "head",
+            "options",
+        }:
+            return None
+        if method in {"some", "ok", "err", "is_some", "unwrap", "map", "filter"}:
+            return None
+        return method, "axum"
+
+    def _validate_java_route(
+        self, captures: dict[str, list[Any]], method: str
+    ) -> tuple[str, str] | None:
+        """验证 Java (Spring) 路由。"""
+        if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
+            return None
+        return method, "spring"
+
     def _http_route_from_captures(
         self, captures: dict[str, list[Any]], lang: str, file: str
     ) -> Any | None:
@@ -1630,144 +1808,14 @@ class TreeSitterAdapter:
         if not method:
             return None
 
-        if lang == "python":
-            obj = self._text(self._first_capture(captures, "_obj"))
-            if obj not in {
-                "app",
-                "router",
-                "api",
-                "bp",
-                "blueprint",
-                "routes",
-                "endpoints",
-            } or method not in {
-                "get",
-                "post",
-                "put",
-                "delete",
-                "patch",
-                "head",
-                "options",
-                "route",
-            }:
-                return None
-            # Flask: @app.route("/path", methods=["GET"]) — method comes from a list, not the attribute name
-            if method == "route":
-                # 尝试从 methods= 参数提取 HTTP method
-                methods_node = self._first_capture(captures, "_methods")
-                if methods_node is not None:
-                    method_text = self._text(methods_node).strip("\"'")
-                    method = method_text.lower()
-                else:
-                    method = "get"  # Flask route 默认为 GET
-            if method not in {
-                "get",
-                "post",
-                "put",
-                "delete",
-                "patch",
-                "head",
-                "options",
-            }:
-                return None
-            framework = (
-                "flask"
-                if method == "route" or obj in {"bp", "blueprint"}
-                else "fastapi"
-            )
-        elif lang in ("javascript", "typescript", "tsx"):
-            # NestJS decorator-based routes: only apply when captured from
-            # http_route_nestjs query (no _router capture). Express routes
-            # have _router (app/router/api/server/routes) and are handled below.
-            router_capture = self._first_capture(captures, "_router")
-            if router_capture is None:
-                nestjs_methods = {
-                    "get",
-                    "post",
-                    "put",
-                    "delete",
-                    "patch",
-                    "head",
-                    "options",
-                    "all",
-                }
-                if method in nestjs_methods:
-                    path = self._string_literal_value(path_node)
-                    if not path:
-                        return None
-                    handler_name = self._route_handler_name(handler_node)
-                    if not handler_name:
-                        return None
-                    return HttpRoute(
-                        method=method.upper(),
-                        path=path,
-                        handler=handler_name,
-                        file=file,
-                        line=path_node.start_point[0] + 1,
-                        framework="nestjs",
-                    )
-            # Express route handling
-            if router_capture is None:
-                return None
-            router = self._text(router_capture)
-            if router not in {
-                "app",
-                "router",
-                "api",
-                "server",
-                "routes",
-            } or method not in {
-                "get",
-                "post",
-                "put",
-                "delete",
-                "patch",
-                "use",
-                "all",
-            }:
-                return None
-            if method in {
-                "describe",
-                "test",
-                "it",
-                "expect",
-                "log",
-                "some",
-                "map",
-                "filter",
-                "find",
-                "reduce",
-                "foreach",
-            }:
-                return None
-            framework = "express"
-        elif lang == "go":
-            router = self._text(self._first_capture(captures, "_router"))
-            if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
-                return None
-            framework = "go-http"
-        elif lang == "rust":
-            method_name = self._text(self._first_capture(captures, "_method_name"))
-            if method_name != "route" or method not in {
-                "get",
-                "post",
-                "put",
-                "delete",
-                "patch",
-                "head",
-                "options",
-            }:
-                return None
-            if method in {"some", "ok", "err", "is_some", "unwrap", "map", "filter"}:
-                return None
-            framework = "axum"
-        elif lang == "java":
-            # Spring Boot: @GetMapping("/path") on a method
-            if method in {"some", "ok", "err", "unwrap", "map", "filter"}:
-                return None
-            framework = "spring"
-        else:
+        result = self._validate_http_route(
+            lang, captures, method, path_node, handler_node, file
+        )
+        if result is None:
             return None
+        if isinstance(result, HttpRoute):
+            return result
+        method, framework = result
 
         path = self._string_literal_value(path_node)
         if not path:
