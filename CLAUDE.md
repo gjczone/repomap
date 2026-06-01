@@ -102,6 +102,8 @@ src/                    # Python package (flat)
 ├── git_backend.py          # GitBackend: unified git operations (pygit2 priority, subprocess fallback)
 ├── core.py                # RepoMapEngine: scan pipeline, graph build
 ├── parser.py              # TreeSitterAdapter: AST parsing, import/export bindings
+├── queries.py             # Tree-sitter query definitions for all 17 languages
+├── route_extractor.py     # HTTP route detection: multi-framework route extraction
 ├── resolver.py            # ImportResolver: resolve imports to file paths
 ├── ranking.py             # EdgeBuilder, GraphAnalyzer: PageRank, call-graph edges
 ├── callgraph.py           # Multi-language precise call graph (Python ast + TS/Go/Rust tree-sitter)
@@ -124,11 +126,13 @@ tests/                     # Test suite
 dist/repomap               # Local build output (CI builds Linux x64 only via GitHub Actions)
 ```
 
-**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
+**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `queries.py` (query definitions), `route_extractor.py` (route detection), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
 
 ## Change Map
 
 - **Parser/AST**: `src/parser.py`, `src/resolver.py` → all symbol/call-chain commands
+- **Queries**: `src/queries.py` → tree-sitter query definitions for all 17 languages
+- **Route extraction**: `src/route_extractor.py` → `routes` HTTP route detection (FastAPI, Express, NestJS, Gin, Axum, Spring Boot)
 - **Graph/ranking**: `src/ranking.py` → `overview`, `call-chain`, `query --symbol`, `impact`
 - **Call graph**: `src/callgraph.py` → `call-chain` precise edges (Python ast + TS/Go/Rust tree-sitter + JSX component detection + Rust trait default methods)
 - **Type inference**: `src/type_inference.py` → `query --symbol` return_type/params (11 languages)
