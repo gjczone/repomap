@@ -582,7 +582,7 @@ class DiagnosticRunner:
     def _run_pyright(self) -> DiagnosticResult:
         """运行 pyright 类型检查"""
         tool = "pyright"
-        cmd_str = "pyright . --outputjson"
+        cmd_str = "pyright src --outputjson"
 
         if not self._has_cmd("pyright"):
             return DiagnosticResult(
@@ -608,7 +608,7 @@ class DiagnosticRunner:
                 )
             cmd = ["pyright", "--outputjson", "--"] + target_files
         else:
-            cmd = ["pyright", ".", "--outputjson"]
+            cmd = ["pyright", "src", "--outputjson"]
 
         exit_code, stdout, stderr, duration = self._run_command(
             cmd, tool, merge_output=False
