@@ -58,115 +58,92 @@ class DiagnosticResult:
     raw_excerpt: list[str] = field(default_factory=list)
 
 
-class ProjectDetector:
-    """检测项目类型"""
+def _detect_project_types(project_root: Path) -> list[str]:
+    """检测项目包含的语言类型列表"""
+    types = set()
 
-    @staticmethod
-    def detect(project_root: Path) -> list[str]:
-        """检测项目包含的语言类型列表"""
-        types = set()
+    if list(project_root.glob("tsconfig*.json")):
+        types.add("typescript")
+    if (project_root / "Cargo.toml").exists():
+        types.add("rust")
+    if any(
+        (project_root / f).exists()
+        for f in ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"]
+    ):
+        types.add("python")
+    if (project_root / "go.mod").exists():
+        types.add("go")
+    if "typescript" not in types:
+        if _has_js_files(project_root):
+            types.add("javascript")
 
-        # TypeScript
-        if list(project_root.glob("tsconfig*.json")):
-            types.add("typescript")
+    return sorted(types)
 
-        # Rust
-        if (project_root / "Cargo.toml").exists():
-            types.add("rust")
 
-        # Python
+def _has_js_files(project_root: Path) -> bool:
+    """检查是否有 JS 文件（排除 node_modules）"""
+    try:
+        result = subprocess.run(
+            [
+                "rg",
+                "--files",
+                "-g",
+                "!node_modules/**",
+                "-g",
+                "!dist/**",
+                "-g",
+                "!build/**",
+            ],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.split("\n")[:100]:
+                if re.search(r"\.(mjs|cjs|js|jsx)$", line):
+                    return True
+    except subprocess.TimeoutExpired:
+        logger.debug("rg --files timed out for JS detection, falling back")
+    except Exception:
+        logger.warning("rg --files failed for JS detection, falling back to os.walk")
+
+    skip_dirs = {
+        "node_modules",
+        "dist",
+        "build",
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+    }
+    for root, dir_names, file_names in os.walk(project_root):
+        dir_names[:] = [name for name in dir_names if name not in skip_dirs]
         if any(
-            (project_root / f).exists()
-            for f in ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"]
+            Path(file_name).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs"}
+            for file_name in file_names
         ):
-            types.add("python")
-
-        # Go
-        if (project_root / "go.mod").exists():
-            types.add("go")
-
-        # JavaScript (只有 TypeScript 不存在时才单独检测)
-        if "typescript" not in types:
-            if ProjectDetector._has_js_files(project_root):
-                types.add("javascript")
-
-        return sorted(types)
-
-    @staticmethod
-    def _has_js_files(project_root: Path) -> bool:
-        """检查是否有 JS 文件（排除 node_modules）"""
-        try:
-            result = subprocess.run(
-                [
-                    "rg",
-                    "--files",
-                    "-g",
-                    "!node_modules/**",
-                    "-g",
-                    "!dist/**",
-                    "-g",
-                    "!build/**",
-                ],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.split("\n")[:100]:
-                    if re.search(r"\.(mjs|cjs|js|jsx)$", line):
-                        return True
-        except subprocess.TimeoutExpired:
-            logger.debug("rg --files timed out for JS detection, falling back")
-        except Exception:
-            logger.warning(
-                "rg --files failed for JS detection, falling back to os.walk"
-            )
-
-        # fallback: 简单遍历，剪掉依赖和构建目录，避免只因 node_modules 内文件误判为 JS 项目
-        skip_dirs = {
-            "node_modules",
-            "dist",
-            "build",
-            ".git",
-            ".venv",
-            "venv",
-            "__pycache__",
-        }
-        for root, dir_names, file_names in os.walk(project_root):
-            dir_names[:] = [name for name in dir_names if name not in skip_dirs]
-            if any(
-                Path(file_name).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs"}
-                for file_name in file_names
-            ):
-                return True
-        return False
+            return True
+    return False
 
 
-class GitHelper:
-    """Git 辅助工具"""
+def _get_git_modified_files(
+    project_root: Path, since_commit: str | None = None
+) -> list[str] | None:
+    """获取变更的文件列表，失败时返回 None"""
+    try:
+        from .git_backend import GitBackend
 
-    @staticmethod
-    def get_modified_files(
-        project_root: Path, since_commit: str | None = None
-    ) -> list[str] | None:
-        """获取变更的文件列表，失败时返回 None"""
-        try:
-            from .git_backend import GitBackend
-
-            git = GitBackend(str(project_root))
-            files: set[str] = set()
-            files.update(git.diff_cached_name_only())
-            files.update(git.diff_name_only())
-            if since_commit:
-                files.update(git.diff_name_only(since=since_commit))
-            return sorted(files)
-        except Exception:
-            logger.warning(
-                "Failed to get modified files from git",
-                exc_info=True,
-            )
-            return None
+        git = GitBackend(str(project_root))
+        files: set[str] = set()
+        files.update(git.diff_cached_name_only())
+        files.update(git.diff_name_only())
+        if since_commit:
+            files.update(git.diff_name_only(since=since_commit))
+        return sorted(files)
+    except Exception:
+        logger.warning("Failed to get modified files from git", exc_info=True)
+        return None
 
 
 class DiagnosticRunner:
@@ -923,7 +900,6 @@ class RepoMapChecker:
     def __init__(self, project_root: str | Path, max_items: int = 100):
         self.project_root = Path(project_root).resolve()
         self.max_items = max_items
-        self.detector = ProjectDetector()
         # runner 延迟初始化，以便传入 modified_files
 
     def check(
@@ -954,9 +930,9 @@ class RepoMapChecker:
         # 处理增量检查参数
         target_files = modified_files
         if since_commit and not modified_files:
-            target_files = GitHelper.get_modified_files(self.project_root, since_commit)
+            target_files = _get_git_modified_files(self.project_root, since_commit)
 
-        detected_types = types or self.detector.detect(self.project_root)
+        detected_types = types or _detect_project_types(self.project_root)
 
         if not detected_types:
             return {

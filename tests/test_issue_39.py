@@ -165,13 +165,13 @@ class TestP1_4_HasJsFilesRgFailure(unittest.TestCase):
         if not hasattr(src.check, "logger"):
             self.skipTest("check.py 尚未添加 logger（待修复后此测试应通过）")
 
-        from src.check import ProjectDetector
+        from src.check import _has_js_files
 
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError("rg not found")
             with self.assertLogs("repomap", level="WARNING") as log_ctx:
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    result = ProjectDetector._has_js_files(Path(tmpdir))
+                    result = _has_js_files(Path(tmpdir))
                     self.assertFalse(result)
 
             self.assertTrue(
@@ -197,10 +197,10 @@ class TestP1_5_ModifiedFilesGitFailure(unittest.TestCase):
         if not hasattr(src.check, "logger"):
             self.skipTest("check.py 尚未添加 logger（待修复后此测试应通过）")
 
-        from src.check import GitHelper
+        from src.check import _get_git_modified_files
 
         with patch("src.check.logger"):
-            result = GitHelper.get_modified_files(Path("/tmp/nonexistent_repo"))
+            result = _get_git_modified_files(Path("/tmp/nonexistent_repo"))
             self.assertEqual(result, [])
 
 

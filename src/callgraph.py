@@ -145,17 +145,16 @@ class _PyCallGraphVisitor(ast.NodeVisitor):
         return ""
 
 
-# analyze_{lang}_callgraph 四函数共享相同结构（parse → modules → calls → edges）。
-# 差异仅在解析器（ast vs tree-sitter）和符号提取方式，不适合强行模板化。
-# 保持独立实现以确保每语言调用的正确性和可维护性。
-def analyze_python_callgraph(
+def _build_callgraph_modules(
     project_root: Path,
-    python_files: list[str],
-    source_map: dict[str, bytes] | None = None,
+    files: list[str],
+    source_map: dict[str, bytes] | None,
+    parse_fn: Any,
+    label: str = "",
 ) -> dict[str, ModuleInfo]:
+    """共享模板：读取文件 → 解析 → 收集 ModuleInfo。"""
     modules: dict[str, ModuleInfo] = {}
-
-    for rel_path in python_files:
+    for rel_path in files:
         full_path = project_root / rel_path
         if not full_path.exists():
             continue
@@ -169,15 +168,32 @@ def analyze_python_callgraph(
                 "Failed to read %s for call graph analysis", rel_path, exc_info=True
             )
             continue
+        info = parse_fn(source, rel_path, full_path)
+        if info is not None:
+            modules[rel_path] = info
+        else:
+            logger.debug("%s parse returned None for %s", label, rel_path)
+    return modules
+
+
+def analyze_python_callgraph(
+    project_root: Path,
+    python_files: list[str],
+    source_map: dict[str, bytes] | None = None,
+) -> dict[str, ModuleInfo]:
+    def _parse_python(
+        source: bytes, rel_path: str, _full_path: Path
+    ) -> ModuleInfo | None:
         tree = _safe_parse(source, rel_path)
         if not tree:
-            logger.debug("Python AST parse returned None for %s", rel_path)
-            continue
+            return None
         visitor = _PyCallGraphVisitor(rel_path)
         visitor.visit(tree)
-        modules[rel_path] = visitor.info
+        return visitor.info
 
-    return modules
+    return _build_callgraph_modules(
+        project_root, python_files, source_map, _parse_python, "Python"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -336,31 +352,17 @@ def analyze_ts_callgraph(
     ts_adapter: Any,
     source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
-    modules: dict[str, ModuleInfo] = {}
-    for rel_path in ts_files:
-        full_path = project_root / rel_path
-        if not full_path.exists():
-            continue
-        try:
-            if source_map and rel_path in source_map:
-                source = source_map[rel_path]
-            else:
-                source = full_path.read_bytes()
-        except OSError:
-            logger.debug(
-                "Failed to read %s for call graph analysis", rel_path, exc_info=True
-            )
-            continue
+    def _parse_ts(source: bytes, rel_path: str, _full_path: Path) -> ModuleInfo | None:
         ext = Path(rel_path).suffix.lower()
         lang = "tsx" if ext == ".tsx" else "typescript"
         tree = ts_adapter.parse(source, lang)
         if not tree:
-            logger.debug("TypeScript tree-sitter parse returned None for %s", rel_path)
-            continue
+            return None
         info = ModuleInfo(rel_path)
         _walk_ts_node(tree.root_node, info, [None])
-        modules[rel_path] = info
-    return modules
+        return info
+
+    return _build_callgraph_modules(project_root, ts_files, source_map, _parse_ts, "TS")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -485,29 +487,15 @@ def analyze_go_callgraph(
     ts_adapter: Any,
     source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
-    modules: dict[str, ModuleInfo] = {}
-    for rel_path in go_files:
-        full_path = project_root / rel_path
-        if not full_path.exists():
-            continue
-        try:
-            if source_map and rel_path in source_map:
-                source = source_map[rel_path]
-            else:
-                source = full_path.read_bytes()
-        except OSError:
-            logger.debug(
-                "Failed to read %s for call graph analysis", rel_path, exc_info=True
-            )
-            continue
+    def _parse_go(source: bytes, rel_path: str, _full_path: Path) -> ModuleInfo | None:
         tree = ts_adapter.parse(source, "go")
         if not tree:
-            logger.debug("Go tree-sitter parse returned None for %s", rel_path)
-            continue
+            return None
         info = ModuleInfo(rel_path)
         _walk_go_node(tree.root_node, info, [None])
-        modules[rel_path] = info
-    return modules
+        return info
+
+    return _build_callgraph_modules(project_root, go_files, source_map, _parse_go, "Go")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -658,29 +646,19 @@ def analyze_rust_callgraph(
     ts_adapter: Any,
     source_map: dict[str, bytes] | None = None,
 ) -> dict[str, ModuleInfo]:
-    modules: dict[str, ModuleInfo] = {}
-    for rel_path in rust_files:
-        full_path = project_root / rel_path
-        if not full_path.exists():
-            continue
-        try:
-            if source_map and rel_path in source_map:
-                source = source_map[rel_path]
-            else:
-                source = full_path.read_bytes()
-        except OSError:
-            logger.debug(
-                "Failed to read %s for call graph analysis", rel_path, exc_info=True
-            )
-            continue
+    def _parse_rust(
+        source: bytes, rel_path: str, _full_path: Path
+    ) -> ModuleInfo | None:
         tree = ts_adapter.parse(source, "rust")
         if not tree:
-            logger.debug("Rust tree-sitter parse returned None for %s", rel_path)
-            continue
+            return None
         info = ModuleInfo(rel_path)
         _walk_rust_node(tree.root_node, info, [None])
-        modules[rel_path] = info
-    return modules
+        return info
+
+    return _build_callgraph_modules(
+        project_root, rust_files, source_map, _parse_rust, "Rust"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

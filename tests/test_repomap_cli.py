@@ -978,14 +978,14 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(route["line"], 1)
 
     def test_js_detector_fallback_skips_dependency_directories(self) -> None:
-        from src.check import ProjectDetector
+        from src.check import _has_js_files
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(
                 project_root, "node_modules/pkg/index.js", "module.exports = {};\n"
             )
             with patch("src.check.subprocess.run", side_effect=FileNotFoundError()):
-                self.assertFalse(ProjectDetector._has_js_files(Path(project_root)))
+                self.assertFalse(_has_js_files(Path(project_root)))
 
         from src.cli.commands.verify import _parse_git_status_porcelain_paths
 
