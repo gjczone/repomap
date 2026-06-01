@@ -31,10 +31,12 @@ def _get_or_load_co_change_cache(
         if cache is not None:
             _co_change_cache.move_to_end(cache_key)
         else:
-            if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
-                _co_change_cache.popitem(last=False)
             cache = _load_co_change_scores(project_root, since_days=since_days)
-            _co_change_cache[cache_key] = cache
+            # 仅在加载成功时缓存（失败时 _co_change_load_failed 为 True）
+            if not _co_change_load_failed:
+                if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
+                    _co_change_cache.popitem(last=False)
+                _co_change_cache[cache_key] = cache
     return cache
 
 
@@ -72,6 +74,7 @@ def _load_co_change_scores(
     project_root: str, since_days: int = 30
 ) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
+    global _co_change_load_failed
     from .git_backend import GitBackend
 
     scores: dict[tuple[str, str], int] = defaultdict(int)
@@ -80,9 +83,11 @@ def _load_co_change_scores(
         commit_groups = git.log_commits_grouped(since_days=since_days)
     except Exception:
         logger.warning("Failed to load co-change scores from git", exc_info=True)
-        global _co_change_load_failed
         _co_change_load_failed = True
         return dict(scores)
+
+    # 加载成功，清除之前的失败标志
+    _co_change_load_failed = False
 
     for commit_files in commit_groups:
         if len(commit_files) > 1:

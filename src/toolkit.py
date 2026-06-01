@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-RepoMap Toolkit - 轻量级代码分析工具
-=====================================
-功能：
-1. 符号缓存持久化 (cache)
-2. 变更检测 (diff)
-3. Git 历史关联 (git)
-4. 引用计数分析 (refs)
+RepoMap Toolkit - 内部缓存与 graph diff 辅助模块
+=================================================
+职责：
+1. 符号缓存持久化（cache save/restore）
+2. 增量扫描基线（verify graph diff 对比）
+3. Git 历史关联辅助（co-change 分析）
 
-使用：
-    python repomap_toolkit.py cache --save --project /path/to/project
-    python repomap_toolkit.py diff --project /path/to/project
-    python repomap_toolkit.py git --symbol calculate_kpi --project /path/to/project
-    python repomap_toolkit.py refs --symbol calculate_kpi --project /path/to/project
-    python repomap_toolkit.py orphan --project /path/to/project
+对外命令入口：
+    repomap cache save --project <path>    # 保存扫描基线
+    repomap verify --project <path>        # 验证变更 + graph diff 对比
 """
 
 from __future__ import annotations
@@ -172,7 +168,7 @@ def load_cache(project_path: str) -> SymbolCache | None:
         return None
 
     try:
-        with open(cache_file, "r", encoding="utf-8") as f:
+        with open(cache_file, "r", encoding="utf-8", errors="replace") as f:
             data = json_load(f)
         # Schema version check - 不匹配时删除旧缓存，触发重建
         if data.get("_schema_version") != CACHE_SCHEMA_VERSION:
@@ -335,7 +331,7 @@ def load_incremental_cache(project_path: str) -> IncrementalCache | None:
     if not cache_path.exists():
         return None
     try:
-        with open(cache_path, "r", encoding="utf-8") as f:
+        with open(cache_path, "r", encoding="utf-8", errors="replace") as f:
             data = json_load(f)
         files = {}
         for fp, entry_data in data.get("files", {}).items():
