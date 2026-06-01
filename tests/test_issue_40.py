@@ -22,8 +22,9 @@ class TestP1_3_CallgraphOsErrorLogging(unittest.TestCase):
 
         source = inspect.getsource(src.callgraph._build_callgraph_modules)
         self.assertIn("OSError", source)
-        self.assertIn("logger", source,
-            "_build_callgraph_modules OSError 处理应有日志调用")
+        self.assertIn(
+            "logger", source, "_build_callgraph_modules OSError 处理应有日志调用"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
