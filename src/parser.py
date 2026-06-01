@@ -473,7 +473,7 @@ class TreeSitterAdapter:
                 self.parsers[lang] = Parser(Language(lang_fn()))
                 logger.debug(f"Parser loaded: {lang}")
             except Exception as e:
-                logger.warning(f"Parser unavailable [{lang}]: {e}")
+                logger.info(f"Parser unavailable [{lang}]: {e}")
 
         # TypeScript / TSX：优先专用绑定，TypeScript 回退到 JavaScript parser，TSX 不回退以避免误解析 JSX。
         try:
@@ -563,7 +563,7 @@ class TreeSitterAdapter:
                 abs(open_count - close_count) > 100
                 or max(open_count, close_count) > 1000
             ):
-                logger.warning(
+                logger.info(
                     f"Extreme nesting risk detected ({open_count} open, {close_count} close brackets in first 256KB), "
                     f"skipping file to prevent parser crash"
                 )

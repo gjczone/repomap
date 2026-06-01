@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from .search import SymbolSearchIndex
 # ── 日志：统一写 stderr，绝不污染 CLI stdout ────────────────────────────────
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     stream=sys.stderr,
 )
