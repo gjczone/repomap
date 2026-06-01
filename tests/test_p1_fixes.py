@@ -74,7 +74,12 @@ class TestP1_2_UnknownCheckStatus(unittest.TestCase):
                 "tests": [],
                 "untestedSymbols": [],
                 "orphanSymbols": [],
-                "check": {"status": "unknown", "summary": {}, "runs": [], "errorsByFile": {}},
+                "check": {
+                    "status": "unknown",
+                    "summary": {},
+                    "runs": [],
+                    "errorsByFile": {},
+                },
                 "lsp": {
                     "enabled": False,
                     "status": "skipped",
