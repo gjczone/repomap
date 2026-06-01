@@ -10,35 +10,96 @@ from unittest.mock import MagicMock, patch
 
 
 class TestP1_2_UnknownCheckStatus(unittest.TestCase):
-    """P1-2: check 结果 unknown 不应视为 passed。"""
+    """P1-2: check 结果不应出现 UNKNOWN，应映射为 SKIPPED/PASSED/FAILED。
 
-    def test_unknown_check_with_passed_lsp_is_warning(self) -> None:
-        """unknown + LSP passed → 整体应为 warning，不是 passed。"""
+    Issue #146: 修复后 check.py 不再返回 "unknown"，改为 "skipped"。
+    verify 渲染也将 "unknown" 映射为 "SKIPPED"。
+    """
+
+    def test_skipped_check_with_passed_lsp_is_passed(self) -> None:
+        """check skipped + LSP passed → 整体 passed（skipped 不是问题）。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
             risk_level="high",
             missing_checks=[],
-            check_payload={"status": "unknown"},
+            check_payload={"status": "skipped"},
             lsp_payload={"status": "passed"},
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
-        self.assertEqual(status, "warning")
+        self.assertEqual(status, "passed")
 
-    def test_unknown_check_with_skipped_lsp_is_warning(self) -> None:
-        """unknown + LSP skipped → 整体应为 warning。"""
+    def test_skipped_check_with_failed_lsp_is_failed(self) -> None:
+        """check skipped + LSP failed → 整体 failed（LSP 错误是实锤）。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
             risk_level="high",
             missing_checks=[],
-            check_payload={"status": "unknown"},
-            lsp_payload={"status": "skipped"},
+            check_payload={"status": "skipped"},
+            lsp_payload={"status": "failed"},
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
-        self.assertEqual(status, "warning")
+        self.assertEqual(status, "failed")
+
+    def test_rendered_status_maps_unknown_to_skipped(self) -> None:
+        """ai.py 渲染时，check status 'unknown' 应显示为 SKIPPED。"""
+        from src.ai import (
+            render_verify_report,
+        )
+
+        # 构造一个最小 verify payload，check 状态为 "unknown"（边界防护）
+        payload = {
+            "result": {
+                "scanStats": {
+                    "listed_source_files": 0,
+                    "selected_source_files": 0,
+                    "processed_files": 0,
+                    "filtered_path_files": 0,
+                    "filtered_large_files": 0,
+                    "truncated_files": 0,
+                    "failed_files": [],
+                    "scan_duration_ms": 0,
+                    "timeout_triggered": False,
+                    "git_failed": False,
+                    "symbol_count": 0,
+                    "edge_count": 0,
+                },
+                "status": "passed",
+                "changedFiles": [],
+                "risk": {"level": "low", "reasons": [], "missingChecks": []},
+                "affectedFiles": [],
+                "tests": [],
+                "untestedSymbols": [],
+                "orphanSymbols": [],
+                "check": {
+                    "status": "unknown",
+                    "summary": {},
+                    "runs": [],
+                    "errorsByFile": {},
+                },
+                "lsp": {
+                    "enabled": False,
+                    "status": "skipped",
+                    "runs": [],
+                    "summary": {},
+                    "reason": "",
+                },
+                "graphDiff": {
+                    "enabled": False,
+                    "status": "skipped",
+                    "summary": {},
+                    "breakingChanges": [],
+                },
+                "contractRisks": [],
+                "callGraphConsistency": None,
+            }
+        }
+        report = render_verify_report(payload)
+        self.assertIn("SKIPPED", report)
+        self.assertNotIn("UNKNOWN", report)
 
 
 class TestP1_5_LogNameOnlyReturncode(unittest.TestCase):
