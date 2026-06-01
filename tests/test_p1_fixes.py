@@ -339,5 +339,90 @@ class TestP1_13_CallChainCallerGrouping(unittest.TestCase):
         self.assertIn("10", report)  # test count
 
 
+class TestP1_14_RouteConsumerExcludesOwnFile(unittest.TestCase):
+    """P1-14: route consumer 检测应排除路由定义文件自身。
+
+    Issue #145: routes --with-consumers 将 decorator 行也作为 consumer，
+    实际需要的是前端/测试代码中的 API 调用。
+    """
+
+    def test_route_handler_file_not_reported_as_consumer(self) -> None:
+        """路由 handler 文件自身不应被列为 consumer（那是路由定义）。"""
+        import tempfile
+        from pathlib import Path
+
+        from src.consumers import find_route_consumers
+        from src import HttpRoute
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            # 创建后端路由文件（包含 FastAPI route decorator）
+            backend_file = project_root / "backend" / "routes.py"
+            backend_file.parent.mkdir(parents=True, exist_ok=True)
+            backend_file.write_text(
+                'from fastapi import APIRouter\n'
+                'router = APIRouter()\n'
+                '@router.get("/api/users")\n'
+                'def get_users():\n'
+                '    return []\n'
+            )
+            # 创建前端文件（包含 fetch 调用）
+            frontend_file = project_root / "frontend" / "api.ts"
+            frontend_file.parent.mkdir(parents=True, exist_ok=True)
+            frontend_file.write_text(
+                "const resp = await fetch('/api/users')\n"
+            )
+
+            # 初始化 git repo（engine 需要）
+            import subprocess
+            subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=tmpdir, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=tmpdir, capture_output=True,
+            )
+            subprocess.run(["git", "add", "-A"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init", "--no-gpg-sign"],
+                cwd=tmpdir, capture_output=True,
+            )
+
+            from src.core import RepoMapEngine
+
+            engine = RepoMapEngine(str(tmpdir))
+            engine.scan(max_files=200)
+
+            # 手动构造 route（模拟 parser 提取的结果）
+            routes = [
+                HttpRoute(
+                    method="GET",
+                    path="/api/users",
+                    handler="get_users",
+                    file="backend/routes.py",
+                    line=3,
+                    framework="fastapi",
+                )
+            ]
+            consumers = find_route_consumers(engine, routes)
+
+            key = "GET /api/users"
+            self.assertIn(key, consumers, f"应找到路由 {key} 的 consumer")
+
+            consumer_files = [c.file for c in consumers.get(key, [])]
+            # 后端路由文件自身不应被列为 consumer
+            self.assertNotIn(
+                "backend/routes.py", consumer_files,
+                "路由 handler 文件不应被列为 consumer（那是路由定义，不是调用者）",
+            )
+            # 前端文件应被列为 consumer
+            self.assertIn(
+                "frontend/api.ts", consumer_files,
+                "前端 fetch 调用应被检测",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
