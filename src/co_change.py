@@ -8,8 +8,10 @@ Git 共变更热度分析。
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections import OrderedDict, defaultdict
+from pathlib import Path
 
 logger = logging.getLogger("repomap")
 _co_change_load_failed: bool = False
@@ -19,6 +21,25 @@ _co_change_cache: OrderedDict[tuple[str, int], dict[tuple[str, str], int]] = (
 )
 _co_change_lock = threading.Lock()
 _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
+
+# 项目大小限制：超过此大小的项目跳过 co-change 分析
+_MAX_PROJECT_FILES = 5000  # 最大文件数
+_DEFAULT_SINCE_DAYS = 7    # 默认分析最近7天（而非30天）
+
+
+def _count_source_files(project_root: str) -> int:
+    """快速统计项目中的源文件数量（排除 node_modules 等）。"""
+    skip_dirs = {"node_modules", ".git", "dist", "build", "target", "__pycache__", ".venv", "venv"}
+    count = 0
+    try:
+        for root, dirs, files in os.walk(project_root):
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            count += len(files)
+            if count > _MAX_PROJECT_FILES:
+                return count  # 提前返回，避免遍历整个项目
+    except Exception:
+        pass
+    return count
 
 
 def _get_or_load_co_change_cache(
@@ -41,7 +62,7 @@ def _get_or_load_co_change_cache(
 
 
 def get_co_change_score(
-    project_root: str, file_a: str, file_b: str, since_days: int = 30
+    project_root: str, file_a: str, file_b: str, since_days: int = _DEFAULT_SINCE_DAYS
 ) -> int:
     """查询两个文件的 git 共变更次数（带缓存，公开接口）。"""
     cache = _get_or_load_co_change_cache(project_root, since_days)
@@ -53,7 +74,7 @@ def get_co_change_neighbors(
     project_root: str,
     file_path: str,
     top_n: int = 5,
-    since_days: int = 30,
+    since_days: int = _DEFAULT_SINCE_DAYS,
 ) -> list[tuple[str, int]]:
     """返回与指定文件共变频率最高的文件列表（降序）。
 
@@ -71,13 +92,24 @@ def get_co_change_neighbors(
 
 
 def _load_co_change_scores(
-    project_root: str, since_days: int = 30
+    project_root: str, since_days: int = _DEFAULT_SINCE_DAYS
 ) -> dict[tuple[str, str], int]:
     """统计项目中文件对的 git 共变更次数。"""
     global _co_change_load_failed
     from .git_backend import GitBackend
 
     scores: dict[tuple[str, str], int] = defaultdict(int)
+
+    # 大项目跳过 co-change 分析，避免超时
+    file_count = _count_source_files(project_root)
+    if file_count > _MAX_PROJECT_FILES:
+        logger.info(
+            "Skipping co-change analysis: project has %d files (limit %d)",
+            file_count, _MAX_PROJECT_FILES,
+        )
+        _co_change_load_failed = True
+        return dict(scores)
+
     try:
         git = GitBackend(project_root)
         commit_groups = git.log_commits_grouped(since_days=since_days)
@@ -89,8 +121,20 @@ def _load_co_change_scores(
     # 加载成功，清除之前的失败标志
     _co_change_load_failed = False
 
+    # 限制处理的提交数量，避免大型项目超时
+    max_commits = 500
+    if len(commit_groups) > max_commits:
+        logger.info(
+            "Limiting co-change analysis to %d commits (had %d)",
+            max_commits, len(commit_groups),
+        )
+        commit_groups = commit_groups[:max_commits]
+
     for commit_files in commit_groups:
         if len(commit_files) > 1:
+            # 限制每个提交的文件数量，避免组合爆炸
+            if len(commit_files) > 50:
+                commit_files = commit_files[:50]
             for i in range(len(commit_files)):
                 for j in range(i + 1, len(commit_files)):
                     a, b = sorted([commit_files[i], commit_files[j]])
