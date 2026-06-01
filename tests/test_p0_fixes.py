@@ -224,29 +224,27 @@ class P0_8_StderrNoiseRegression(unittest.TestCase):
     """
 
     def test_basic_config_level_is_warning_not_info(self) -> None:
-        """src/core.py: basicConfig 的 level 应为 WARNING 而非 INFO。
+        """src/core.py: 库代码应使用 NullHandler 而非 basicConfig。
 
-        修复前：level=logging.INFO → 所有 INFO/WARNING 都输出到 stderr
-        修复后：level=logging.WARNING → 仅 WARNING+ 输出
+        修复前：basicConfig(level=logging.WARNING) 在模块导入时配置日志
+        修复后：NullHandler — 库层不配置，应用层自行决定日志策略
 
-        使用 inspect.getsource 直接检查源码，避免依赖运行时 root logger 状态
-        （pytest 可能已在 basicConfig 之前配置了 root logger）。
+        使用 inspect.getsource 直接检查源码，避免依赖运行时 root logger 状态。
         """
         import inspect
 
         from src import core as core_module
 
         source = inspect.getsource(core_module)
-        # basicConfig 调用中 level 参数应为 WARNING
         self.assertIn(
-            "level=logging.WARNING",
+            "NullHandler",
             source,
-            "src/core.py 的 basicConfig 应使用 level=logging.WARNING",
+            "src/core.py 应使用 NullHandler（库层不自行配置日志）",
         )
         self.assertNotIn(
-            "level=logging.INFO",
+            "basicConfig",
             source,
-            "src/core.py 的 basicConfig 不应使用 level=logging.INFO（会产生噪音）",
+            "src/core.py 不应调用 basicConfig（库代码不配置日志输出）",
         )
 
     def test_parser_unavailable_logs_as_info_not_warning(self) -> None:
