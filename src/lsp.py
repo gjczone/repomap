@@ -22,7 +22,7 @@ _MAX_LSP_FILE_SIZE = 1_048_576  # 1 MiB，超过此大小的文件不送 LSP
 # 按语言区分的 LSP 超时（秒），重型服务器需要更长启动/响应时间
 _LSP_TIMEOUT_BY_LANGUAGE: dict[str, float] = {
     "typescript": 15.0,  # TypeScript 项目通常较大，需要更多时间初始化
-    "python": 12.0,      # pyright 在大型项目上也需要更多时间
+    "python": 12.0,  # pyright 在大型项目上也需要更多时间
     "rust": 20.0,
     "java": 15.0,
     "kotlin": 15.0,

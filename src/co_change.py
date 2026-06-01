@@ -24,12 +24,21 @@ _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
 
 # 项目大小限制：超过此大小的项目跳过 co-change 分析
 _MAX_PROJECT_FILES = 5000  # 最大文件数
-_DEFAULT_SINCE_DAYS = 7    # 默认分析最近7天（而非30天）
+_DEFAULT_SINCE_DAYS = 7  # 默认分析最近7天（而非30天）
 
 
 def _count_source_files(project_root: str) -> int:
     """快速统计项目中的源文件数量（排除 node_modules 等）。"""
-    skip_dirs = {"node_modules", ".git", "dist", "build", "target", "__pycache__", ".venv", "venv"}
+    skip_dirs = {
+        "node_modules",
+        ".git",
+        "dist",
+        "build",
+        "target",
+        "__pycache__",
+        ".venv",
+        "venv",
+    }
     count = 0
     try:
         for root, dirs, files in os.walk(project_root):
@@ -105,7 +114,8 @@ def _load_co_change_scores(
     if file_count > _MAX_PROJECT_FILES:
         logger.info(
             "Skipping co-change analysis: project has %d files (limit %d)",
-            file_count, _MAX_PROJECT_FILES,
+            file_count,
+            _MAX_PROJECT_FILES,
         )
         _co_change_load_failed = True
         return dict(scores)
@@ -126,7 +136,8 @@ def _load_co_change_scores(
     if len(commit_groups) > max_commits:
         logger.info(
             "Limiting co-change analysis to %d commits (had %d)",
-            max_commits, len(commit_groups),
+            max_commits,
+            len(commit_groups),
         )
         commit_groups = commit_groups[:max_commits]
 

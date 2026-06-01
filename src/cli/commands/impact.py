@@ -442,8 +442,12 @@ def run_impact(
     except Exception as exc:
         if as_json:
             from ..handlers import json_envelope
-            print(json_envelope("impact", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+
+            print(
+                json_envelope(
+                    "impact", str(project or ""), {"error": str(exc)}, status="error"
+                )
+            )
         print(f"[{CLI_NAME}] impact failed: {exc}", file=sys.stderr)
         return 1
 

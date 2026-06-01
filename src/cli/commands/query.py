@@ -273,8 +273,12 @@ def run_query(
     except Exception as exc:
         if as_json:
             from ..handlers import json_envelope
-            print(json_envelope("query", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+
+            print(
+                json_envelope(
+                    "query", str(project or ""), {"error": str(exc)}, status="error"
+                )
+            )
         print(f"[{CLI_NAME}] query failed: {exc}", file=sys.stderr)
         return 1
 
@@ -555,7 +559,11 @@ def run_search(
     except Exception as exc:
         if as_json:
             from ..handlers import json_envelope
-            print(json_envelope("search", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+
+            print(
+                json_envelope(
+                    "search", str(project or ""), {"error": str(exc)}, status="error"
+                )
+            )
         print(f"[{CLI_NAME}] search failed: {exc}", file=sys.stderr)
         return 1

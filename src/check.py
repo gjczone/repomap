@@ -84,8 +84,12 @@ def _detect_project_types(project_root: Path) -> list[str]:
         if pkg_json.exists():
             try:
                 import json
+
                 pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
-                all_deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+                all_deps = {
+                    **pkg.get("dependencies", {}),
+                    **pkg.get("devDependencies", {}),
+                }
                 if "typescript" in all_deps or "@types/node" in all_deps:
                     types.add("typescript")
                 elif any(k for k in all_deps if k.startswith("@types/")):

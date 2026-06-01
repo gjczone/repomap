@@ -292,8 +292,14 @@ def run_call_chain(
         return 0
     except Exception as exc:
         if as_json:
-            print(json_envelope("call-chain", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+            print(
+                json_envelope(
+                    "call-chain",
+                    str(project or ""),
+                    {"error": str(exc)},
+                    status="error",
+                )
+            )
         print(f"[{CLI_NAME}] call-chain failed: {exc}", file=sys.stderr)
         return 1
 
@@ -430,8 +436,11 @@ def run_query_symbol(
         return 0
     except Exception as exc:
         if as_json:
-            print(json_envelope("query", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+            print(
+                json_envelope(
+                    "query", str(project or ""), {"error": str(exc)}, status="error"
+                )
+            )
         print(f"[{CLI_NAME}] query --symbol failed: {exc}", file=sys.stderr)
         return 1
 
@@ -526,13 +535,18 @@ def run_file_detail(
             len(engine.graph.incoming.get(sid, set())) > 0 for sid in file_sids
         )
         if not as_json:
-            for hint in file_detail_hint(has_symbols=has_symbols, has_callers=has_callers):
+            for hint in file_detail_hint(
+                has_symbols=has_symbols, has_callers=has_callers
+            ):
                 print(hint, file=sys.stderr)
         return 0
     except Exception as exc:
         if as_json:
-            print(json_envelope("query", str(project or ""),
-                  {"error": str(exc)}, status="error"))
+            print(
+                json_envelope(
+                    "query", str(project or ""), {"error": str(exc)}, status="error"
+                )
+            )
         print(f"[{CLI_NAME}] query --file failed: {exc}", file=sys.stderr)
         return 1
 

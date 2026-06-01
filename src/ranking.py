@@ -113,16 +113,19 @@ class GraphAnalyzer:
         # Tier 2: camelCase token匹配
         if not candidates:
             from .topic import split_identifier
+
             query_tokens = set(split_identifier(name))
             if query_tokens:
                 candidates = [
-                    s for s in self.graph.symbols.values()
+                    s
+                    for s in self.graph.symbols.values()
                     if query_tokens & set(split_identifier(s.name))
                 ]
 
         # Tier 3: 文件名匹配 - 查找文件名包含查询词的文件中的符号
         if not candidates:
             from pathlib import PurePosixPath
+
             name_lower = name.lower()
             for file_path, sids in self.graph.file_symbols.items():
                 stem = PurePosixPath(file_path).stem.lower()

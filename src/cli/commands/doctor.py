@@ -56,7 +56,9 @@ def run_lsp_doctor(project: str, as_json: bool = False) -> int:
         return 1
 
 
-def run_lsp_setup(project: str, languages: list[str] | None, dry_run: bool, as_json: bool = False) -> int:
+def run_lsp_setup(
+    project: str, languages: list[str] | None, dry_run: bool, as_json: bool = False
+) -> int:
     try:
         project_root = _resolve_project(project)
         from ...lsp import detect_lsp_server, detect_lsp_servers, LSP_INSTALL_STRATEGIES
@@ -71,18 +73,27 @@ def run_lsp_setup(project: str, languages: list[str] | None, dry_run: bool, as_j
 
         if as_json:
             from ..handlers import json_envelope
+
             payload = {
                 "detected_languages": len(detections),
                 "available": [
-                    {"language": d.language, "server": d.server_name, "source": d.source}
+                    {
+                        "language": d.language,
+                        "server": d.server_name,
+                        "source": d.source,
+                    }
                     for d in available
                 ],
                 "missing": [
                     {
                         "language": d.language,
                         "server": d.server_name,
-                        "tool": LSP_INSTALL_STRATEGIES.get(d.language, {}).get("tool", "unknown"),
-                        "command": LSP_INSTALL_STRATEGIES.get(d.language, {}).get("cmd", "manual install"),
+                        "tool": LSP_INSTALL_STRATEGIES.get(d.language, {}).get(
+                            "tool", "unknown"
+                        ),
+                        "command": LSP_INSTALL_STRATEGIES.get(d.language, {}).get(
+                            "cmd", "manual install"
+                        ),
                     }
                     for d in missing
                 ],
