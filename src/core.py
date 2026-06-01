@@ -770,7 +770,10 @@ class RepoMapEngine:
 
         # 缓存源文件字节，供调用图分析复用，避免二次读取（512MB 上限，LRU 驱逐）
         item_size = len(content)
-        while self._source_bytes and self._source_bytes_total + item_size > _MAX_SOURCE_BYTES_TOTAL:
+        while (
+            self._source_bytes
+            and self._source_bytes_total + item_size > _MAX_SOURCE_BYTES_TOTAL
+        ):
             _, old = self._source_bytes.popitem(last=False)
             self._source_bytes_total -= len(old)
         self._source_bytes[file] = content
