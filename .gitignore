@@ -4,6 +4,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 dist/*
+build/
+repomap.spec
 .pytest_cache/
 npm/platforms/*/repomap
 npm/platforms/*/repomap.exe
