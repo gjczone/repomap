@@ -1,3 +1,4 @@
+import queue
 import stat
 import sys
 import tempfile
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.lsp import (
+    StdioLspClient,
     _json_rpc_frame,
     _read_lsp_message,
     _npm_prefix_bin,
@@ -354,6 +356,33 @@ while True:
         self.assertIn("fake-lsp", error_msg)
         self.assertIn("exit code 1", error_msg)
         self.assertIn("LSP server crashed", error_msg)
+
+
+class LspQueueTests(unittest.TestCase):
+    def test_queue_has_maxsize(self) -> None:
+        with patch.object(StdioLspClient, "start"):
+            client = StdioLspClient(["fake"], Path("/tmp"))
+            assert client._messages.maxsize == 10000
+
+    def test_queue_full_drops_oldest(self) -> None:
+        q: queue.Queue[dict[str, str]] = queue.Queue(maxsize=2)
+        q.put_nowait({"a": "1"})
+        q.put_nowait({"b": "2"})
+        assert q.full()
+        # Simulate the put-with-drop logic
+        try:
+            q.put({"c": "3"}, timeout=0.01)
+        except queue.Full:
+            try:
+                q.get_nowait()
+                q.put_nowait({"c": "3"})
+            except queue.Empty:
+                q.put_nowait({"c": "3"})
+            except queue.Full:
+                pass
+        assert q.qsize() == 2
+        assert q.get_nowait() == {"b": "2"}
+        assert q.get_nowait() == {"c": "3"}
 
 
 if __name__ == "__main__":

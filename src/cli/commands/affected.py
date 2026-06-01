@@ -51,7 +51,13 @@ def run_affected(
         print("# Affected Tests\n\nNo changed files specified.")
         return 0
 
-    if depth > _AFFECTED_MAX_DEPTH:
+    if depth < 1:
+        print(
+            f"[{CLI_NAME}] --depth {depth} is invalid, must be >= 1, using 1",
+            file=sys.stderr,
+        )
+        depth = 1
+    elif depth > _AFFECTED_MAX_DEPTH:
         print(
             f"[{CLI_NAME}] --depth {depth} exceeds max {_AFFECTED_MAX_DEPTH}, "
             f"clamping to {_AFFECTED_MAX_DEPTH}",

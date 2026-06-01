@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-import sys
+from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -44,17 +44,14 @@ from . import (
 if TYPE_CHECKING:
     from . import IncrementalCache
     from .search import SymbolSearchIndex
-# ── 日志：统一写 stderr，绝不污染 CLI stdout ────────────────────────────────
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    stream=sys.stderr,
-)
+# ── 日志：库层用 NullHandler，应用层自行配置 ────────────────────────────────
 logger = logging.getLogger("repomap")
+logger.addHandler(logging.NullHandler())
 
 DEFAULT_MAX_FILE_BYTES = 512 * 1024
 DEFAULT_MAX_FILES = 8000
 MAX_FAILED_FILES = 50
+_MAX_SOURCE_BYTES_TOTAL = 512 * 1024 * 1024  # 512 MB 上限
 _DEFAULT_SKIP_DIRS = frozenset(
     {
         "node_modules",
@@ -206,7 +203,8 @@ class RepoMapEngine:
         self.routes: list = []
         self._gitignore: GitignoreParser | None = None
         self._search_index: SymbolSearchIndex | None = None
-        self._source_bytes: dict[str, bytes] = {}
+        self._source_bytes: OrderedDict[str, bytes] = OrderedDict()
+        self._source_bytes_total: int = 0
         self._inc_cache_loaded: bool = False
 
     @staticmethod
@@ -247,7 +245,8 @@ class RepoMapEngine:
 
         self.graph = RepoGraph()
         self._cache = {}
-        self._source_bytes = {}
+        self._source_bytes = OrderedDict()
+        self._source_bytes_total = 0
         self.scan_stats = ScanStats()
         self.routes = []
         self._search_index = None  # invalidate search index on re-scan
@@ -330,6 +329,7 @@ class RepoMapEngine:
             if elapsed > max_scan_time:
                 self.scan_stats.timeout_triggered = True
                 self._source_bytes.clear()  # 超时跳过边构建，释放源文件缓存
+                self._source_bytes_total = 0
                 logger.warning(
                     f"Scan timeout before edge building: {elapsed:.1f}s, limit {max_scan_time}s"
                 )
@@ -768,8 +768,13 @@ class RepoMapEngine:
         if new_routes:
             self.routes.extend(new_routes)
 
-        # 缓存源文件字节，供调用图分析复用，避免二次读取
+        # 缓存源文件字节，供调用图分析复用，避免二次读取（512MB 上限，LRU 驱逐）
+        item_size = len(content)
+        while self._source_bytes and self._source_bytes_total + item_size > _MAX_SOURCE_BYTES_TOTAL:
+            _, old = self._source_bytes.popitem(last=False)
+            self._source_bytes_total -= len(old)
         self._source_bytes[file] = content
+        self._source_bytes_total += item_size
 
         # 符号已写入图，现在进行类型富化（在所有图写入完成后，释放 tree 之前）
         if lang in (
@@ -923,6 +928,7 @@ class RepoMapEngine:
         self._enrich_go_call_edges()
         self._enrich_rust_call_edges()
         self._source_bytes.clear()  # 调用图完成后释放源文件缓存
+        self._source_bytes_total = 0
 
     # ── PageRank ───────────────────────────────────────────────────────────────
 

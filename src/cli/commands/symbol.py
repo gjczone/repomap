@@ -153,7 +153,13 @@ def run_call_chain(
     max_source_lines: int = 80,
     trace_pattern: str | None = None,
 ) -> int:
-    if depth > _CALL_CHAIN_MAX_DEPTH:
+    if depth < 1:
+        print(
+            f"[{CLI_NAME}] --depth {depth} is invalid, must be >= 1, using 1",
+            file=sys.stderr,
+        )
+        depth = 1
+    elif depth > _CALL_CHAIN_MAX_DEPTH:
         print(
             f"[{CLI_NAME}] --depth {depth} exceeds max {_CALL_CHAIN_MAX_DEPTH}, clamping to {_CALL_CHAIN_MAX_DEPTH}",
             file=sys.stderr,

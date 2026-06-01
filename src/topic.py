@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -572,6 +573,7 @@ def _file_to_module_path(file_path: str) -> str:
 _co_change_cache: OrderedDict[tuple[str, int], dict[tuple[str, str], int]] = (
     OrderedDict()
 )
+_co_change_lock = threading.Lock()
 _MAX_CO_CHANGE_CACHE = 32  # 最多缓存 32 个项目的共变更数据
 
 
@@ -580,14 +582,15 @@ def _get_or_load_co_change_cache(
 ) -> dict[tuple[str, str], int]:
     """获取或加载共变更缓存（消除 get_co_change_score 和 get_co_change_neighbors 的重复逻辑）。"""
     cache_key = (project_root, since_days)
-    cache = _co_change_cache.get(cache_key)
-    if cache is not None:
-        _co_change_cache.move_to_end(cache_key)
-    else:
-        if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
-            _co_change_cache.popitem(last=False)
-        cache = _load_co_change_scores(project_root, since_days=since_days)
-        _co_change_cache[cache_key] = cache
+    with _co_change_lock:
+        cache = _co_change_cache.get(cache_key)
+        if cache is not None:
+            _co_change_cache.move_to_end(cache_key)
+        else:
+            if len(_co_change_cache) >= _MAX_CO_CHANGE_CACHE:
+                _co_change_cache.popitem(last=False)
+            cache = _load_co_change_scores(project_root, since_days=since_days)
+            _co_change_cache[cache_key] = cache
     return cache
 
 

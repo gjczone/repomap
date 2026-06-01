@@ -191,12 +191,23 @@ def run_impact(
     compact: bool = False,
     top_n: int = 5,
 ) -> int:
-    if depth > _IMPACT_MAX_DEPTH:
+    if depth < 1:
+        print(
+            f"[{CLI_NAME}] --depth {depth} is invalid, must be >= 1, using 1",
+            file=sys.stderr,
+        )
+        depth = 1
+    elif depth > _IMPACT_MAX_DEPTH:
         print(
             f"[{CLI_NAME}] --depth {depth} exceeds max {_IMPACT_MAX_DEPTH}, clamping to {_IMPACT_MAX_DEPTH}",
             file=sys.stderr,
         )
         depth = _IMPACT_MAX_DEPTH
+
+    if top_n < 1:
+        top_n = 1
+    if max_affected_files < 1:
+        max_affected_files = 1
     try:
         engine = _scan_engine(project, max_files, incremental=incremental)
 
