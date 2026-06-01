@@ -75,11 +75,11 @@ class P0_3_CoChangeCacheKeyIncludesSinceDays(unittest.TestCase):
     """P0-3: co_change 缓存键必须包含 since_days，不同时间窗口不能复用缓存。"""
 
     def test_different_since_days_produces_different_cache_entries(self) -> None:
-        from src import topic
+        from src import co_change
 
         # 清空缓存，确保干净测试
-        original_cache = topic._co_change_cache.copy()
-        topic._co_change_cache.clear()
+        original_cache = co_change._co_change_cache.copy()
+        co_change._co_change_cache.clear()
 
         try:
             call_log: list[int] = []
@@ -88,13 +88,13 @@ class P0_3_CoChangeCacheKeyIncludesSinceDays(unittest.TestCase):
                 call_log.append(since_days)
                 return {("a.py", "b.py"): since_days}
 
-            with patch.object(topic, "_load_co_change_scores", side_effect=fake_load):
+            with patch.object(co_change, "_load_co_change_scores", side_effect=fake_load):
                 # 第一次调用 since_days=30
-                score_30 = topic.get_co_change_score(
+                score_30 = co_change.get_co_change_score(
                     "/fake/project", "a.py", "b.py", since_days=30
                 )
                 # 第二次调用 since_days=90 — 必须重新加载
-                score_90 = topic.get_co_change_score(
+                score_90 = co_change.get_co_change_score(
                     "/fake/project", "a.py", "b.py", since_days=90
                 )
 
@@ -104,8 +104,8 @@ class P0_3_CoChangeCacheKeyIncludesSinceDays(unittest.TestCase):
             self.assertEqual(score_30, 30)
             self.assertEqual(score_90, 90)
         finally:
-            topic._co_change_cache.clear()
-            topic._co_change_cache.update(original_cache)
+            co_change._co_change_cache.clear()
+            co_change._co_change_cache.update(original_cache)
 
 
 class P0_4_TypescriptFallbackWarning(unittest.TestCase):

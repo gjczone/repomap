@@ -664,7 +664,7 @@ def _print_missed_files_section(
 
     # 2. Co-change neighbors
     try:
-        from ...topic import get_co_change_neighbors
+        from ...co_change import get_co_change_neighbors
 
         co_change_found = False
         for f in changed_files:

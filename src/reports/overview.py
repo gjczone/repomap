@@ -6,10 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core import RepoMapEngine
 
-from ..topic import (
-    get_co_change_neighbors,
-    co_change_load_failed,
-)
+from ..co_change import get_co_change_neighbors, co_change_load_failed
 from . import (
     RISK_MARK,
     VISIBILITY_MARK,

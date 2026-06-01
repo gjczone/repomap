@@ -109,6 +109,7 @@ src/                    # Python package (flat)
 ├── callgraph.py           # Multi-language precise call graph (Python ast + TS/Go/Rust tree-sitter)
 ├── type_inference.py      # Multi-language type annotation extraction (11 languages)
 ├── search.py              # BM25 symbol search index (rank-bm25 with keyword fallback)
+├── co_change.py           # Git co-change analysis: cache, scoring, neighbor discovery
 ├── topic.py               # Topic scoring, test matching, file role classification
 ├── check.py               # RepoMapChecker: diagnostics (eslint, tsc, ruff, go vet, ...)
 ├── toolkit.py             # Cache/diff/git helper logic
@@ -126,7 +127,7 @@ tests/                     # Test suite
 dist/repomap               # Local build output (CI builds Linux x64 only via GitHub Actions)
 ```
 
-**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `reports/` (reports). Cross-cutting: `__init__.py` (data types), `queries.py` (query definitions), `route_extractor.py` (route detection), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
+**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `reports/` (reports). Cross-cutting: `__init__.py` (data types), `queries.py` (query definitions), `route_extractor.py` (route detection), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `co_change.py` (git co-change), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
 
 ## Change Map
 
@@ -142,7 +143,8 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/reports/`
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
 - **Reports**: `src/reports/` → each `render_*` module owns one report type; `__init__.py` re-exports all + shared helpers
-- **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
+- **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions, file role classification
+- **Co-change**: `src/co_change.py` → `overview --with-co-change`, `verify` neighbor detection, test matching (git co-change history)
 - **Diagnostics**: `src/check.py` → `check`, `verify`
 - **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
 - **Cache/diff**: `src/toolkit.py` → `cache save`, `verify` (graph diff)

@@ -470,7 +470,7 @@ class TestP2_12_CoChangeScoresSilentFailure(unittest.TestCase):
     """P2-12: _load_co_change_scores git 失败应记录日志。"""
 
     def test_git_failure_returns_empty(self) -> None:
-        from src.topic import _load_co_change_scores
+        from src.co_change import _load_co_change_scores
 
         result = _load_co_change_scores("/tmp/nonexistent_repo_xyz")
         self.assertEqual(result, {})
