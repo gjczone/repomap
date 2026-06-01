@@ -1264,7 +1264,10 @@ def render_verify_report(payload: dict[str, Any], max_chars: int = 10000) -> str
 
     check = result.get("check", {})
     lines.append("## Check Result\n")
-    lines.append(f"- Status: **{str(check.get('status', 'unknown')).upper()}**")
+    raw_status = check.get("status", "skipped")
+    if raw_status == "unknown":
+        raw_status = "skipped"
+    lines.append(f"- Status: **{str(raw_status).upper()}**")
     summary = check.get("summary", {})
     if summary:
         lines.append(

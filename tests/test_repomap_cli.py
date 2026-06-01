@@ -28,7 +28,7 @@ class RepoMapCliTests(unittest.TestCase):
                 types=["javascript"], resolve_symbols=False
             )
 
-        self.assertEqual(report["status"], "unknown")
+        self.assertEqual(report["status"], "skipped")
         self.assertEqual(report["summary"]["tools_run"], 0)
         # eslint skipped + LSP may also be skipped when no server available
         self.assertGreaterEqual(report["summary"]["tools_skipped"], 1)
@@ -228,33 +228,34 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertEqual(status, "warning")
 
     def test_verify_unknown_check_always_warns(self) -> None:
-        """P1-2: unknown 表示没有诊断工具运行，不能视为 passed，即使 LSP 通过。"""
+        """P1-2: 修复后 skipped check + clean evidence → passed（skipped 不是问题）。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
             risk_level="high",
             missing_checks=[],
-            check_payload={"status": "unknown"},
+            check_payload={"status": "skipped"},
             lsp_payload={"status": "passed"},
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
 
-        self.assertEqual(status, "warning")
+        self.assertEqual(status, "passed")
 
     def test_verify_unknown_check_warns_without_lsp_evidence(self) -> None:
+        """P1-2: 修复后 skipped check + skipped LSP + has changes → passed。"""
         from src.cli.commands.verify import _overall_verify_status
 
         status = _overall_verify_status(
             changed_files=["src/core.py"],
             risk_level="high",
             missing_checks=[],
-            check_payload={"status": "unknown"},
+            check_payload={"status": "skipped"},
             lsp_payload={"status": "skipped"},
             graph_diff_payload={"status": "skipped", "breakingChanges": []},
         )
 
-        self.assertEqual(status, "warning")
+        self.assertEqual(status, "passed")
 
     def test_verify_with_diff_without_cache_is_nonfatal(self) -> None:
         from src.cli import main

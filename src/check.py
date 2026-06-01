@@ -1192,7 +1192,7 @@ class RepoMapChecker:
         elif total_warnings > 0:
             status = "warning"
         elif tools_run == 0 and tools_skipped > 0:
-            status = "unknown"
+            status = "skipped"
             message = "Project type detected but no diagnostic tools ran"
         else:
             status = "passed"

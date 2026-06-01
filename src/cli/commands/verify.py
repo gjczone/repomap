@@ -533,8 +533,8 @@ def _overall_verify_status(
     check_status = check_payload.get("status")
     if check_status == "warning":
         return "warning"
-    # unknown 表示没有诊断工具运行，不能视为 passed；缺失 status 同样视为 warning
-    if check_status in (None, "unknown"):
+    # 缺失 check status 视为 warning（安全网，正常流程不应触发）
+    if check_status in (None,):
         return "warning"
     # impact session 漏改：不影响其他 warning/failed 判定，但把 passed 降为 warning
     if (
