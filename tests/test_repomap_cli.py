@@ -1314,7 +1314,7 @@ class RepoMapCliTests(unittest.TestCase):
         self.assertIn("required", stderr.getvalue().lower())
 
     def test_overview_git_co_change_requires_explicit_flag(self) -> None:
-        import src.ai
+        import src.reports.overview
         from src.cli import main
 
         with tempfile.TemporaryDirectory() as project_root:
@@ -1346,7 +1346,9 @@ class RepoMapCliTests(unittest.TestCase):
             )
 
             with patch.object(
-                src.ai, "get_co_change_neighbors", return_value=[("other.py", 2)]
+                src.reports.overview,
+                "get_co_change_neighbors",
+                return_value=[("other.py", 2)],
             ) as co_change_mock:
                 # Default: co-change is disabled (opt-in)
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):

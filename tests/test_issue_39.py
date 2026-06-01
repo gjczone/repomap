@@ -261,7 +261,7 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
     """P2-7: _truncate_output 应在换行边界截断，不在任意字符位置截断。"""
 
     def test_truncate_at_newline(self) -> None:
-        from src.ai import _truncate_output
+        from src.reports import _truncate_output
 
         text = "line 1\nline 2\nline 3\nline 4"
         max_chars = 15  # "line 1\nline 2\n" is 13 chars
@@ -270,7 +270,7 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
         self.assertIn("truncated", result.lower(), f"截断输出应有截断提示: {result!r}")
 
     def test_truncate_respects_max_chars(self) -> None:
-        from src.ai import _truncate_output
+        from src.reports import _truncate_output
 
         text = "line 1\nline 2\nline 3\nline 4"
         max_chars = 15
@@ -290,7 +290,7 @@ class TestP2_7_TruncateOutputNewlineBoundary(unittest.TestCase):
         )
 
     def test_no_newline_fallback(self) -> None:
-        from src.ai import _truncate_output
+        from src.reports import _truncate_output
 
         text = "a" * 100
         result = _truncate_output(text, 30)
@@ -308,7 +308,7 @@ class TestP2_15_TruncateMessageSize(unittest.TestCase):
     """P2-15: 截断提示应告知原始大小和截断比例。"""
 
     def test_truncation_message_includes_size(self) -> None:
-        from src.ai import _truncate_output
+        from src.reports import _truncate_output
 
         text = "x" * 5000
         result = _truncate_output(text, 100)

@@ -46,7 +46,7 @@ class TestP1_2_UnknownCheckStatus(unittest.TestCase):
 
     def test_rendered_status_maps_unknown_to_skipped(self) -> None:
         """ai.py 渲染时，check status 'unknown' 应显示为 SKIPPED。"""
-        from src.ai import (
+        from src.reports import (
             render_verify_report,
         )
 
@@ -243,7 +243,7 @@ class TestP1_12_QueryMatchedLinesRemoved(unittest.TestCase):
 
     def test_render_query_report_has_no_matched_lines(self) -> None:
         """render_query_report 输出不应包含 'Matched Lines' 标题。"""
-        from src.ai import render_query_report
+        from src.reports import render_query_report
         from src.core import RepoMapEngine
         from src.topic import FileMatch
 
@@ -285,7 +285,7 @@ class TestP1_13_CallChainCallerGrouping(unittest.TestCase):
         """call-chain 输出应将 caller 分为 Implementation Callers 和 Test Callers。"""
         from unittest.mock import MagicMock
 
-        from src.ai import render_call_chain_report
+        from src.reports import render_call_chain_report
         from src import Symbol
 
         engine = MagicMock()
@@ -448,7 +448,7 @@ class TestP2_15_ImpactSessionNoise(unittest.TestCase):
 
     def test_skipped_session_not_rendered(self):
         """status=skipped 时不应出现 Impact Session Check section"""
-        from src.ai import render_verify_report
+        from src.reports import render_verify_report
 
         output = render_verify_report(
             self._make_payload(
@@ -470,7 +470,7 @@ class TestP2_15_ImpactSessionNoise(unittest.TestCase):
 
     def test_expired_session_shows_oneliner(self):
         """session 过期（>300s）时只显示一行提示，不列举文件"""
-        from src.ai import render_verify_report
+        from src.reports import render_verify_report
 
         output = render_verify_report(
             self._make_payload(
@@ -489,7 +489,7 @@ class TestP2_15_ImpactSessionNoise(unittest.TestCase):
 
     def test_valid_session_shows_details(self):
         """有效 session 正常展示"""
-        from src.ai import render_verify_report
+        from src.reports import render_verify_report
 
         output = render_verify_report(
             self._make_payload(

@@ -25,7 +25,7 @@ from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from .ai import (
+from .reports import (
     render_call_chain_report,
     render_file_detail_report,
     render_overview_report,

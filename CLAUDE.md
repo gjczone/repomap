@@ -112,7 +112,7 @@ src/                    # Python package (flat)
 ├── topic.py               # Topic scoring, test matching, file role classification
 ├── check.py               # RepoMapChecker: diagnostics (eslint, tsc, ruff, go vet, ...)
 ├── toolkit.py             # Cache/diff/git helper logic
-├── ai.py                  # Markdown report rendering (overview, impact, verify, query)
+├── reports/                # Markdown report rendering (overview, call-chain, file-detail, query, impact, verify, affected, routes)
 ├── consumers.py            # HTTP route consumer detection (frontend/test → API mapping)
 ├── state_map.py            # Enum/const state definition discovery and analysis
 └── lsp.py                 # Optional local LSP integration (stdio, on-demand)
@@ -126,7 +126,7 @@ tests/                     # Test suite
 dist/repomap               # Local build output (CI builds Linux x64 only via GitHub Actions)
 ```
 
-**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `ai.py` (reports). Cross-cutting: `__init__.py` (data types), `queries.py` (query definitions), `route_extractor.py` (route detection), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
+**Dependency flow**: `cli.py` → `core.py` (engine) → `parser.py` (AST) → `resolver.py` (imports) → `ranking.py` (graph) → `reports/` (reports). Cross-cutting: `__init__.py` (data types), `queries.py` (query definitions), `route_extractor.py` (route detection), `git_backend.py` (git ops), `callgraph.py` (precise call graph), `type_inference.py` (type extraction), `search.py` (BM25 search), `topic.py` (scoring), `check.py` (diagnostics), `toolkit.py` (cache/git), `hints.py` (runtime hints).
 
 ## Change Map
 
@@ -139,9 +139,9 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Search**: `src/search.py` → `query --search` (BM25 + keyword fallback)
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
 - **Affected files**: `src/cli/commands/affected.py` → `affected` — CI test discovery from source changes
-- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/ai.py`
+- **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/reports/`
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
-- **Reports**: `src/ai.py` → each `render_*` function owns one report type
+- **Reports**: `src/reports/` → each `render_*` module owns one report type; `__init__.py` re-exports all + shared helpers
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions
 - **Diagnostics**: `src/check.py` → `check`, `verify`
 - **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
@@ -200,7 +200,7 @@ The public README files serve different audiences than this document:
 
 - Source ownership: `src/cli/cli.py` owns all argparse definitions and subcommand dispatch.
 - Data structures: `src/__init__.py` is single source of truth for Symbol, Edge, RepoGraph, ScanStats, HttpRoute.
-- Rendering: report rendering stays in `src/ai.py`; engine/parser/ranking produce data, `ai.py` formats it.
+- Rendering: report rendering stays in `src/reports/`; engine/parser/ranking produce data, `reports/` formats it.
 - Import resolution: goes through `src/resolver.py`; do not hand-roll path resolution.
 - LSP: strictly opt-in, local-only. `lsp setup` suggests install commands per detected language but does not execute them without user consent.
 - Resource limits: every cache, file read, loop, or collection must have an explicit upper bound (max size, max entries, timeout). Unbounded growth is a memory-leak bug.

@@ -8,7 +8,7 @@ from typing import Any
 from ... import (
     Symbol,
 )
-from ...ai import render_verify_report
+from ...reports import render_verify_report
 from ...check import RepoMapChecker
 from ...core import RepoMapEngine
 from ...git_backend import GitBackend

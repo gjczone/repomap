@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from ...ai import render_routes_report
+from ...reports import render_routes_report
 from ...hints import routes_hint
 from ..handlers import (
     CLI_NAME,
