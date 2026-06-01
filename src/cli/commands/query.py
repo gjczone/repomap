@@ -8,7 +8,7 @@ from typing import Any
 from ... import (
     RepoGraph,
 )
-from ...ai import (
+from ...reports import (
     _build_query_reading_order,
     _rank_symbols_for_file,
     render_query_report,
@@ -454,7 +454,7 @@ def _query_symbols_json(
             if (sym_end - sym["line"]) > 100:
                 entry["chunkRange"] = f"L{sym['line']}-L{sym_end}"
             if include_source and max_source_lines > 0 and m.path:
-                from ...ai import _read_symbol_source
+                from ...reports import _read_symbol_source
 
                 entry["source"] = _read_symbol_source(
                     str(engine.project_root),

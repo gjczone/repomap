@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ... import RepoGraph
-from ...ai import render_impact_report
+from ...reports import render_impact_report
 from ...core import RepoMapEngine
 from ..handlers import (
     CLI_NAME,

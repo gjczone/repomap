@@ -10,7 +10,7 @@ from ... import (
     DEFAULT_OVERVIEW_JSON_SUPPORTING_FILES,
     DEFAULT_OVERVIEW_JSON_SYMBOLS_PER_FILE,
 )
-from ...ai import (
+from ...reports import (
     _get_hot_files,
 )
 from ...hints import overview_hint

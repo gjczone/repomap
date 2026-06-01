@@ -10,7 +10,7 @@ from ... import (
     DEFAULT_QUERY_SYMBOL_MAX_CHARS,
 )
 from ...core import DEFAULT_MAX_FILES
-from ...ai import _truncate_output
+from ...reports import _truncate_output
 from ...core import RepoMapEngine
 from ...hints import (
     call_chain_hint,
@@ -224,7 +224,7 @@ def run_call_chain(
             if trace_result is not None:
                 payload["trace"] = trace_result
             if include_source and max_source_lines > 0:
-                from ...ai import _read_symbol_source
+                from ...reports import _read_symbol_source
 
                 project_root_str = str(engine.project_root)
                 # Add source for the primary symbol
@@ -341,7 +341,7 @@ def run_query_symbol(
                 if item.params:
                     d["params"] = item.params
                 if include_source and max_source_lines > 0:
-                    from ...ai import _read_symbol_source
+                    from ...reports import _read_symbol_source
 
                     d["source"] = _read_symbol_source(
                         str(engine.project_root),

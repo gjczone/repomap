@@ -153,7 +153,7 @@ def run_affected(
             print(json_envelope("affected", str(engine.project_root), result))
             return 0
 
-        from ...ai import render_affected_report
+        from ...reports import render_affected_report
 
         print(render_affected_report(target_files, affected_tests, chains))
         return 0
