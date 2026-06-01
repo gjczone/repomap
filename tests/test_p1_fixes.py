@@ -360,34 +360,36 @@ class TestP1_14_RouteConsumerExcludesOwnFile(unittest.TestCase):
             backend_file = project_root / "backend" / "routes.py"
             backend_file.parent.mkdir(parents=True, exist_ok=True)
             backend_file.write_text(
-                'from fastapi import APIRouter\n'
-                'router = APIRouter()\n'
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
                 '@router.get("/api/users")\n'
-                'def get_users():\n'
-                '    return []\n'
+                "def get_users():\n"
+                "    return []\n"
             )
             # 创建前端文件（包含 fetch 调用）
             frontend_file = project_root / "frontend" / "api.ts"
             frontend_file.parent.mkdir(parents=True, exist_ok=True)
-            frontend_file.write_text(
-                "const resp = await fetch('/api/users')\n"
-            )
+            frontend_file.write_text("const resp = await fetch('/api/users')\n")
 
             # 初始化 git repo（engine 需要）
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
-                cwd=tmpdir, capture_output=True,
+                cwd=tmpdir,
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test"],
-                cwd=tmpdir, capture_output=True,
+                cwd=tmpdir,
+                capture_output=True,
             )
             subprocess.run(["git", "add", "-A"], cwd=tmpdir, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "init", "--no-gpg-sign"],
-                cwd=tmpdir, capture_output=True,
+                cwd=tmpdir,
+                capture_output=True,
             )
 
             from src.core import RepoMapEngine
@@ -414,12 +416,14 @@ class TestP1_14_RouteConsumerExcludesOwnFile(unittest.TestCase):
             consumer_files = [c.file for c in consumers.get(key, [])]
             # 后端路由文件自身不应被列为 consumer
             self.assertNotIn(
-                "backend/routes.py", consumer_files,
+                "backend/routes.py",
+                consumer_files,
                 "路由 handler 文件不应被列为 consumer（那是路由定义，不是调用者）",
             )
             # 前端文件应被列为 consumer
             self.assertIn(
-                "frontend/api.ts", consumer_files,
+                "frontend/api.ts",
+                consumer_files,
                 "前端 fetch 调用应被检测",
             )
 
