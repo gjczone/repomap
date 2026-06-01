@@ -11,7 +11,6 @@ import logging
 import os
 import threading
 from collections import OrderedDict, defaultdict
-from pathlib import Path
 
 logger = logging.getLogger("repomap")
 _co_change_load_failed: bool = False
