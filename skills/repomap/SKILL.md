@@ -33,7 +33,7 @@ repomap <command> [--project <path>] [options]
 | Topic search | `query --query <keyword>` | Synonym expansion, relevance ranking |
 | BM25 search | `query --search <text>` | BM25 symbol ranking |
 | Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
-| Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` concise output; `--top-n <N>` limit files |
+| Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` for concise output; `--top-n <N>` to limit files |
 | Discover affected tests | `affected --files <f...>` | Reverse dependency tracing from changed files; `--stdin` for pipe mode, `--filter` for custom pattern |
 | Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | Quick check | `verify --quick` | Git changes + risk only |
@@ -41,42 +41,42 @@ repomap <command> [--project <path>] [options]
 | Auto-fix | `fix` | ruff --fix, eslint --fix |
 | Pre-commit | `ready` | verify + check + format |
 | API routes | `routes` | HTTP route inventory |
-| Prepare for changes | `cache save` | For verify diff comparison |
+| Prepare for changes | `cache save` | Baseline snapshot for verify diff comparison |
 | LSP status / setup | `lsp doctor` / `lsp setup` | Detects and installs language servers |
 | Health check | `doctor` | Runtime + LSP server availability |
 
 ## Value-Added Features (Auto-Enabled)
 
-- **verify** automatically outputs high-confidence orphan symbols (≥70), call-graph consistency check (broken call/import edges), and graph diff (when baseline exists)
-- **query --symbol** automatically outputs state map for enum/const symbols and references
-- **call-chain** automatically outputs all references
-- **overview** automatically includes hotspot files
-- **doctor** automatically outputs LSP server status
+- **verify** — high-confidence orphan symbols (≥70), call-graph consistency check (broken call/import edges), and graph diff (when baseline exists)
+- **query --symbol** — state map for enum/const symbols and references
+- **call-chain** — all references
+- **overview** — hotspot files
+- **doctor** — LSP server status
 
 ## Workflows
 
-**New repo:**
+### New repo
 1. `overview` → grasp structure
 2. `doctor` → check runtime + LSP availability
 
-**Edit file:**
+### Edit file
 1. `query --file <f>` → understand before touching
 2. `impact --files <f> --with-symbols` → assess blast radius
 3. Edit
 4. `verify` → evidence gate (includes graph diff)
 
-**Change symbol behavior:**
+### Change symbol behavior
 1. `query --symbol <name>` → find definition + state map
 2. `call-chain --symbol <name>` → understand call flow + references
 3. Edit
 4. `verify`
 
-**Delete code:**
+### Delete code
 1. `verify` → check orphan symbols (≥70 confidence)
 2. Check for dynamic references (string dispatch, reflection, macros)
 3. Delete
 
-**API change:**
+### API change
 1. `routes` → route inventory
 2. `impact --files <route-file> --with-symbols` → blast radius
 3. Edit
@@ -84,20 +84,20 @@ repomap <command> [--project <path>] [options]
 
 ## Call Budget
 
-| 项目规模 | 文件数 | 最大 query 次数 | 最大 call-chain 次数 | 建议策略 |
-|---------|--------|----------------|---------------------|---------|
-| 小型    | <500   | 3              | 2                   | 直接 query |
-| 中型    | <5000  | 5              | 3                   | 先 overview 缩小范围 |
-| 大型    | >=5000 | 4              | 2                   | 必须先 overview + impact |
+| Project Scale | File Count | Max `query` Calls | Max `call-chain` Calls | Recommended Strategy |
+|--------------|-----------|-------------------|-----------------------|---------------------|
+| Small        | <500      | 3                 | 2                     | Query directly      |
+| Medium       | <5000     | 5                 | 3                     | Start with `overview` to narrow scope |
+| Large        | ≥5000     | 4                 | 2                     | Must start with `overview` + `impact` |
 
-注意：数字基于 repomap 实时扫描的耗时，不是持久化图查询。
+> Budgets are based on repomap real-time scan latency, not persisted graph queries.
 
 ## Diagnostic Decision
 
 | After editing… | Use | Time | What it checks |
 |---|---|---|---|
 | Just saved a file | `verify --quick` | ~2s | Git changes + risk level only |
-| Ready to commit | `verify` | 10-30s | Full evidence: changes, risk, orphan symbols, LSP diagnostics, graph diff |
+| Ready to commit | `verify` | 10–30s | Full evidence: changes, risk, orphan symbols, LSP diagnostics, graph diff |
 | Need compiler/lint errors | `check` | varies | Standalone diagnostics (eslint, tsc, ruff, go vet) — no git dependency |
 | CI pipeline | `check` + `verify` | varies | Diagnostics first, then full evidence gate |
 
@@ -105,30 +105,32 @@ repomap <command> [--project <path>] [options]
 
 ## Critical Rules
 
-- `check` reports `unknown` → no diagnostic tool ran, investigate
-- `check` reports `parse_error` (truncated=True) → diagnostic tool ran but output could not be parsed; investigate project config or tool version
-- `verify` says "SKIPPED" → state limitation explicitly
-- `verify` says "NO_CHANGES" → no git changes detected, cannot assess risk; distinct from SKIPPED
+- `check` reports `unknown` → no diagnostic tool ran; investigate
+- `check` reports `parse_error` (`truncated=True`) → diagnostic tool ran but output could not be parsed; investigate project config or tool version
+- `verify` says `SKIPPED` → state limitation; state it explicitly
+- `verify` says `NO_CHANGES` → no git changes detected, cannot assess risk; distinct from `SKIPPED`
 - `verify` reports contract risks → address each before claiming completion
 
 ### Session Flags
 
-- **`cache save`**: Run BEFORE a refactoring session. Saves graph baseline so `verify` can show a before/after graph diff. Skip for isolated single-file edits.
-- **`--with-co-change`**: Enable for HIGH-RISK edits (changing exported symbols, core modules). Uses git history to find files that are often modified together. Adds 30-60s. Skip for routine edits.
-- **`--no-incremental`**: Force a full rescan, ignoring cached data. Use when cache may be stale (switched branches, pulled new commits, getting unexpected results).
+- **`cache save`** — Run BEFORE a refactoring session. Saves a graph baseline so `verify` can show a before/after graph diff. Skip for isolated single-file edits.
+- **`--with-co-change`** — Enable for HIGH-RISK edits (changing exported symbols, core modules). Uses git history to find files that are often modified together. Adds 30–60s. Skip for routine edits.
+- **`--no-incremental`** — Force a full rescan, ignoring cached data. Use when cache may be stale (switched branches, pulled new commits, getting unexpected results).
 
 ## Capabilities
 
-- **Call graph**: Python, TypeScript/TSX, Go, Rust, Java, C#, C++ (tree-sitter, 7 languages)
-- **Type inference**: 11 languages (Python, TS/TSX, Go, Rust, Java, Kotlin, Swift, C#, C++, PHP)
-- **Parsing**: 17 languages — Python, JS/TS/TSX, Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, Lua, HTML, CSS, JSON, YAML, Bash
-- **Git backend**: pygit2 (libgit2) when available, subprocess fallback
-- **Search**: BM25 ranking with keyword fallback
-- **LSP**: default-on when available, local-only
+| Feature | Coverage |
+|---------|----------|
+| Call graph | Python, TypeScript/TSX, Go, Rust, Java, C#, C++ (tree-sitter, 7 languages) |
+| Type inference | Python, TS/TSX, Go, Rust, Java, Kotlin, Swift, C#, C++, PHP (11 languages) |
+| Parsing | Python, JS/TS/TSX, Go, Rust, Java, Kotlin, Swift, C/C++, C#, PHP, Ruby, Lua, HTML, CSS, JSON, YAML, Bash (17 languages) |
+| Git backend | pygit2 (libgit2) when available; subprocess fallback |
+| Search | BM25 ranking with keyword fallback |
+| LSP | Default-on when available, local-only |
 
 ## Boundaries
 
-- Prefer repomap over grep/reads when repository intelligence reduces uncertainty
-- Quote only real CLI output, do not guess
-- `verify` requires a Git repository
-- Path-taking commands normalize `./...` and absolute paths
+- Prefer repomap over grep/reads when repository intelligence reduces uncertainty.
+- Quote only real CLI output; do not guess.
+- `verify` requires a Git repository.
+- Path-taking commands normalize `./...` and absolute paths.
