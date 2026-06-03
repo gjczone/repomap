@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from ...core import RepoMapEngine
+from ...lsp import language_for_file
 from ...topic import is_test_like_file
 from ..handlers import (
     CLI_NAME,
@@ -71,39 +72,61 @@ def run_affected(
             engine.project_root, target_files
         )
 
-        # Collect target file symbols
+        # Issue #181: 按语言分组遍历，避免跨语言 phantom edge 产生假依赖链。
+        # tree-sitter 可能把同名符号跨语言误关联；语言边界视为天然隔离点。
+        target_by_lang: dict[str, list[str]] = {}
+        for f in target_files:
+            lang = language_for_file(f) or "unknown"
+            target_by_lang.setdefault(lang, []).append(f)
+
         target_symbols: set[str] = set()
         for f in target_files:
             for sid in engine.graph.file_symbols.get(f, []):
                 target_symbols.add(sid)
 
-        # Find files that directly depend on target files (incoming edges)
         dependent_files: set[str] = set()
-        for sid in target_symbols:
-            for edge in engine.graph.incoming.get(sid, []):
-                caller = engine.graph.symbols.get(edge.source)
-                if caller and caller.file not in target_files:
-                    dependent_files.add(caller.file)
+        for lang, lang_targets in target_by_lang.items():
+            lang_target_set = set(lang_targets)
+            # 直接依赖（仅接受同语言的 caller）
+            for f in lang_targets:
+                for sid in engine.graph.file_symbols.get(f, []):
+                    for edge in engine.graph.incoming.get(sid, []):
+                        caller = engine.graph.symbols.get(edge.source)
+                        if not caller or caller.file in lang_target_set:
+                            continue
+                        if (language_for_file(caller.file) or "unknown") != lang:
+                            continue
+                        dependent_files.add(caller.file)
 
-        # BFS for transitive dependencies
-        if depth > 1 and dependent_files:
-            frontier = set(dependent_files)
-            for _ in range(1, depth):
-                next_frontier: set[str] = set()
-                for f in frontier:
-                    for sid in engine.graph.file_symbols.get(f, []):
-                        for edge in engine.graph.incoming.get(sid, []):
-                            caller = engine.graph.symbols.get(edge.source)
-                            if (
-                                caller
-                                and caller.file not in target_files
-                                and caller.file not in dependent_files
-                            ):
+            # BFS 传递依赖（限制在同语言内）
+            if depth > 1:
+                frontier = {
+                    d
+                    for d in dependent_files
+                    if (language_for_file(d) or "unknown") == lang
+                }
+                for _ in range(1, depth):
+                    next_frontier: set[str] = set()
+                    for f in frontier:
+                        for sid in engine.graph.file_symbols.get(f, []):
+                            for edge in engine.graph.incoming.get(sid, []):
+                                caller = engine.graph.symbols.get(edge.source)
+                                if not caller:
+                                    continue
+                                if (
+                                    caller.file in lang_target_set
+                                    or caller.file in dependent_files
+                                ):
+                                    continue
+                                if (
+                                    language_for_file(caller.file) or "unknown"
+                                ) != lang:
+                                    continue
                                 next_frontier.add(caller.file)
                                 dependent_files.add(caller.file)
-                if not next_frontier:
-                    break
-                frontier = next_frontier
+                    if not next_frontier:
+                        break
+                    frontier = next_frontier
 
         # Filter for test files
         affected_tests: list[tuple[str, str]] = []
