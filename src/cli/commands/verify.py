@@ -772,7 +772,12 @@ def run_verify(
             graph_diff_payload,
             impact_session_payload=impact_session_payload,
         )
-        untested = find_untested_symbols(engine.graph) if not quick else []
+        untested_meta: dict = {}
+        untested = (
+            find_untested_symbols(engine.graph, metadata=untested_meta)
+            if not quick
+            else []
+        )
 
         # 获取孤儿符号信息（高置信度 ≥70）
         orphan_symbols = _collect_orphan_symbols(engine) if not quick else []
@@ -799,7 +804,16 @@ def run_verify(
                 }
                 for test in evidence["tests"]
             ],
-            "untestedSymbols": untested,
+            "untestedSymbols": (
+                {
+                    "symbols": untested,
+                    "totalBeforeFilter": untested_meta.get("total_before_filter", 0),
+                    "returned": untested_meta.get("returned", len(untested)),
+                    "truncated": untested_meta.get("truncated", False),
+                }
+                if not quick
+                else []
+            ),
             "orphanSymbols": orphan_symbols,
             "check": {
                 "status": check_payload.get("status", "unknown"),

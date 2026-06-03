@@ -576,6 +576,7 @@ def find_untested_symbols(
     min_incoming_calls: int = 2,
     min_score: float = 5.0,
     max_results: int = 30,
+    metadata: dict | None = None,
 ) -> list[dict]:
     """找出没有测试覆盖的符号，按风险分降序排列。
 
@@ -624,4 +625,11 @@ def find_untested_symbols(
         )
 
     untested.sort(key=lambda x: -float(x["risk_score"]))
-    return untested[:max_results]
+    # Issue #180: 记录 filter 前后数量，让调用方能感知截断
+    total_before_filter = len(untested)
+    truncated_result = untested[:max_results]
+    if metadata is not None:
+        metadata["total_before_filter"] = total_before_filter
+        metadata["returned"] = len(truncated_result)
+        metadata["truncated"] = total_before_filter > max_results
+    return truncated_result
