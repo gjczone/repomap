@@ -354,49 +354,65 @@ def run_impact(
             )
 
         key_symbols = _impact_key_symbols(engine, target_files) if with_symbols else []
-        read_next = _impact_read_next(target_files, affected_list, tests)
+        read_next_full = _impact_read_next(target_files, affected_list, tests)
         lsp_hint = (
             _impact_lsp_hint(engine.project_root, target_files) if with_symbols else {}
         )
+        # compact 模式：所有数组字段统一截断，避免 JSON/text 都出现过长列表（issue #173）
+        _COMPACT_ARRAY_LIMIT = 3
+        if compact:
+            display_tests_payload = [
+                {"test_file": t.test_file, "confidence": t.confidence}
+                for t in tests[:_COMPACT_ARRAY_LIMIT]
+            ]
+            display_tests = tests[:_COMPACT_ARRAY_LIMIT]
+            display_read_next = read_next_full[:_COMPACT_ARRAY_LIMIT]
+            summary_counts = {
+                "affectedFilesCount": len(affected_list),
+                "suggestedTestsCount": len(tests),
+                "typeImpactsCount": len(type_impacts),
+            }
+        else:
+            display_tests_payload = [
+                {
+                    "test_file": t.test_file,
+                    "target_file": t.target_file,
+                    "confidence": t.confidence,
+                    "reason": t.reason,
+                }
+                for t in tests
+            ]
+            display_tests = tests
+            display_read_next = read_next_full
+            summary_counts = {}
 
         if as_json:
             from ..handlers import json_envelope
 
-            # compact 模式：限制 affectedFiles 数量，添加总数摘要
-            if compact:
-                total_affected = len(affected_list)
-                display_affected = affected_list[:top_n]
-            else:
-                total_affected = None
-                display_affected = affected_list
+            display_affected = affected_list[:top_n] if compact else affected_list
 
             result: dict[str, Any] = {
                 "scan_stats": _scan_stats_payload(engine),
                 "input_files": target_files,
                 "depth": depth,
-                "impact_radius": impact_radius,
                 "affected_files": [
                     {"file": f, "why": why, "confidence": conf}
                     for f, why, conf in display_affected
                 ],
-                "tests": [
-                    {
-                        "test_file": t.test_file,
-                        "target_file": t.target_file,
-                        "confidence": t.confidence,
-                        "reason": t.reason,
-                    }
-                    for t in tests
-                ],
+                "tests": display_tests_payload,
                 "risk_level": risk_level,
                 "risk_notes": risk_notes,
                 "key_symbols": key_symbols,
-                "read_next": read_next,
+                "read_next": display_read_next,
                 "lsp_hint": lsp_hint,
-                "type_impacts": type_impacts,
             }
-            if total_affected is not None:
-                result["affectedFilesCount"] = total_affected
+            # 摘要计数（仅 compact）
+            for k, v in summary_counts.items():
+                result[k] = v
+            # full 模式保留完整数组
+            if not compact:
+                result["impact_radius"] = impact_radius
+                result["type_impacts"] = type_impacts
             if session_warning:
                 result["session_warning"] = session_warning
             print(json_envelope("impact", str(engine.project_root), result))
@@ -407,14 +423,15 @@ def run_impact(
                 engine,
                 target_files,
                 affected_list,
-                tests,
+                display_tests,
                 risk_level,
                 risk_notes,
                 key_symbols=key_symbols,
-                read_next=read_next,
+                read_next=display_read_next,
                 lsp_hint=lsp_hint,
                 compact=compact,
                 top_n=top_n,
+                total_tests=len(tests),
             )
         )
         # Print type-level impacts
