@@ -289,8 +289,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cache_parser.add_argument(
         "action",
-        choices=["save"],
-        help="Cache action. Only save is public; graph comparison reads the baseline through diff/verify --with-diff.",
+        choices=["save", "prune"],
+        help="Cache action. `save` captures a baseline; `prune` removes stale session caches older than --ttl-days.",
+    )
+    cache_parser.add_argument(
+        "--ttl-days",
+        type=int,
+        default=7,
+        help="Prune session caches older than this many days (default: 7).",
     )
     _add_project_args(cache_parser)
 
@@ -608,7 +614,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             risk_threshold=getattr(args, "risk_threshold", "MED"),
         )
     if command == "cache":
-        return run_cache(args.project, args.action, getattr(args, "json", False))
+        return run_cache(
+            args.project,
+            args.action,
+            getattr(args, "json", False),
+            ttl_days=getattr(args, "ttl_days", 7),
+        )
     if command == "check":
         return run_check(
             project=args.project,
