@@ -55,7 +55,7 @@ class BM25GranularityTests(unittest.TestCase):
             ),
         }
         for i in range(15):
-            sid = f"src/x.py::unrelated_{i}::{i+100}"
+            sid = f"src/x.py::unrelated_{i}::{i + 100}"
             symbols[sid] = _mk_symbol(
                 sid,
                 f"unrelated_{i}",
