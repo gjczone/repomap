@@ -374,7 +374,36 @@ def compare_graph_snapshots(
     added_symbol_ids = sorted(current_symbol_ids - previous_symbol_ids)
     removed_symbol_ids = sorted(previous_symbol_ids - current_symbol_ids)
 
+    # Issue #175: 用 stable key (file, name, kind, occurrence) 对 added/removed 做二次匹配，
+    # 避免同一符号仅 line 漂移时被误报为 add+remove 对。
+    def _stable_key_from_current(sid: str) -> tuple[str, str, str]:
+        s = current_symbol_map[sid]
+        return (s.file, s.name, s.kind)
+
+    def _stable_key_from_prev(sid: str) -> tuple[str, str, str]:
+        row = previous_symbol_map[sid]
+        return (row.get("file", ""), row.get("name", ""), row.get("kind", ""))
+
+    added_by_key: dict[tuple[str, str, str], list[str]] = {}
+    for sid in added_symbol_ids:
+        added_by_key.setdefault(_stable_key_from_current(sid), []).append(sid)
+    removed_by_key: dict[tuple[str, str, str], list[str]] = {}
+    for sid in removed_symbol_ids:
+        removed_by_key.setdefault(_stable_key_from_prev(sid), []).append(sid)
+
+    reconciled_pairs: list[tuple[str, str]] = []  # (prev_id, current_id)
+    for key, adds in added_by_key.items():
+        rems = removed_by_key.get(key, [])
+        # 按顺序两两匹配（同 stable key 的第 N 个互相对应）
+        for prev_id, cur_id in zip(rems, adds):
+            reconciled_pairs.append((prev_id, cur_id))
+    reconciled_added = {pair[1] for pair in reconciled_pairs}
+    reconciled_removed = {pair[0] for pair in reconciled_pairs}
+    added_symbol_ids = sorted(set(added_symbol_ids) - reconciled_added)
+    removed_symbol_ids = sorted(set(removed_symbol_ids) - reconciled_removed)
+
     modified_symbols = []
+    # 稳定 ID 完全匹配 → 检查 signature/line 变化
     for symbol_id in sorted(current_symbol_ids & previous_symbol_ids):
         current = current_symbol_map[symbol_id]
         previous = previous_symbol_map[symbol_id]
@@ -413,6 +442,36 @@ def compare_graph_snapshots(
                 else:
                     entry["risk"] = "LOW"
             modified_symbols.append(entry)
+
+    # reconciled 对：stable key 匹配但 symbol_id 不同（line 漂移）→ 记为 modified
+    for prev_id, cur_id in reconciled_pairs:
+        current = current_symbol_map[cur_id]
+        previous = previous_symbol_map[prev_id]
+        sig_changed = current.signature != previous.get("signature", "")
+        entry = {
+            "id": cur_id,
+            "name": current.name,
+            "file": current.file,
+            "visibility": current.visibility,
+            "kind": current.kind,
+            "line_change": f"{previous.get('line')} -> {current.line}",
+            "old_signature": previous.get("signature", ""),
+            "new_signature": current.signature,
+            "signature_changed": sig_changed,
+        }
+        if incoming_map:
+            callers = [e for e in incoming_map.get(cur_id, []) if e.kind == "call"]
+            entry["affected_callers"] = [
+                {"symbol_id": e.source, "kind": e.kind} for e in callers[:10]
+            ]
+            entry["affected_caller_count"] = len(callers)
+            if sig_changed and entry.get("visibility") == "exported":
+                entry["risk"] = "HIGH"
+            elif sig_changed and len(callers) >= 3:
+                entry["risk"] = "MEDIUM"
+            else:
+                entry["risk"] = "LOW"
+        modified_symbols.append(entry)
 
     current_edge_set = {
         edge_id
