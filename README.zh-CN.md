@@ -115,7 +115,8 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
 | `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
-| `cache save` | 图基线保存（用于 diff 对比） |
+| `cache save` | 图基线保存（用于 diff 对比，自动清理陈旧 session） |
+| `cache prune` | 手动清理陈旧 session 缓存（`--ttl-days N`） |
 | `doctor [--no-lsp]` | 健康检查：解析器、运行时、LSP 状态（默认） |
 | `lsp setup [--dry-run]` | 自动安装缺失的 LSP 服务器 |
 

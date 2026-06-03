@@ -113,7 +113,8 @@ LSP-backed commands automatically use local LSP servers when available. All comm
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
 | `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
-| `cache save` | Graph baseline save for diff comparison |
+| `cache save` | Graph baseline save for diff comparison (auto-prunes stale sessions) |
+| `cache prune` | Manually remove stale session caches (`--ttl-days N`) |
 | `doctor [--no-lsp]` | Health check: parsers, runtime, LSP status (default) |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
 | `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |

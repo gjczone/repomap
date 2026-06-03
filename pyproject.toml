@@ -1,6 +1,6 @@
 [project]
 name = "repomap-cli"
-version = "4.8.1"
+version = "4.9.0"
 description = "Standalone RepoMap CLI with tree-sitter AST parsing"
 requires-python = ">=3.12"
 dependencies = [

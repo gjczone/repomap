@@ -30,7 +30,7 @@ repomap <command> [--project <path>] [options]
 | Project overview | `overview` | Modules, entrypoints, reading order, hotspots |
 | Find symbol | `query --symbol <name>` | LSP precision, state map for enums |
 | Call flow | `call-chain --symbol <name>` | Callers, callees, references |
-| Topic search | `query --query <keyword>` | Synonym expansion, relevance ranking |
+| Topic search | `query --query <keyword>` | Synonym expansion, relevance ranking; returns empty with `message` when no matches |
 | BM25 search | `query --search <text>` | BM25 symbol ranking |
 | Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
 | Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` for concise output; `--top-n <N>` to limit files |
@@ -41,7 +41,7 @@ repomap <command> [--project <path>] [options]
 | Auto-fix | `fix` | ruff --fix, eslint --fix |
 | Pre-commit | `ready` | verify + check + format |
 | API routes | `routes` | HTTP route inventory |
-| Prepare for changes | `cache save` | Baseline snapshot for verify diff comparison |
+| Prepare for changes | `cache save` | Baseline snapshot for verify diff comparison; auto-prunes session caches older than 7 days |
 | LSP status / setup | `lsp doctor` / `lsp setup` | Detects and installs language servers |
 | Health check | `doctor` | Runtime + LSP server availability |
 
@@ -113,7 +113,8 @@ repomap <command> [--project <path>] [options]
 
 ### Session Flags
 
-- **`cache save`** — Run BEFORE a refactoring session. Saves a graph baseline so `verify` can show a before/after graph diff. Skip for isolated single-file edits.
+- **`cache save`** — Run BEFORE a refactoring session. Saves a graph baseline so `verify` can show a before/after graph diff. Automatically prunes stale session caches (TTL 7 days). Skip for isolated single-file edits.
+- **`cache prune`** — Manually remove stale session caches older than `--ttl-days` (default 7).
 - **`--with-co-change`** — Enable for HIGH-RISK edits (changing exported symbols, core modules). Uses git history to find files that are often modified together. Adds 30–60s. Skip for routine edits.
 - **`--no-incremental`** — Force a full rescan, ignoring cached data. Use when cache may be stale (switched branches, pulled new commits, getting unexpected results).
 

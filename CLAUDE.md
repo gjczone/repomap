@@ -31,7 +31,7 @@ All via `repomap <subcommand> [--project <path>]`.
 | Command                                | Purpose                                                                  |
 | -------------------------------------- | ------------------------------------------------------------------------ |
 | `overview`                             | Project map: modules, entry points, reading order, hotspots, key symbols |
-| `query --query "keyword"`              | Topic/feature discovery with adaptive fallback (never empty)             |
+| `query --query "keyword"`              | Topic/feature discovery with synonym expansion; empty when no matches    |
 | `query --symbol <name>`                | Exact/fuzzy symbol lookup + state map for enums + references             |
 | `query --search "text"`                | BM25 semantic symbol search with keyword fallback                        |
 | `query --file <f>`                     | Symbols and structure of a known file                                    |
@@ -41,7 +41,8 @@ All via `repomap <subcommand> [--project <path>]`.
 | `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff; `--risk-threshold HIGH\|MED\|LOW` |
 | `check`                                | Compiler/type/lint diagnostics                                           |
 | `routes [--with-consumers]`             | HTTP/API route inventory + consumer mapping                              |
-| `cache save`                           | Graph baseline save for diff comparison                                  |
+| `cache save`                           | Graph baseline save for diff comparison (auto-prunes stale sessions)      |
+| `cache prune`                          | Manually remove stale session caches (`--ttl-days N`)                     |
 | `lsp setup`                            | Auto-install LSP servers for detected languages                          |
 | `doctor [--no-lsp]`                    | Validate runtime + LSP status (default)                                  |
 | `fix [--dry-run]`                      | Auto-fix: ruff --fix + eslint --fix                                      |
@@ -147,7 +148,7 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Co-change**: `src/co_change.py` → `overview --with-co-change`, `verify` neighbor detection, test matching (git co-change history)
 - **Diagnostics**: `src/check.py` → `check`, `verify`
 - **Gitignore**: `src/gitignore.py` → file filtering (replaced hardcoded skip lists with pathspec)
-- **Cache/diff**: `src/toolkit.py` → `cache save`, `verify` (graph diff)
+- **Cache/diff**: `src/toolkit.py` → `cache save`, `cache prune`, `verify` (graph diff)
 - **Route consumers**: `src/consumers.py` → `routes --with-consumers`
 - **State map**: `src/state_map.py` → integrated into `query --symbol` for enum/const symbols
 - **LSP**: `src/lsp.py` → auto-enabled, affects `query --symbol`, `query --file`, `verify`, `check`, `doctor`, `lsp setup`; per-language timeout via `lsp_timeout_for()`

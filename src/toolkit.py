@@ -427,6 +427,7 @@ def prune_cache(
         root = cache_root
     else:
         from . import CACHE_DIR as _CACHE_DIR
+
         root = _CACHE_DIR
     if not root.exists():
         return [], []
