@@ -526,7 +526,8 @@ def _overall_verify_status(
     if check_payload.get("status") == "failed" or lsp_payload.get("status") == "failed":
         return "failed"
     if not changed_files:
-        return "warning"
+        # Issue #174: no_changes 是正常信息状态（非 warning），CI 不应失败
+        return "unchanged"
     # risk_level 表示变更影响面，不等于未解决风险；只有缺证据或破坏性图谱变化才阻断交付。
     if missing_checks or graph_diff_payload.get("breakingChanges"):
         return "warning"
@@ -854,6 +855,9 @@ def run_verify(
             return 1
         if status == "warning":
             return EXIT_NO_RESULTS
+        # Issue #174: unchanged 是信息状态（无 git 变更），exit 0
+        if status == "unchanged":
+            return 0
         return 0
     except Exception as exc:
         print(f"[{CLI_NAME}] verify failed: {exc}", file=sys.stderr)

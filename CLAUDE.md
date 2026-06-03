@@ -257,7 +257,7 @@ The public README files serve different audiences than this document:
 - Resolver fall-through is correct: when import binding resolution fails in `src/resolver.py`, falling through to global symbol matching is intentional — do not flag this as a bug (ref: B1 false positive, round 6).
 - Swift query warnings: `struct_declaration` is not a valid node type in tree-sitter-swift grammar — the `[WARNING] Query compile failed [swift/class]` log line is expected and can be ignored.
 - Git porcelain format: both `"XY path"` (2-char status) and `"X path"` (1-char status) variants appear in real git output — do not simplify `_parse_git_status_porcelain_paths` to expect only one format.
-- verify --quick exit code: returning exit code 3 (EXIT_NO_RESULTS) when no git changes are detected is design behavior, not a bug. The WARNING status means "cannot assess risk without changes."
+- verify --quick exit code (issue #174): no git changes 时返回 exit 0 + status `unchanged`（CI 友好）。`unchanged` 是信息状态，不代表风险；其他 warning 路径仍返回 EXIT_NO_RESULTS。
 - CI uv.lock variability: `uv.lock` may be auto-modified by CI during `uv run` / `uv pip install`. In the CI smoke test, `verify --quick` may return PASS or WARNING depending on whether `uv.lock` was modified — either outcome is acceptable.
 
 ### Code Review Rules (based on 15+ rounds of deep review)
@@ -295,7 +295,7 @@ Representative issues: #5 (first structured review), #31 (shell injection), #33 
 - `except Exception` in top-level CLI handlers → intentional crash guard
 - `_deprecated_*` prefixed unused variables → kept for backward compatibility
 - Pyright `reportAttributeAccessIssue` on dynamic attributes → correct at runtime
-- `repomap verify --quick` exit code 3 on no git changes → WARNING is "cannot assess risk without changes" (ref: B1, round 9)
+- `repomap verify --quick` exit code on no git changes → 已修复为 exit 0 + status `unchanged`（issue #174），不再是 false positive 模式
 - Swift `struct_declaration` query warnings → tree-sitter-swift grammar bug, not repomap bug
 - Git porcelain 1-char + 2-char status formats both appear in real output → don't simplify parser
 - `uv.lock` auto-modified by CI → `verify --quick` may return PASS or WARNING; both acceptable
