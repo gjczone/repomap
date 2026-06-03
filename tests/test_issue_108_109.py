@@ -88,6 +88,35 @@ def _init_git_project(root):
 
     (src / "__init__.py").write_text("")
 
+    # 添加 4 个测试文件引用 consumer 模块，确保 Suggested Tests 有内容（issue #173）
+    tests_dir = root / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "__init__.py").write_text("")
+    # test_core.py 与 core.py 同名 → 触发策略1文件名匹配（high confidence）
+    test_core_content = (
+        "from src.core import DataProcessor, validate\n"
+        "\n"
+        "def test_data_processor():\n"
+        "    p = DataProcessor()\n"
+        "    assert p.process({}) == {}\n"
+        "\n"
+        "def test_validate():\n"
+        "    assert validate('x') is True\n"
+    )
+    (tests_dir / "test_core.py").write_text(test_core_content)
+    # 其他 3 个 test 文件通过 import core 符号触发策略3
+    for i in range(3):
+        content = (
+            f"from src.core import DataProcessor, validate\n"
+            f"from src.consumer_{i} import run_consumer_{i}\n"
+            f"\n"
+            f"def test_consumer_{i}_uses_core():\n"
+            f"    p = DataProcessor()\n"
+            f"    assert validate(p.process({{}})) is True\n"
+            f"    assert run_consumer_{i}() is not None\n"
+        )
+        (tests_dir / f"test_consumer_{i}.py").write_text(content)
+
     _run_git(["add", "."], str(root))
     _run_git(["commit", "-q", "-m", "init"], str(root))
 
@@ -205,6 +234,95 @@ class ImpactCompactModeTests(unittest.TestCase):
         payload = json.loads(r.stdout)
         result = payload["result"]
         self.assertNotIn("affectedFilesCount", result)
+
+    def test_compact_json_truncates_tests_and_read_next(self):
+        """Issue #173: --compact JSON must truncate tests, read_next, type_impacts, impact_radius."""
+        r_compact = self._run_cli(
+            [
+                "impact",
+                "--project",
+                str(self.root),
+                "--files",
+                "src/core.py",
+                "--compact",
+                "--top-n",
+                "2",
+                "--json",
+            ]
+        )
+        r_full = self._run_cli(
+            [
+                "impact",
+                "--project",
+                str(self.root),
+                "--files",
+                "src/core.py",
+                "--json",
+            ]
+        )
+        self.assertEqual(r_compact.returncode, 0, r_compact.stderr)
+        self.assertEqual(r_full.returncode, 0, r_full.stderr)
+        compact = json.loads(r_compact.stdout)["result"]
+        full = json.loads(r_full.stdout)["result"]
+
+        # 项目有 8 个 consumer 文件引用 core，full 模式 tests/read_next 应 >=4
+        self.assertGreaterEqual(len(full["tests"]), 4)
+        self.assertGreaterEqual(len(full["read_next"]), 4)
+
+        # compact 模式下：tests/read_next 被严格截断（不超过 3）
+        self.assertLessEqual(len(compact["tests"]), 3)
+        self.assertLessEqual(len(compact["read_next"]), 3)
+
+        # type_impacts 不应以完整数组形式出现（compact 下替换为 summary）
+        self.assertNotIn("type_impacts", compact)
+
+        # impact_radius 不应出现（compact 不需要多跳展开细节）
+        self.assertNotIn("impact_radius", compact)
+
+        # compact 应提供测试总数摘要
+        self.assertIn("suggestedTestsCount", compact)
+        self.assertEqual(compact["suggestedTestsCount"], len(full["tests"]))
+
+    def test_compact_text_shorter_with_many_tests(self):
+        """Issue #173: --compact text should meaningfully truncate Suggested Tests."""
+        r_full = self._run_cli(
+            [
+                "impact",
+                "--project",
+                str(self.root),
+                "--files",
+                "src/core.py",
+                "--no-json",
+            ]
+        )
+        r_compact = self._run_cli(
+            [
+                "impact",
+                "--project",
+                str(self.root),
+                "--files",
+                "src/core.py",
+                "--compact",
+                "--no-json",
+            ]
+        )
+        self.assertEqual(r_full.returncode, 0, r_full.stderr)
+        self.assertEqual(r_compact.returncode, 0, r_compact.stderr)
+        # compact 必须比 full 短（Suggested Tests 也被截断）
+        self.assertLess(
+            len(r_compact.stdout),
+            len(r_full.stdout),
+            "compact text should be shorter than full output",
+        )
+        # compact 的 Suggested Tests 数量应少于 full（如果有的话）
+        full_test_lines = [
+            l for l in r_full.stdout.splitlines() if l.startswith("- `tests/")
+        ]
+        compact_test_lines = [
+            l for l in r_compact.stdout.splitlines() if l.startswith("- `tests/")
+        ]
+        if len(full_test_lines) >= 4:
+            self.assertLessEqual(len(compact_test_lines), 3)
 
 
 class VerifyRiskThresholdTests(unittest.TestCase):

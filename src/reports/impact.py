@@ -41,6 +41,7 @@ def render_impact_report(
     lsp_hint: dict[str, Any] | None = None,
     compact: bool = False,
     top_n: int = 5,
+    total_tests: int | None = None,
 ) -> str:
     lines: list[str] = []
     lines.append("# Impact Analysis\n")
@@ -116,8 +117,12 @@ def render_impact_report(
 
     if tests:
         lines.append("## Suggested Tests\n")
+        # compact 模式：最多展示 top-3 测试，节省 token（issue #173）
+        # 注意：调用方已根据 compact 截断 tests，这里直接遍历
         for t in tests:
             lines.append(f"- `{t.test_file}` ({t.confidence} confidence: {t.reason})")
+        if total_tests is not None and total_tests > len(tests):
+            lines.append(f"- … and {total_tests - len(tests)} more")
         lines.append("")
 
     risk_icon = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
@@ -133,7 +138,7 @@ def render_impact_report(
         lines.append(
             f"- View target file details: `repomap query --file {target_files[0]} --project .`"
         )
-    if affected_files:
+    if affected_files and not compact:
         top_affected = affected_files[0][0]
         lines.append(
             f"- Inspect top affected file: `repomap query --file {top_affected} --project .`"
