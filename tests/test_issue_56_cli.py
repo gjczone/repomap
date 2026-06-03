@@ -177,12 +177,13 @@ class TestSessionRoundtrip(unittest.TestCase):
             )
 
 
-# ── #36: verify WARNING exit code 3 (no git changes) ────────────────────────
+# ── #174: verify no_changes 应返回 exit 0（CI 友好）─────────────────────────
 
 
-class TestVerifyNoChangesExitCode(unittest.TestCase):
-    """Verify that run_verify returns EXIT_NO_RESULTS (3) when no git changes
-    are detected in a clean repo."""
+class TestVerifyNoChangesExitCodeZero(unittest.TestCase):
+    """Issue #174: verify on clean repo should exit 0, not 3.
+    旧行为 exit 3 会破坏 CI set -e。新行为：no_changes = informational, exit 0。
+    """
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -192,13 +193,9 @@ class TestVerifyNoChangesExitCode(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def test_no_changes_returns_exit_3(self) -> None:
-        from src.cli.handlers import EXIT_NO_RESULTS
+    def test_no_changes_returns_exit_0(self) -> None:
         from src.cli.commands.verify import run_verify
 
-        self.assertEqual(EXIT_NO_RESULTS, 3, "EXIT_NO_RESULTS must be 3")
-
-        # Run verify on a clean repo — no uncommitted changes
         exit_code = run_verify(
             project=str(self.root),
             as_json=True,
@@ -214,9 +211,34 @@ class TestVerifyNoChangesExitCode(unittest.TestCase):
         )
         self.assertEqual(
             exit_code,
-            3,
-            f"run_verify on clean repo must return EXIT_NO_RESULTS (3), got {exit_code}",
+            0,
+            f"run_verify on clean repo must return 0 (informational), got {exit_code}",
         )
+
+    def test_no_changes_status_is_unchanged(self) -> None:
+        """no_changes 情况下 status 字段应为 'unchanged'（非 'warning'）"""
+        import json
+        import io
+        from contextlib import redirect_stdout
+        from src.cli.commands.verify import run_verify
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            run_verify(
+                project=str(self.root),
+                as_json=True,
+                types=None,
+                max_issues=20,
+                resolve_symbols=False,
+                lsp_timeout=30,
+                lsp_max_files=20,
+                with_diff=False,
+                quick=True,
+                incremental=False,
+                max_chars=16000,
+            )
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["result"].get("status"), "unchanged")
 
 
 # ── #41: --max-files parameter ───────────────────────────────────────────────
