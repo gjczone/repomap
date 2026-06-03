@@ -157,38 +157,11 @@ def run_query(
                     matches = expanded_matches
                     is_fallback = True
 
-            # If still too few results, fall back to hotspots
-            if len(matches) < 3:
-                hotspot_entries = engine.hotspots(20)
-                hotspot_matches: list[FileMatch] = []
-                for entry in hotspot_entries:
-                    file_path = entry["file"]
-                    # Respect path filters
-                    if allowed and not any(
-                        _path_matches_prefix(file_path, a) for a in allowed
-                    ):
-                        continue
-                    if excluded and any(
-                        _path_matches_prefix(file_path, e) for e in excluded
-                    ):
-                        continue
-                    if no_tests and is_test_like_file(file_path):
-                        continue
-                    hotspot_matches.append(
-                        FileMatch(
-                            path=file_path,
-                            role="hotspot",
-                            score=float(entry.get("symbol_count", 0)),
-                            reasons=["(fallback — no direct matches found)"],
-                        )
-                    )
-                if hotspot_matches:
-                    matches = hotspot_matches
-                    is_fallback = True
-            else:
-                if is_fallback:
-                    for m in matches:
-                        m.reasons.append("(fallback — no direct matches found)")
+            # Issue #178: 移除 hotspot fallback。无匹配时返回空结果 + 明确提示，
+            # 避免误导 LLM/CI 把不相关的 hotspots 当作匹配结果。
+            if is_fallback and matches:
+                for m in matches:
+                    m.reasons.append("(fallback — synonym expansion)")
 
         top_matches = matches[:max_result_files]
 
@@ -205,7 +178,7 @@ def run_query(
         if as_json:
             from ..handlers import json_envelope
 
-            payload = {
+            payload: dict[str, Any] = {
                 "query": query,
                 "scanStats": _scan_stats_payload(engine),
                 "filesConsidered": len(candidate_files),
@@ -250,6 +223,8 @@ def run_query(
                     max_source_lines=max_source_lines,
                 ),
             }
+            if len(matches) == 0:
+                payload["message"] = f"No matches found for {query!r}"
             print(json_envelope("query", str(engine.project_root), payload))
             return 0
 
