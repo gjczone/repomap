@@ -1413,20 +1413,48 @@ def collect_lsp_full_evidence(
                 root, client.references(abs_file, line_index, character)
             )
             # hover in the same session — no extra process start
+            raw_hover: Any = None
             try:
                 raw_hover = client.hover(abs_file, line_index, character)
-                hover_info = LspHoverInfo(
-                    file=file_path,
-                    line=line,
-                    col=character + 1,
-                    contents=_parse_hover_response(raw_hover),
-                )
             except Exception:
                 logger.warning(
                     "LSP hover failed for %s:%d (definition OK)",
                     file_path,
                     line,
                     exc_info=True,
+                )
+
+            # Issue #176: rust-analyzer 在 indexing 完成前对 definition/hover 可能返回空。
+            # 当首次三个查询全部空（definition+references+hover）时，短暂等待后重试一次。
+            # 仅针对 rust，避免对其他语言引入延迟。
+            _RUST_RETRY_DELAY = 1.5
+            hover_empty = raw_hover is None or _parse_hover_response(raw_hover) == ""
+            first_pass_empty = not definitions and not references and hover_empty
+            if language == "rust" and first_pass_empty:
+                time.sleep(_RUST_RETRY_DELAY)
+                try:
+                    definitions = _normalize_lsp_locations(
+                        root, client.definition(abs_file, line_index, character)
+                    )
+                except Exception:
+                    logger.debug("Rust LSP retry definition failed", exc_info=True)
+                try:
+                    references = _normalize_lsp_locations(
+                        root, client.references(abs_file, line_index, character)
+                    )
+                except Exception:
+                    logger.debug("Rust LSP retry references failed", exc_info=True)
+                try:
+                    raw_hover = client.hover(abs_file, line_index, character)
+                except Exception:
+                    logger.debug("Rust LSP retry hover failed", exc_info=True)
+
+            if raw_hover is not None:
+                hover_info = LspHoverInfo(
+                    file=file_path,
+                    line=line,
+                    col=character + 1,
+                    contents=_parse_hover_response(raw_hover),
                 )
         result = LspRunResult(
             server=detection.server_name,
