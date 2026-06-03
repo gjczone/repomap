@@ -1246,11 +1246,19 @@ class RepoMapChecker:
         else:
             status = "passed"
 
+        # Issue #179: 把所有被跳过的工具的 skip_reason 汇总到顶层 skip_warnings，
+        # 让 LLM/CI 能立即看到哪些诊断未执行（避免藏在 runs 数组里被忽略）。
+        skip_warnings: list[str] = []
+        for r in results:
+            if r.skipped and r.skip_reason:
+                skip_warnings.append(f"{r.tool}: {r.skip_reason}")
+
         return {
             "timestamp": self._get_timestamp(),
             "project_root": str(self.project_root),
             "status": status,
             "message": message,
+            "skip_warnings": skip_warnings,
             "types": types,
             "incremental": {
                 "enabled": modified_files is not None,
