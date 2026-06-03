@@ -1321,6 +1321,15 @@ def collect_lsp_symbol_tree(
                 abs_file.read_text(encoding="utf-8", errors="replace"),
             )
             raw = client.document_symbols(abs_file)
+            # Issue #177: typescript-language-server（及少数重型 LSP）在 indexing 完成前
+            # 对 document_symbols 可能返回空数组。首次空时短暂等待后重试一次。
+            _SYMBOL_TREE_RETRY_DELAY = 1.5
+            if not raw:
+                time.sleep(_SYMBOL_TREE_RETRY_DELAY)
+                try:
+                    raw = client.document_symbols(abs_file)
+                except Exception:
+                    logger.debug("LSP retry document_symbols failed", exc_info=True)
         tree = _parse_lsp_symbol_tree(root, raw)
         # 回填 file 字段
         for node in _walk_symbol_tree(tree):
