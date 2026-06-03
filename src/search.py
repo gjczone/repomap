@@ -81,6 +81,7 @@ class SymbolSearchIndex:
     def __init__(self, symbols: dict[str, Symbol]) -> None:
         self._symbol_ids: list[str] = []
         self._documents: list[list[str]] = []
+        self._pageranks: list[float] = []
         self._bm25: Any | None = None
         self._built = False
 
@@ -92,6 +93,7 @@ class SymbolSearchIndex:
             if doc:
                 self._symbol_ids.append(sym_id)
                 self._documents.append(doc)
+                self._pageranks.append(float(getattr(sym, "pagerank", 0.0)))
 
         if self._documents and _HAS_BM25:
             try:
@@ -114,16 +116,22 @@ class SymbolSearchIndex:
             return []
 
         assert self._bm25 is not None  # _built=True 保证 _bm25 已初始化
-        scores = self._bm25.get_scores(tokens)
-        ranked = sorted(
-            enumerate(scores),
-            key=lambda x: -x[1],
-        )
+        raw_scores = self._bm25.get_scores(tokens)
+        # Issue #182: BM25 对短 query 产生离散分数（如 0.5/1.0 二元分布）。
+        # 用 pagerank 作为 tiebreaker：final = bm25 * (1 + pagerank * 10)
+        #   - bm25=0 时仍为 0（不相关符号被排除）
+        #   - 同 bm25 分时 pagerank 高的领先，打破并列
+        #   - 系数 10 让 PR 在 0.01~1.0 范围贡献 0.1~10 的相对调整
         results: list[tuple[str, float]] = []
-        for idx, score in ranked:
-            if score > 0 and len(results) < top_k:
-                results.append((self._symbol_ids[idx], float(score)))
-        return results
+        for idx, bm25_score in enumerate(raw_scores):
+            if bm25_score <= 0:
+                continue
+            sid = self._symbol_ids[idx]
+            pr = float(self._pageranks[idx]) if self._pageranks else 0.0
+            final = bm25_score * (1.0 + pr * 10.0)
+            results.append((sid, round(final, 4)))
+        results.sort(key=lambda x: -x[1])
+        return results[:top_k]
 
     def _fallback_search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
         query_tokens = set(_tokenize(query))
@@ -132,7 +140,9 @@ class SymbolSearchIndex:
             doc_tokens = set(self._documents[i])
             overlap = len(query_tokens & doc_tokens)
             if overlap > 0:
-                score = overlap / max(len(query_tokens), 1)
-                results.append((sym_id, score))
+                base = overlap / max(len(query_tokens), 1)
+                pr = float(self._pageranks[i]) if self._pageranks else 0.0
+                score = base * (1.0 + pr * 10.0)
+                results.append((sym_id, round(score, 4)))
         results.sort(key=lambda x: -x[1])
         return results[:top_k]
