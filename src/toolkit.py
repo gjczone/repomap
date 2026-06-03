@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -406,3 +407,52 @@ def diff_project(project_path: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 # 功能 3: 引用计数分析
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+_DEFAULT_CACHE_TTL_DAYS = 7
+
+
+def prune_cache(
+    cache_root: Path | None = None, ttl_days: int = _DEFAULT_CACHE_TTL_DAYS
+) -> tuple[list[Path], list[Path]]:
+    """删除 cache_root 下 mtime 早于 ttl_days 的子目录。
+
+    返回 (removed, kept) 两个 Path 列表。
+    只处理目录（忽略散文件）；删除失败时保留目录并记录 warning。
+    """
+    import logging as _logging
+    import shutil
+
+    if cache_root is not None:
+        root = cache_root
+    else:
+        from . import CACHE_DIR as _CACHE_DIR
+        root = _CACHE_DIR
+    if not root.exists():
+        return [], []
+
+    now = time.time()
+    cutoff = now - ttl_days * 86400
+    removed: list[Path] = []
+    kept: list[Path] = []
+
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            mtime = entry.stat().st_mtime
+        except OSError:
+            kept.append(entry)
+            continue
+        if mtime < cutoff:
+            try:
+                shutil.rmtree(entry)
+                removed.append(entry)
+            except OSError as exc:
+                _logging.getLogger("repomap.toolkit").warning(
+                    "Failed to prune cache dir %s: %s", entry, exc
+                )
+                kept.append(entry)
+        else:
+            kept.append(entry)
+    return removed, kept
