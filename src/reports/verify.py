@@ -102,13 +102,26 @@ def _render_verify_tests(lines: list[str], result: dict[str, Any]) -> None:
 
 
 def _render_verify_untested(lines: list[str], result: dict[str, Any]) -> None:
-    untested = result.get("untestedSymbols", [])
+    raw = result.get("untestedSymbols", [])
+    # Issue #180: 新格式是 dict（含 symbols + 元数据）；旧格式/quick 模式是 list
+    if isinstance(raw, dict):
+        untested = raw.get("symbols", [])
+        truncated = raw.get("truncated", False)
+        total_before = raw.get("totalBeforeFilter", len(untested))
+    else:
+        untested = raw
+        truncated = False
+        total_before = len(untested)
     if not untested:
         return
     lines.append("## Test Coverage Gaps\n")
     lines.append(
         "> Symbols below lack test coverage. Review carefully before modifying.\n"
     )
+    if truncated:
+        lines.append(
+            f"*Showing top {len(untested)} of {total_before} untested symbols (sorted by risk).*\n"
+        )
     lines.append("| Symbol | Kind | File | Callers | Risk |")
     lines.append("|--------|------|------|:------:|:----:|")
     for item in untested[:15]:
