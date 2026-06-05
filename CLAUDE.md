@@ -142,6 +142,8 @@ dist/repomap               # Local build output (CI builds Linux x64 only via Gi
 - **Git backend**: `src/git_backend.py` → all git operations (pygit2 priority, subprocess fallback)
 - **Affected files**: `src/cli/commands/affected.py` → `affected` — CI test discovery from source changes
 - **CLI/commands**: `src/cli/cli.py` (argparse + dispatch), `src/cli/handlers.py` (shared helpers), `src/cli/commands/*.py` (run\_\* implementations) → add subparser in cli.py, implement handler in commands/<group>.py, render via `src/reports/`
+- **Formatters**: `src/formatters.py` → `fix` multi-language formatter dispatch (ruff, biome, prettier, eslint, gofmt, cargo fmt) with nearest-wins config detection
+- **Secrets**: `src/secrets.py` → `verify` secrets scanning (gitleaks → detect-secrets → builtin patterns); `fix` pre-flight guard
 - **Hints**: `src/hints.py` → runtime next-step suggestions appended to text output via stderr (not JSON)
 - **Reports**: `src/reports/` → each `render_*` module owns one report type; `__init__.py` re-exports all + shared helpers
 - **Topic scoring**: `src/topic.py` → `impact`, `verify`, `query` test suggestions, file role classification
