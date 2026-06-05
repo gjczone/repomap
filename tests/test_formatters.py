@@ -29,9 +29,7 @@ class TestDetectFormatter(unittest.TestCase):
         """Python files should default to ruff format."""
         with tempfile.TemporaryDirectory() as tmp:
             write_file(tmp, "src/main.py", "print('hello')\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "src/main.py"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "src/main.py"), tmp)
         self.assertIsNotNone(result)
         self.assertIn("ruff", result[0])
 
@@ -39,9 +37,7 @@ class TestDetectFormatter(unittest.TestCase):
         """JS files without biome.json should fallback to prettier."""
         with tempfile.TemporaryDirectory() as tmp:
             write_file(tmp, "src/app.js", "console.log('ok')\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "src/app.js"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "src/app.js"), tmp)
         self.assertIsNotNone(result)
         # Fallback should be prettier (if installed) or eslint
         # Without any config, prettier is checked first as fallback
@@ -50,21 +46,17 @@ class TestDetectFormatter(unittest.TestCase):
     def test_go_file_returns_gofmt(self) -> None:
         """Go files should use gofmt -w."""
         with tempfile.TemporaryDirectory() as tmp:
-            write_file(tmp, "main.go", 'package main\nfunc main() {}\n')
-            result = self.detect_formatter(
-                os.path.join(tmp, "main.go"), tmp
-            )
+            write_file(tmp, "main.go", "package main\nfunc main() {}\n")
+            result = self.detect_formatter(os.path.join(tmp, "main.go"), tmp)
         self.assertIsNotNone(result)
         self.assertEqual("gofmt", result[0])
 
     def test_rust_file_with_cargo_toml_returns_cargo_fmt(self) -> None:
         """Rust files with Cargo.toml should use cargo fmt."""
         with tempfile.TemporaryDirectory() as tmp:
-            write_file(tmp, "Cargo.toml", "[package]\nname = \"test\"\n")
+            write_file(tmp, "Cargo.toml", '[package]\nname = "test"\n')
             write_file(tmp, "src/main.rs", "fn main() {}\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "src/main.rs"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "src/main.rs"), tmp)
         self.assertIsNotNone(result)
         self.assertIn("cargo", result[0])
 
@@ -72,27 +64,21 @@ class TestDetectFormatter(unittest.TestCase):
         """Rust files without Cargo.toml should return None (skip)."""
         with tempfile.TemporaryDirectory() as tmp:
             write_file(tmp, "main.rs", "fn main() {}\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "main.rs"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "main.rs"), tmp)
         self.assertIsNone(result)
 
     def test_unknown_extension_returns_none(self) -> None:
         """Unknown file extensions should return None."""
         with tempfile.TemporaryDirectory() as tmp:
             write_file(tmp, "test.sh", "echo hello\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "test.sh"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "test.sh"), tmp)
         self.assertIsNone(result)
 
     def test_tsx_file_returns_biome_or_fallback(self) -> None:
         """TSX files should work with biome or fallback."""
         with tempfile.TemporaryDirectory() as tmp:
             write_file(tmp, "src/App.tsx", "export const App = () => <div/>;\n")
-            result = self.detect_formatter(
-                os.path.join(tmp, "src/App.tsx"), tmp
-            )
+            result = self.detect_formatter(os.path.join(tmp, "src/App.tsx"), tmp)
         self.assertIsNotNone(result)
         self.assertIn(result[0], ["biome", "prettier", "eslint"])
 

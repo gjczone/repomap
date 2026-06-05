@@ -109,9 +109,7 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
 
         for tool, files in tool_groups.items():
             if dry_run:
-                dry_run_actions.append(
-                    f"{tool} (would format {len(files)} file(s))"
-                )
+                dry_run_actions.append(f"{tool} (would format {len(files)} file(s))")
                 files_processed += len(files)
                 continue
 
@@ -128,7 +126,9 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
                         result = run_formatter(["gofmt", "-w", f])
                         if not result.success:
                             all_ok = False
-                            tools_failed.append(f"gofmt on {f} (exit {result.exit_code})")
+                            tools_failed.append(
+                                f"gofmt on {f} (exit {result.exit_code})"
+                            )
                     if all_ok:
                         fixes_applied.append(f"gofmt ({len(files)} file(s))")
                         files_processed += len(files)

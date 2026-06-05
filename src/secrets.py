@@ -13,10 +13,8 @@ Design:
 from __future__ import annotations
 
 import logging
-import os
 import re
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from .git_backend import GitBackend
@@ -38,7 +36,9 @@ _BUILTIN_PATTERNS: list[dict[str, Any]] = [
     },
     {
         "rule_id": "private-key",
-        "pattern": re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"),
+        "pattern": re.compile(
+            r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
+        ),
         "description": "Private Key (PEM format)",
     },
     {

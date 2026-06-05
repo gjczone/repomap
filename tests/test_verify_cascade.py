@@ -40,9 +40,7 @@ class TestVerifyCascade(unittest.TestCase):
         mock_engine.graph.incoming = {}
         mock_engine.graph.outgoing = {}
 
-        result = self._verify_cascade(
-            ["src/main.py"], mock_engine, depth=2, top_n=10
-        )
+        result = self._verify_cascade(["src/main.py"], mock_engine, depth=2, top_n=10)
         self.assertIn("cascadeDepth", result)
         self.assertIn("topN", result)
         self.assertIn("calls", result)
@@ -60,15 +58,11 @@ class TestVerifyCascade(unittest.TestCase):
         mock_engine.graph.outgoing = {}
 
         # Depth 0 should be clamped to 1
-        result = self._verify_cascade(
-            ["src/main.py"], mock_engine, depth=0, top_n=10
-        )
+        result = self._verify_cascade(["src/main.py"], mock_engine, depth=0, top_n=10)
         self.assertGreaterEqual(result["cascadeDepth"], 1)
 
         # Depth > 5 should be clamped to 5
-        result = self._verify_cascade(
-            ["src/main.py"], mock_engine, depth=10, top_n=10
-        )
+        result = self._verify_cascade(["src/main.py"], mock_engine, depth=10, top_n=10)
         self.assertLessEqual(result["cascadeDepth"], 5)
 
     def test_cascade_finds_callers_of_changed_symbols(self) -> None:
@@ -132,9 +126,7 @@ class TestVerifyCascade(unittest.TestCase):
             sid_caller2: [mock_edge2],
         }
 
-        result = self._verify_cascade(
-            ["src/main.py"], mock_engine, depth=2, top_n=10
-        )
+        result = self._verify_cascade(["src/main.py"], mock_engine, depth=2, top_n=10)
         self.assertGreaterEqual(len(result["calls"]), 1)
         # Should contain caller entries
         caller_files = {c["callerFile"] for c in result["calls"]}
@@ -199,7 +191,7 @@ class TestVerifyCascadeInPayload(unittest.TestCase):
                 ),
                 patch("sys.stdout", stdout),
             ):
-                rc = run_verify(
+                run_verify(
                     project=project_root,
                     as_json=True,
                     quick=True,
@@ -242,9 +234,7 @@ class TestVerifyCLICascadeArgs(unittest.TestCase):
         from src.cli.cli import build_parser
 
         parser = build_parser()
-        args = parser.parse_args(
-            ["verify", "--project", "/tmp/test", "--json"]
-        )
+        args = parser.parse_args(["verify", "--project", "/tmp/test", "--json"])
         self.assertEqual(args.cascade_depth, 2)
 
 

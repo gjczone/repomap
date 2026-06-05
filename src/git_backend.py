@@ -201,9 +201,7 @@ class SubprocessBackend:
     def diff_unified(project_root: str) -> str:
         """Return unified diff of all changes (staged + unstaged) as text."""
         try:
-            r = SubprocessBackend._run_git(
-                ["diff", "HEAD"], project_root
-            )
+            r = SubprocessBackend._run_git(["diff", "HEAD"], project_root)
             return r.stdout if r.returncode in (0, 1) else ""
         except _SUBPROCESS_EXPECTED:
             return ""

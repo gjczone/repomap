@@ -1,6 +1,5 @@
 """Tests for src/secrets.py — credentials/secret scanning."""
 
-import os
 import sys
 import tempfile
 import unittest
@@ -52,16 +51,12 @@ class TestBuiltinPatterns(unittest.TestCase):
         # Construct test key to avoid GitHub push-protection false positive
         prefix = "sk"
         key = prefix + "_live_" + "0" * 24
-        findings = self.scan_content(
-            f"STRIPE_KEY={key}", "/test/.env"
-        )
+        findings = self.scan_content(f"STRIPE_KEY={key}", "/test/.env")
         self.assertGreaterEqual(len(findings), 1)
 
     def test_no_false_positive_on_placeholder(self) -> None:
         """Should not flag short placeholder values (under 16 chars)."""
-        findings = self.scan_content(
-            'API_KEY = "placeholder"', "/test/config.py"
-        )
+        findings = self.scan_content('API_KEY = "placeholder"', "/test/config.py")
         self.assertEqual(len(findings), 0)
 
     def test_no_false_positive_on_comment(self) -> None:
@@ -124,9 +119,7 @@ class TestSecretsScanDiff(unittest.TestCase):
         """Should use built-in patterns when no external tools available."""
         mock_gl.return_value = None
         mock_ds.return_value = None
-        mock_diff.return_value = [
-            {"file": "test.py", "content": "AKIA" + "0" * 16}
-        ]
+        mock_diff.return_value = [{"file": "test.py", "content": "AKIA" + "0" * 16}]
 
         result = self.scan_diff_secrets("/fake/project")
         self.assertEqual(result["tool"], "builtin")
@@ -221,7 +214,8 @@ class TestVerifySecretsSection(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_root:
             write_file(project_root, "main.py", "def target():\n    return 1\n")
-            import io, json
+            import io
+            import json
 
             stdout = io.StringIO()
             with (
@@ -243,7 +237,7 @@ class TestVerifySecretsSection(unittest.TestCase):
                 ),
                 patch("sys.stdout", stdout),
             ):
-                rc = run_verify(
+                run_verify(
                     project=project_root,
                     as_json=True,
                     quick=True,
