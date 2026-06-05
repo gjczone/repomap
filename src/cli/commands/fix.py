@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
-from pathlib import Path
 
 from ..handlers import (
     CLI_NAME,
@@ -12,7 +10,10 @@ from ..handlers import (
     _resolve_project,
 )
 from .verify import run_verify, run_check
-from ...core import _DEFAULT_SKIP_DIRS
+from ...formatters import (
+    detect_all_formatters,
+    run_formatter,
+)
 
 logger = logging.getLogger("repomap")
 
@@ -25,66 +26,155 @@ def _run_subprocess(
 
 
 def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
-    """Auto-fix: ruff --fix, eslint --fix, etc."""
+    """Auto-fix: language-aware formatters (ruff, biome, gofmt, cargo fmt, etc.).
+
+    Uses nearest-wins config detection to pick the right formatter per file.
+    Before formatting, runs a secrets scan on changed files — if secrets are
+    found, fix is rejected to prevent overwriting secret evidence.
+    """
     try:
         project_root = _resolve_project(project)
 
         fixes_applied: list[str] = []
         tools_failed: list[str] = []
         dry_run_actions: list[str] = []
+        files_processed = 0
 
-        # Try ruff
+        # 1. Secrets scan (pre-fix guard) — reject fix if secrets detected
         try:
-            ruff_args = (
-                ["ruff", "check", str(project_root)]
-                if dry_run
-                else ["ruff", "check", "--fix", str(project_root)]
-            )
-            result = _run_subprocess(ruff_args)
-            if result.returncode == 0:
-                if dry_run:
-                    dry_run_actions.append("ruff (would fix issues)")
-                else:
-                    fixes_applied.append("ruff --fix")
-            elif dry_run and result.stdout.strip():
-                dry_run_actions.append("ruff (would fix issues)")
-        except FileNotFoundError:
-            tools_failed.append("ruff (not installed)")
-        except Exception as exc:
-            tools_failed.append(f"ruff (error: {exc})")
+            from ...secrets import scan_diff_secrets
 
-        # Try eslint
-        try:
-            eslint_files: list[str] = []
-            valid_exts = {".js", ".ts", ".jsx", ".tsx"}
-            skip_parts = _DEFAULT_SKIP_DIRS | {"coverage"}
-            for dirpath, dirnames, filenames in os.walk(str(project_root)):
-                # 剪枝：跳过不需要遍历的目录
-                dirnames[:] = [d for d in dirnames if d not in skip_parts]
-                for fname in filenames:
-                    if (
-                        Path(fname).suffix.lower() in valid_exts
-                        and len(eslint_files) < 500
-                    ):
-                        eslint_files.append(os.path.join(dirpath, fname))
-                if len(eslint_files) >= 500:
-                    logger.warning(
-                        "ESLint: reached 500 file limit, some files may not be checked"
+            secrets_result = scan_diff_secrets(project_root)
+            if secrets_result.get("findings"):
+                count = len(secrets_result["findings"])
+                msg = (
+                    f"Secrets detected in {count} location(s) — "
+                    f"refusing to format to preserve evidence. "
+                    f"Run `repomap verify --project .` to see details."
+                )
+                if as_json:
+                    from ..handlers import json_envelope
+
+                    print(
+                        json_envelope(
+                            "fix",
+                            project_root,
+                            {
+                                "dry_run": dry_run,
+                                "fixes_applied": [],
+                                "tools_failed": [],
+                                "dry_run_actions": [],
+                                "secrets_blocked": True,
+                                "error": msg,
+                            },
+                            status="error",
+                        )
                     )
-                    break
-            if eslint_files:
-                if dry_run:
-                    result = _run_subprocess(["eslint", "--", *eslint_files])
-                    if result.stdout.strip():
-                        dry_run_actions.append("eslint (would fix issues)")
                 else:
-                    result = _run_subprocess(["eslint", "--fix", "--", *eslint_files])
-                    if result.returncode == 0:
-                        fixes_applied.append("eslint --fix")
-        except FileNotFoundError:
-            tools_failed.append("eslint (not installed)")
+                    print(f"[{CLI_NAME}] {msg}")
+                return 1
+        except ImportError:
+            pass  # secrets module not available yet (graceful degradation)
         except Exception as exc:
-            tools_failed.append(f"eslint (error: {exc})")
+            logger.warning("Secrets pre-scan failed (non-fatal): %s", exc)
+
+        # 2. Detect all applicable formatters
+        candidates = detect_all_formatters(project_root, dry_run=dry_run)
+        if not candidates:
+            if as_json:
+                from ..handlers import json_envelope
+
+                print(
+                    json_envelope(
+                        "fix",
+                        project_root,
+                        {
+                            "dry_run": dry_run,
+                            "fixes_applied": [],
+                            "tools_failed": [],
+                            "dry_run_actions": [],
+                            "files_processed": 0,
+                        },
+                    )
+                )
+                return 0
+            print("No formattable files found or no formatters available.")
+            return 0
+
+        # 3. Group by tool and run
+        tool_groups: dict[str, list[str]] = {}
+        for c in candidates:
+            tool = c["tool"]
+            tool_groups.setdefault(tool, []).append(c["file"])
+
+        for tool, files in tool_groups.items():
+            if dry_run:
+                dry_run_actions.append(
+                    f"{tool} (would format {len(files)} file(s))"
+                )
+                files_processed += len(files)
+                continue
+
+            # Build batch command — some formatters accept multiple files
+            try:
+                if tool == "ruff":
+                    args = ["ruff", "format", *files]
+                elif tool == "biome":
+                    args = ["biome", "check", "--apply", *files]
+                elif tool == "gofmt":
+                    # gofmt -w per file (batch-safe)
+                    all_ok = True
+                    for f in files:
+                        result = run_formatter(["gofmt", "-w", f])
+                        if not result.success:
+                            all_ok = False
+                            tools_failed.append(f"gofmt on {f} (exit {result.exit_code})")
+                    if all_ok:
+                        fixes_applied.append(f"gofmt ({len(files)} file(s))")
+                        files_processed += len(files)
+                    continue
+                elif tool == "cargo":
+                    # cargo fmt works per project, not per file
+                    result = run_formatter(["cargo", "fmt"])
+                    if result.success:
+                        fixes_applied.append(f"cargo fmt ({len(files)} file(s))")
+                        files_processed += len(files)
+                    else:
+                        tools_failed.append(
+                            f"cargo fmt (exit {result.exit_code}): {result.stderr[:100]}"
+                        )
+                    continue
+                elif tool in ("prettier", "eslint"):
+                    if tool == "prettier":
+                        args = ["prettier", "--write", *files]
+                    else:
+                        args = ["eslint", "--fix", "--", *files]
+                else:
+                    # Generic: run per-file
+                    all_ok = True
+                    for f in files:
+                        result = run_formatter([tool, f])
+                        if not result.success:
+                            all_ok = False
+                            tools_failed.append(
+                                f"{tool} on {f} (exit {result.exit_code})"
+                            )
+                    if all_ok:
+                        fixes_applied.append(f"{tool} ({len(files)} file(s))")
+                        files_processed += len(files)
+                    continue
+
+                result = run_formatter(args)
+                if result.success:
+                    fixes_applied.append(f"{tool} ({len(files)} file(s))")
+                    files_processed += len(files)
+                else:
+                    tools_failed.append(
+                        f"{tool} (exit {result.exit_code}): {result.stderr[:100]}"
+                    )
+
+            except Exception as exc:
+                tools_failed.append(f"{tool} (error: {exc})")
 
         if as_json:
             from ..handlers import json_envelope
@@ -92,12 +182,13 @@ def run_fix(project: str, dry_run: bool = False, as_json: bool = False) -> int:
             print(
                 json_envelope(
                     "fix",
-                    project,
+                    project_root,
                     {
                         "dry_run": dry_run,
                         "fixes_applied": fixes_applied,
                         "tools_failed": tools_failed,
                         "dry_run_actions": dry_run_actions,
+                        "files_processed": files_processed,
                     },
                 )
             )

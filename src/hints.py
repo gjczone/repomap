@@ -120,7 +120,11 @@ def verify_hint(status: str, has_contract_risks: bool) -> list[str]:
     if status == "passed" and not has_contract_risks:
         hints.append(
             "> All checks passed. Run `repomap fix --project .`"
-            " to auto-fix lint, then `repomap ready --project .`"
+            " for multi-language auto-formatting, then `repomap ready --project .`"
+        )
+        hints.append(
+            "> Tip: check cascade section for callers of changed symbols;"
+            " review secrets section for credential exposure"
         )
     return hints[:3]
 

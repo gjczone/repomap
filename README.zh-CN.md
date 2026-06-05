@@ -10,8 +10,8 @@
 
 - **从哪里开始**：`overview`、`query`（同义词扩展）、`routes`
 - **什么会被破坏**：`impact`（含类型级）、`call-chain`（含引用信息）
-- **遗漏了什么**：`verify`（合约风险 + 漏改检测 + 孤儿符号）、`check`
-- **自动修复与就绪检查**：`fix`（ruff + eslint 自动修复）、`ready`（提交前检查）
+- **遗漏了什么**：`verify`（合约风险 + 漏改检测 + 孤儿符号 + 级联调用方 + 密钥扫描）、`check`
+- **自动修复与就绪检查**：`fix`（多语言格式化：ruff、biome、prettier、eslint、gofmt、cargo fmt）、`ready`（提交前检查）
 - **编码自动检测**：UTF-8 → GBK → GB2312 回退，消除老项目扫描盲区
 - **自适应搜索**：永不返回空结果 — 关键词扩展 → 热点兜底
 
@@ -111,8 +111,8 @@ repomap lsp setup --project .             # 安装缺失的服务器
 | `affected --files <文件...>` | 发现受源代码变更影响的测试；`--stdin` 管道模式；`--filter` 自定义模式 |
 | `call-chain --symbol <名称>` | 调用者、被调用者和引用，支持配置深度；`--direction`；`--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API 路由清单（FastAPI、Express、Axum、Spring Boot） |
-| `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异；`--risk-threshold HIGH\|MED\|LOW` |
-| `fix [--dry-run]` | 自动修复：ruff --fix + eslint --fix |
+| `verify [--quick] [--no-diff]` | 编辑后证据门：git 变更、风险、诊断、孤儿符号、图差异、级联调用方、密钥扫描；`--risk-threshold HIGH\|MED\|LOW`；`--no-cascade`；`--no-secrets` |
+| `fix [--dry-run]` | 自动修复：多语言格式化工具（ruff、biome、prettier、eslint、gofmt、cargo fmt），基于配置就近检测 |
 | `ready` | 提交就绪检查：verify + check + format 一键执行 |
 | `check` | 编译器/类型/lint 诊断（tsc、pyright、ruff、cargo check、go vet） |
 | `cache save` | 图基线保存（用于 diff 对比，自动清理陈旧 session） |
@@ -146,7 +146,7 @@ repomap check                                         # 编译器诊断
 
 ## 起源
 
-`repomap` 的核心思想来自 **[aider](https://github.com/Aider-AI/aider)**——用 tree-sitter + PageRank 为编程代理提供代码库感知。LSP 集成借鉴了 **[serena](https://github.com/oraios/serena)** 的服务器自动检测、搜索结果格式和分级符号索引。
+`repomap` 的核心思想来自 **[aider](https://github.com/Aider-AI/aider)**——用 tree-sitter + PageRank 为编程代理提供代码库感知。LSP 集成借鉴了 **[serena](https://github.com/oraios/serena)** 的服务器自动检测、搜索结果格式和分级符号索引。多语言格式化分发和密钥扫描借鉴了 **[pi-lens](https://github.com/apmantza/pi-lens)**，一个面向 pi 编程代理的 TypeScript 扩展包。
 
 ---
 
