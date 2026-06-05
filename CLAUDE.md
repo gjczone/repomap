@@ -38,14 +38,14 @@ All via `repomap <subcommand> [--project <path>]`.
 | `impact --files <f...> --with-symbols` | Pre-edit blast radius + edit planning; `--compact` concise; `--top-n <N>` |
 | `call-chain --symbol <name>`           | Caller/callee context + references                                       |
 | `affected --files <f...>`              | CI test discovery: which test files are affected by source changes        |
-| `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff; `--risk-threshold HIGH\|MED\|LOW` |
+| `verify [--quick] [--no-diff]`         | Post-edit evidence gate + orphan symbols + graph diff + cascade callers + secrets scan; `--risk-threshold HIGH\|MED\|LOW`; `--no-cascade`; `--no-secrets` |
 | `check`                                | Compiler/type/lint diagnostics                                           |
 | `routes [--with-consumers]`             | HTTP/API route inventory + consumer mapping                              |
 | `cache save`                           | Graph baseline save for diff comparison (auto-prunes stale sessions)      |
 | `cache prune`                          | Manually remove stale session caches (`--ttl-days N`)                     |
 | `lsp setup`                            | Auto-install LSP servers for detected languages                          |
 | `doctor [--no-lsp]`                    | Validate runtime + LSP status (default)                                  |
-| `fix [--dry-run]`                      | Auto-fix: ruff --fix + eslint --fix                                      |
+| `fix [--dry-run]`                      | Auto-fix: multi-language formatters (ruff, biome, prettier, eslint, gofmt, cargo fmt) with nearest-wins config detection |
 | `ready`                                | Pre-commit readiness check (verify + check + format)                     |
 
 ```bash

@@ -633,6 +633,93 @@ def _verify_impact_session_payload(
     }
 
 
+def _verify_cascade(
+    changed_files: list[str],
+    engine: "RepoMapEngine",
+    depth: int = 2,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """Compute cascade impact: callers of changed symbols up to depth hops.
+
+    Args:
+        changed_files: List of changed file paths (relative to project root).
+        engine: RepoMapEngine with loaded graph.
+        depth: Maximum traversal depth (clamped 1-5).
+        top_n: Maximum cascade entries to return.
+
+    Returns:
+        Dict with cascadeDepth, topN, calls (list of caller entries),
+        and truncated flag.
+    """
+    depth = max(1, min(depth, 5))
+    top_n = max(1, min(top_n, 50))
+
+    if not changed_files:
+        return {"cascadeDepth": depth, "topN": top_n, "calls": []}
+
+    changed_set = set(changed_files)
+
+    # Collect symbol IDs from changed files
+    changed_symbols: set[str] = set()
+    for f in changed_files:
+        for sid in engine.graph.file_symbols.get(f, []):
+            changed_symbols.add(sid)
+
+    if not changed_symbols:
+        return {"cascadeDepth": depth, "topN": top_n, "calls": []}
+
+    # BFS from changed symbols through incoming call edges
+    visited: set[str] = set()
+    frontier: set[str] = set(changed_symbols)
+    calls: list[dict[str, Any]] = []
+
+    for hop in range(depth):
+        next_frontier: set[str] = set()
+        for sid in frontier:
+            for edge in engine.graph.incoming.get(sid, []):
+                if edge.kind != "call":
+                    continue
+                caller_id = edge.source
+                if caller_id in visited:
+                    continue
+                caller = engine.graph.symbols.get(caller_id)
+                if caller is None:
+                    continue
+                # Skip callers in already-changed files (direct changes)
+                if caller.file in changed_set:
+                    continue
+                visited.add(caller_id)
+                next_frontier.add(caller_id)
+                callee = engine.graph.symbols.get(sid)
+                calls.append(
+                    {
+                        "caller": caller.name,
+                        "callee": callee.name if callee else sid,
+                        "callerFile": caller.file,
+                        "callerLine": caller.line,
+                        "hop": hop + 1,
+                    }
+                )
+                if len(calls) >= top_n:
+                    break
+            if len(calls) >= top_n:
+                break
+        if len(calls) >= top_n:
+            break
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    truncated = len(calls) >= top_n
+    return {
+        "cascadeDepth": depth,
+        "topN": top_n,
+        "calls": calls[:top_n],
+        "truncated": truncated,
+        "totalCallers": len(visited),
+    }
+
+
 def _print_missed_files_section(
     engine: RepoMapEngine,
     changed_files: list[str],
@@ -702,6 +789,9 @@ def run_verify(
     incremental: bool = False,
     max_chars: int = 16000,
     risk_threshold: str = "MED",
+    no_cascade: bool = False,
+    cascade_depth: int = 2,
+    no_secrets: bool = False,
 ) -> int:
     try:
         project_root = _resolve_project(project)
@@ -763,6 +853,41 @@ def run_verify(
         impact_session_payload = _verify_impact_session_payload(
             project_root, changed_files
         )
+        cascade_payload = (
+            {"cascadeDepth": cascade_depth, "topN": 10, "calls": []}
+            if no_cascade
+            else _verify_cascade(changed_files, engine, depth=cascade_depth)
+        )
+        secrets_payload: dict[str, Any] = {
+            "enabled": False,
+            "tool": "",
+            "findings": [],
+            "reason": "--no-secrets",
+        }
+        if not no_secrets:
+            try:
+                from ...secrets import scan_diff_secrets
+
+                secrets_result = scan_diff_secrets(project_root)
+                secrets_payload = {
+                    "enabled": True,
+                    "tool": secrets_result["tool"],
+                    "findings": secrets_result["findings"],
+                }
+            except ImportError:
+                secrets_payload = {
+                    "enabled": True,
+                    "tool": "",
+                    "findings": [],
+                    "reason": "secrets module import failed",
+                }
+            except Exception as exc:
+                secrets_payload = {
+                    "enabled": True,
+                    "tool": "",
+                    "findings": [],
+                    "reason": f"secrets scan error: {exc}",
+                }
         status = _overall_verify_status(
             changed_files,
             evidence["riskLevel"],
@@ -827,6 +952,8 @@ def run_verify(
             "contractRisks": contract_risks,
             "callGraphConsistency": call_graph_consistency,
             "impactSession": impact_session_payload,
+            "cascade": cascade_payload,
+            "secrets": secrets_payload,
         }
         if as_json:
             print(

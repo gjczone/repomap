@@ -10,8 +10,8 @@
 
 - **Where to start**: `overview`, `query` (synonym expansion), `routes`
 - **What will break**: `impact` (incl. type-level), `call-chain` (incl. references)
-- **What was missed**: `verify` (contract risk + missed-files + orphan symbols), `check`
-- **Auto-fix & ready**: `fix` (ruff + eslint auto-fix), `ready` (pre-commit check)
+- **What was missed**: `verify` (contract risk + missed-files + orphan symbols + cascade callers + secrets scan), `check`
+- **Auto-fix & ready**: `fix` (multi-language formatters: ruff, biome, prettier, eslint, gofmt, cargo fmt), `ready` (pre-commit check)
 - **Encoding auto-detect**: UTF-8 → GBK → GB2312 fallback for legacy projects
 - **Adaptive search**: never returns empty — keyword expansion → hotspot fallback
 
@@ -111,13 +111,13 @@ LSP-backed commands automatically use local LSP servers when available. All comm
 | `affected --files <f...>` | Discover tests affected by source changes; `--stdin` for pipe mode; `--filter` for custom pattern |
 | `call-chain --symbol <name>` | Callers, callees, and references with configurable depth; `--direction`; `--json` |
 | `routes [--json] [--with-consumers]` | HTTP/API route inventory (FastAPI, Express, Axum, Spring Boot) |
-| `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
+| `verify [--quick] [--no-diff]` | Post-edit evidence gate: git changes, risk, diagnostics, orphan symbols, graph diff, cascade callers, secrets scan; `--risk-threshold HIGH\|MED\|LOW`; `--no-cascade`; `--no-secrets` |
 | `check` | Compiler/type/lint diagnostics (tsc, pyright, ruff, cargo check, go vet) |
 | `cache save` | Graph baseline save for diff comparison (auto-prunes stale sessions) |
 | `cache prune` | Manually remove stale session caches (`--ttl-days N`) |
 | `doctor [--no-lsp]` | Health check: parsers, runtime, LSP status (default) |
 | `lsp setup [--dry-run]` | Auto-install missing LSP servers for detected languages |
-| `fix [--dry-run]` | Auto-fix: ruff --fix + eslint --fix |
+| `fix [--dry-run]` | Auto-fix: multi-language formatters (ruff, biome, prettier, eslint, gofmt, cargo fmt) with config-gated nearest-wins detection |
 | `ready` | Pre-commit readiness: verify + check + format in one command |
 
 ---
@@ -146,7 +146,7 @@ repomap check                                         # compiler diagnostics
 
 ## Origin
 
-`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)** — tree-sitter + PageRank for coding-agent codebase awareness. LSP integration patterns draw from **[serena](https://github.com/oraios/serena)**, including server auto-detection, search result formatting, and hierarchical symbol indexing.
+`repomap`'s core idea comes from **[aider](https://github.com/Aider-AI/aider)** — tree-sitter + PageRank for coding-agent codebase awareness. LSP integration patterns draw from **[serena](https://github.com/oraios/serena)**, including server auto-detection, search result formatting, and hierarchical symbol indexing. Multi-language formatter dispatch and secrets scanning patterns draw from **[pi-lens](https://github.com/apmantza/pi-lens)**, a TypeScript extension pack for pi coding agent.
 
 ---
 

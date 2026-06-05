@@ -283,6 +283,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="MED",
         help="Minimum contract risk level to display (default: MED).",
     )
+    verify_parser.add_argument(
+        "--no-cascade",
+        action="store_true",
+        default=False,
+        help="Skip cascade impact analysis (caller chain).",
+    )
+    verify_parser.add_argument(
+        "--cascade-depth",
+        type=int,
+        default=2,
+        help="Maximum cascade traversal depth (default: 2, range: 1-5).",
+    )
+    verify_parser.add_argument(
+        "--no-secrets",
+        action="store_true",
+        default=False,
+        help="Skip secrets/credentials scanning.",
+    )
 
     cache_parser = subparsers.add_parser(
         "cache", help="Prepare a graph baseline before the target edits."
@@ -612,6 +630,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             incremental=not getattr(args, "no_incremental", False),
             max_chars=args.max_chars,
             risk_threshold=getattr(args, "risk_threshold", "MED"),
+            no_cascade=getattr(args, "no_cascade", False),
+            cascade_depth=getattr(args, "cascade_depth", 2),
+            no_secrets=getattr(args, "no_secrets", False),
         )
     if command == "cache":
         return run_cache(

@@ -35,10 +35,10 @@ repomap <command> [--project <path>] [options]
 | Read a file | `query --file <path>` | Symbols, signatures, callers, LSP tree |
 | Impact analysis | `impact --files <f...> --with-symbols` | Blast radius, suggested tests; `--compact` for concise output; `--top-n <N>` to limit files |
 | Discover affected tests | `affected --files <f...>` | Reverse dependency tracing from changed files; `--stdin` for pipe mode, `--filter` for custom pattern |
-| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff; `--risk-threshold HIGH\|MED\|LOW` |
+| Post-edit verify | `verify` | Git changes, risk, diagnostics, orphan symbols, graph diff, cascade callers, secrets scan; `--risk-threshold HIGH\|MED\|LOW`; `--no-cascade`; `--no-secrets` |
 | Quick check | `verify --quick` | Git changes + risk only |
 | Lint diagnostics | `check` | Compiler/lint errors |
-| Auto-fix | `fix` | ruff --fix, eslint --fix |
+| Auto-fix | `fix` | Multi-language formatters (ruff, biome, prettier, eslint, gofmt, cargo fmt) with config-gated nearest-wins detection |
 | Pre-commit | `ready` | verify + check + format |
 | API routes | `routes` | HTTP route inventory |
 | Prepare for changes | `cache save` | Baseline snapshot for verify diff comparison; auto-prunes session caches older than 7 days |
@@ -47,7 +47,7 @@ repomap <command> [--project <path>] [options]
 
 ## Value-Added Features (Auto-Enabled)
 
-- **verify** — high-confidence orphan symbols (≥70), call-graph consistency check (broken call/import edges), and graph diff (when baseline exists)
+- **verify** — high-confidence orphan symbols (≥70), call-graph consistency check (broken call/import edges), graph diff (when baseline exists), cascade caller analysis (≤2 hop, top-10), and secrets scanning (gitleaks → detect-secrets → builtin)
 - **query --symbol** — state map for enum/const symbols and references
 - **call-chain** — all references
 - **overview** — hotspot files

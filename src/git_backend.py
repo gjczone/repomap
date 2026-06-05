@@ -198,6 +198,18 @@ class SubprocessBackend:
             return []
 
     @staticmethod
+    def diff_unified(project_root: str) -> str:
+        """Return unified diff of all changes (staged + unstaged) as text."""
+        try:
+            r = SubprocessBackend._run_git(["diff", "HEAD"], project_root)
+            return r.stdout if r.returncode in (0, 1) else ""
+        except _SUBPROCESS_EXPECTED:
+            return ""
+        except Exception as exc:
+            logger.error("git diff HEAD unexpected error: %s", exc, exc_info=True)
+            return ""
+
+    @staticmethod
     def diff_cached_name_only(project_root: str) -> list[str]:
         try:
             r = SubprocessBackend._run_git(
@@ -990,6 +1002,11 @@ class GitBackend:
                 exc_info=True,
             )
             return SubprocessBackend.diff_name_only(self.project_root, since)
+
+    def diff_unified(self) -> str:
+        """Return unified diff of all changes (staged + unstaged) as text."""
+        # Always use subprocess backend for diff_unified (pygit2 doesn't support it)
+        return SubprocessBackend.diff_unified(self.project_root)
 
     def diff_cached_name_only(self) -> list[str]:
         try:
